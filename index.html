@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>SeedDown - Smart Farm Full Flow</title>
+<!-- Link to your separated CSS file -->
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="app-shell">
+
+  <!-- ============================================================
+       SCREEN: SPLASH
+       ============================================================ -->
+  <div class="screen active splash-bg" id="s-splash">
+    <div class="pixel-stars" id="stars"></div>
+    <div class="farm-tower">
+      <div class="tower-top">🌿🌱🥬</div>
+      <div class="tower-body">
+        <div class="tower-layer">🌿</div>
+        <div class="tower-layer">🥬</div>
+        <div class="tower-layer">🌱</div>
+        <div class="tower-layer">💧</div>
+      </div>
+    </div>
+    <div style="position:relative; z-index:3; text-align:center; padding-top:280px">
+      <div class="splash-title">SeedDown</div>
+      <div class="splash-sub">Smart Vertical Farm AI</div>
+      <button class="btn-start" onclick="UI.showScreen('s-login')">▶ Start My Journey</button>
+    </div>
+    <div class="splash-soil"></div>
+    <div class="splash-grass"></div>
+  </div>
+
+  <!-- ============================================================
+       SCREEN: LOGIN
+       ============================================================ -->
+  <div class="screen login-bg" id="s-login">
+    <div class="login-box">
+      <div class="login-logo">🌿 SeedDown</div>
+      <div class="login-tagline">Welcome to SeedDown</div>
+      <div style="font-family:'Press Start 2P',monospace;font-size:6px;color:#C49A6C;margin-bottom:8px">Choose your mode:</div>
+      
+      <!-- PLACEHOLDER: Toggle mode (CHRIST) -->
+      <div class="mode-select">
+        <div class="mode-btn beginner sel" id="btn-beg" onclick="selMode('beginner')">
+          <span class="mode-icon">🌱</span>BEGINNER<br><span style="font-size:5px;color:#6aaa6a">一时兴起</span>
+        </div>
+        <div class="mode-btn commercial" id="btn-com" onclick="selMode('commercial')">
+          <span class="mode-icon">🏭</span>COMMERCIAL<br><span style="font-size:5px;color:#6a8aaa">需要数据</span>
+        </div>
+      </div>
+      
+      <input class="login-input" placeholder="📧 Gmail / Email" id="emailInput" value="farmer_lee@gmail.com"/>
+      <button class="btn-login" onclick="doLogin()">▶ ENTER FARM</button>
+      <div style="font-family:'VT323',monospace;font-size:13px;color:#8B5E3C;text-align:center;margin-top:10px">Powered by PERSAKA <span style="color:red; font-weight:bold;">UTM</span></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SCREEN: FARM LIST
+       ============================================================ -->
+  <div class="screen farmlist-bg" id="s-farmlist">
+    <div class="topbar" style="background:rgba(44,24,16,0.95);">
+      <div class="topbar-logo">🌿 SeedDown</div>
+      <div class="topbar-spacer"></div>
+      <!-- PLACEHOLDER: Toggle mode (CHRIST) -->
+      <button class="topbar-btn" onclick="switchMode()">🔄 Switch</button>
+    </div>
+    
+    <!-- TOP NAV (HOME & PROFILE ONLY) -->
+    <div class="top-nav">
+      <div class="nav-item active" onclick="goDash()">
+        <span class="nav-icon">🏠</span><span class="nav-lbl">HOME</span>
+      </div>
+      <div class="nav-item" onclick="UI.showToast('info','Profile Settings')">
+        <span class="nav-icon">👤</span><span class="nav-lbl">PROFILE</span>
+      </div>
+    </div>
+
+    <div class="farm-list-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;margin-top:12px;">
+        <div class="section-label" id="farmlist-title">SELECT FARM</div>
+        <button class="btn-build" onclick="goBuild()">+ BUILD NEW</button>
+      </div>
+      <div class="farm-card active-farm" onclick="goDash()">
+        <div class="farm-card-icon">🏗️</div>
+        <div class="farm-card-info">
+          <div class="farm-card-name">Farm 1 — Rack Alpha</div>
+          <div class="farm-card-sub">6 plants • Zone A • Active</div>
+          <div class="farm-card-status">
+            <div class="status-dot dot-ok"></div>
+            <div class="status-dot dot-warn"></div>
+            <div class="status-dot dot-bad"></div>
+          </div>
+        </div>
+        <div style="font-size:18px;color:#FFD966">▶</div>
+      </div>
+      <div class="farm-card" onclick="goDash()">
+        <div class="farm-card-icon">🌿</div>
+        <div class="farm-card-info">
+          <div class="farm-card-name">Farm 2 — Rooftop Beta</div>
+          <div class="farm-card-sub">4 plants • Zone B • Active</div>
+        </div>
+        <div style="font-size:18px;color:#FFD966">▶</div>
+      </div>
+      <div style="height:80px"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SCREEN: HOME (GAMIFIED BEGINNER DASHBOARD)
+       ============================================================ -->
+  <div class="screen" id="s-home">
+    <div class="topbar">
+      <button class="topbar-btn" onclick="UI.showScreen('s-farmlist')" style="margin-right:10px;">◀</button>
+      <div class="topbar-logo">🌿</div>
+      <div class="topbar-farm" id="topbar-farm-name">Farm 1</div>
+      <div class="topbar-spacer"></div>
+      <div class="status-pills" id="topbar-pills">
+        <div class="pill pill-ok">ALL OK</div>
+      </div>
+      <button class="topbar-btn" onclick="UI.openAddPlant()">＋ Plant</button>
+    </div>
+    
+    <!-- TOP NAV (HOME & PROFILE ONLY) -->
+    <div class="top-nav">
+      <div class="nav-item active" onclick="goDash()">
+        <span class="nav-icon">🏠</span><span class="nav-lbl">HOME</span>
+      </div>
+      <div class="nav-item" onclick="UI.showToast('info','Profile Settings')">
+        <span class="nav-icon">👤</span><span class="nav-lbl">PROFILE</span>
+      </div>
+    </div>
+
+    <div class="body-scroll" id="home-scroll">
+      <!-- ── ISO FARM SCENE ── -->
+      <!-- PLACEHOLDER: Dashboard (3D & gamified) (JIAHUI) -->
+      <div class="iso-scene-wrap">
+        <div class="home-sky"></div>
+        <canvas id="farmCanvas" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
+        <!-- FAB Add Plant Overlay -->
+        <button class="fab-add" onclick="UI.openAddPlant()">+</button>
+      </div>
+
+      <!-- ── DASHBOARD METRICS STRIP ── -->
+      <div class="dash-strip" id="dashStrip">
+        <!-- populated by JS -->
+      </div>
+
+      <!-- ── NPC DIALOG BOX ── -->
+      <div class="npc-dialog-wrap">
+        <div class="npc-dialog" id="npcDialog">
+          <div class="npc-dialog-portrait" id="npcPortrait">🧑‍🌾</div>
+          <div class="npc-dialog-name" id="npcName">FARMER JOE</div>
+          <div class="npc-dialog-text" id="npcText">
+            Howdy! Your farm is looking great today. Keep it up!<span class="npc-dialog-cursor"></span>
+          </div>
+          <div class="npc-dialog-actions" id="npcActions">
+            <button class="px-btn px-btn-gold" style="font-size:10px;padding:8px 12px" onclick="NPC.next()">Next ▶</button>
+            <button class="px-btn px-btn-green" style="font-size:10px;padding:8px 12px" onclick="NPC.dismiss()">OK ✓</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── FEATURES WIDGET ROW ── -->
+      <div class="features-section">
+        <div class="features-label">◀ FEATURES ▶</div>
+        <div class="features-row">
+          <div class="feat-widget" style="--feat-color:#F5C518" onclick="UI.showFeature('whatif')">
+            <span class="feat-widget-icon">🔮</span>
+            <div class="feat-widget-lbl">WHAT<br>IF</div>
+          </div>
+          <div class="feat-widget" style="--feat-color:#5B9BD5" onclick="UI.showFeature('consumption')">
+            <span class="feat-widget-icon">⚡</span>
+            <div class="feat-widget-lbl">ECO<br>SAVE</div>
+          </div>
+          <div class="feat-widget" style="--feat-color:#D94F4F" onclick="UI.showFeature('alerts')">
+            <span class="feat-widget-icon">🚨</span>
+            <div class="feat-widget-lbl">AI<br>ALERT</div>
+            <div class="feat-badge show" id="alertBadge"></div>
+          </div>
+          <div class="feat-widget" style="--feat-color:#5BAD5E" onclick="UI.showScreen('s-community')">
+            <span class="feat-widget-icon">🏘️</span>
+            <div class="feat-widget-lbl">COMM<br>UNITY</div>
+          </div>
+        </div>
+      </div>
+      <div style="height:100px"></div> <!-- Bottom spacing for floating chatbox -->
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SCREEN: COMMERCIAL DASHBOARD
+       ============================================================ -->
+  <div class="screen" id="s-dash-c">
+    <div class="topbar" style="background:#0D1221; border-bottom: 2px solid #00D4FF33;">
+      <button class="topbar-btn" style="border-color:#00D4FF55;color:#00D4FF" onclick="UI.showScreen('s-farmlist')">◀ BACK</button>
+      <div class="topbar-logo" style="color:#00D4FF; text-shadow:0 0 8px #00D4FF66;">⚙ NexusGrow PRO</div>
+      <div class="topbar-spacer"></div>
+      <div class="com-badge">LIVE</div>
+    </div>
+    
+    <!-- TOP NAV (HOME & PROFILE ONLY) -->
+    <div class="top-nav" style="background:#0D1221; border-bottom-color:#00D4FF33;">
+      <div class="nav-item active" onclick="goDash()">
+        <span class="nav-icon">🏠</span><span class="nav-lbl" style="color:#00D4FF">HOME</span>
+      </div>
+      <div class="nav-item" onclick="UI.showToast('info','Profile Settings')">
+        <span class="nav-icon">👤</span><span class="nav-lbl">PROFILE</span>
+      </div>
+    </div>
+
+    <div class="com-body">
+      <div class="com-kpi-grid">
+        <div class="kpi-card profit"><div class="kpi-label">PROFIT</div><div class="kpi-val green">RM 348</div></div>
+        <div class="kpi-card energy"><div class="kpi-label">ENERGY</div><div class="kpi-val yellow">24 kWh</div></div>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-title">📈 PROFIT TREND</div>
+        <div class="chart-area" style="border:1px solid #00FF8844; height:60px; display:flex; align-items:center; justify-content:center; color:#00FF88; font-size:12px;">[ Chart Area ]</div>
+      </div>
+      <div class="com-feature-tabs">
+        <div class="com-feat" onclick="UI.showFeature('whatif')"><span class="com-feat-icon">🔮</span><div class="com-feat-lbl">WHAT IF</div></div>
+        <div class="com-feat" onclick="UI.showFeature('consumption')"><span class="com-feat-icon">⚡</span><div class="com-feat-lbl">ESG DATA</div></div>
+        <div class="com-feat" onclick="UI.showFeature('alerts')"><span class="com-feat-icon">🚨</span><div class="com-feat-lbl">ALERTS</div></div>
+        <div class="com-feat" onclick="UI.showToast('info','Control Panel Placeholder')"><span class="com-feat-icon">🎛️</span><div class="com-feat-lbl">CONTROL</div></div>
+      </div>
+      <div style="height:80px"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SCREEN: FEATURE PANEL (Shared shell)
+       ============================================================ -->
+  <div class="screen" id="s-feature">
+    <div class="feat-header" id="feat-header">
+      <button class="feat-back" id="feat-back-btn" onclick="UI.goBack()">◀ BACK</button>
+      <div class="feat-screen-title" id="featTitle">FEATURE</div>
+    </div>
+    <div class="feat-content" id="featBody">
+      <!-- dynamic content populated by features.js -->
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SCREEN: COMMUNITY (Happy Farm style)
+       ============================================================ -->
+  <!-- PLACEHOLDER: Community (买卖/exchange && 交流 && gamified 参观) (SUTING) -->
+  <div class="screen" id="s-community">
+    <div class="topbar">
+      <button class="topbar-btn" onclick="UI.showScreen('s-home')">◀ BACK</button>
+      <div class="topbar-logo">🏘️ Community</div>
+      <div class="topbar-spacer"></div>
+      <div style="font-family:'VT323',monospace;font-size:18px;color:var(--ok)">● 12 Online</div>
+    </div>
+
+    <!-- TOP NAV (HOME & PROFILE ONLY) -->
+    <div class="top-nav">
+      <div class="nav-item" onclick="goDash()">
+        <span class="nav-icon">🏠</span><span class="nav-lbl">HOME</span>
+      </div>
+      <div class="nav-item" onclick="UI.showToast('info','Profile Settings')">
+        <span class="nav-icon">👤</span><span class="nav-lbl">PROFILE</span>
+      </div>
+    </div>
+
+    <div class="body-scroll">
+      <!-- Community map -->
+      <div class="community-map-wrap" id="communityMap">
+        <div class="road-h" style="top:55px;"></div>
+        <div class="road-v"></div>
+        <div class="community-map-grid" id="communityMapGrid">
+          <!-- populated by JS -->
+        </div>
+        <!-- Walking NPCs -->
+        <div class="map-npc" style="top:65px;animation-duration:9s;" title="Ali's Farm">👨‍🌾</div>
+        <div class="map-npc" style="top:80px;animation-duration:13s;animation-delay:-4s;">👩‍🌾</div>
+      </div>
+
+      <!-- User list -->
+      <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--wood-lt);padding:14px 14px 6px;">
+        NEARBY FARMERS
+      </div>
+      <div class="community-users" id="communityUsers">
+        <!-- populated by JS -->
+      </div>
+      <div style="height:100px;"></div>
+    </div>
+  </div>
+
+
+  <!-- ============================================================
+       MODALS & OVERLAYS
+       ============================================================ -->
+  <!-- MODAL: ADD PLANT -->
+  <div class="modal-overlay" id="addPlantModal" onclick="UI.closeAddPlant(event)">
+    <div class="modal-sheet" onclick="e=>e.stopPropagation()">
+      <div class="modal-header">
+        <div class="modal-title">🌱 Add New Plant</div>
+        <button class="modal-close" onclick="UI.closeAddPlant()">✕</button>
+      </div>
+
+      <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--wood-lt);padding:14px 16px 6px;">
+        SELECT CROP
+      </div>
+      <div class="plant-select-grid" id="plantSelectGrid"></div>
+      <div class="tile-picker-section">
+        <div class="tile-picker-label">SELECT EMPTY TILE</div>
+        <div class="tile-picker-grid" id="tilePickerGrid"></div>
+      </div>
+      <div class="modal-confirm">
+        <button class="px-btn px-btn-gold" style="width:100%;font-size:12px;padding:16px;" onclick="Farm.confirmAddPlant()">
+          ▶ PLANT NOW
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY: VISIT FARM -->
+  <div class="visit-overlay" id="visitOverlay">
+    <div class="visit-topbar">
+      <div>
+        <div class="visit-farm-name" id="visitFarmName">Friend's Farm</div>
+        <div class="visit-owner" id="visitOwner">Owner: ???</div>
+      </div>
+      <button class="visit-close" onclick="UI.closeVisit()">✕ LEAVE</button>
+    </div>
+    <div class="visit-scene" id="visitScene">
+      <div class="visit-scene-emoji">🌿🥬🌱</div>
+      <div style="font-family:'VT323',monospace;font-size:24px;color:var(--grass-md);text-align:center;">
+        [Visit Farm — 3D View Placeholder]
+      </div>
+      <div style="font-family:'Press Start 2P',monospace;font-size:9px;color:var(--wood-lt);text-align:center;padding:0 30px;">
+        Full 3D farm rendering coming soon
+      </div>
+    </div>
+    <div class="visit-actions">
+      <button class="px-btn px-btn-blue" style="flex:1;font-size:10px" onclick="Community.openTrade()">💱 TRADE</button>
+      <button class="px-btn px-btn-gold" style="flex:1;font-size:10px" onclick="Community.openChat()">💬 CHAT</button>
+      <button class="px-btn px-btn-green" style="flex:1;font-size:10px" onclick="UI.showToast('success','👍 Farm liked!')">❤ LIKE</button>
+    </div>
+  </div>
+
+  <!-- MODAL: TRADE -->
+  <div class="trade-modal" id="tradeModal">
+    <div class="trade-box">
+      <div class="trade-header">
+        <div class="trade-title">💱 Trade Market</div>
+        <button class="trade-close" onclick="UI.closeTrade()">✕</button>
+      </div>
+      <div class="trade-body">
+        <div>
+          <div class="trade-section-title">SELL (your produce)</div>
+          <div class="trade-items" id="tradeMyItems"></div>
+        </div>
+        <div>
+          <div class="trade-section-title">BUY (their produce)</div>
+          <div class="trade-items" id="tradeBuyItems"></div>
+        </div>
+        <div class="trade-confirm">
+          <button class="px-btn px-btn-gold" style="width:100%;font-size:10px;padding:14px;" onclick="Community.confirmTrade()">
+            ▶ CONFIRM TRADE
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERLAY: CHAT -->
+  <div class="chat-overlay" id="chatOverlay">
+    <div class="chat-topbar">
+      <div style="font-size:32px;" id="chatPartnerAvatar">👩‍🌾</div>
+      <div class="chat-with" id="chatPartnerName">Farmer</div>
+      <div style="font-family:'VT323',monospace;font-size:18px;color:var(--ok);">● Online</div>
+      <button class="chat-close" onclick="UI.closeChat()">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-row">
+      <input class="chat-input" id="chatInput" placeholder="Say something..." maxlength="100"
+             onkeydown="if(event.key==='Enter')Community.sendChat()"/>
+      <button class="chat-send" onclick="Community.sendChat()">SEND ▶</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       GLOBAL AI CHATBOX
+       ============================================================ -->
+  <!-- PLACEHOLDER: Solution- AI AI-Chatbox + disease diagnosis (ZIQI) -->
+  <div id="globalAiChat" class="global-ai-container" style="display: none;">
+    <div class="global-ai-window" id="aiChatWindow">
+      <div class="global-ai-header">
+        <span>🤖 NexusAI Assistant</span>
+        <button class="global-ai-close" onclick="toggleAiChat()">✕</button>
+      </div>
+      <div class="global-ai-body" id="aiChatBody">
+        <div class="chat-bubble theirs">
+          <div class="chat-bubble-name">NexusAI</div>
+          Hello! Need help analyzing your farm data?
+        </div>
+      </div>
+      <div class="global-ai-input-wrap">
+        <input type="text" id="aiChatInput" class="global-ai-input" placeholder="Ask AI..." onkeydown="if(event.key==='Enter')sendAiChat()">
+        <button class="global-ai-send" onclick="sendAiChat()">▶ SEND</button>
+      </div>
+    </div>
+    <button class="global-ai-fab" onclick="toggleAiChat()">🤖</button>
+  </div>
+
+</div><!-- end app-shell -->
+
+<!-- Script Imports (MUST BE IN THIS ORDER) -->
+<script src="js/state.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/farm-dashboard.js"></script>
+<script src="js/features-core.js"></script>
+<script src="js/feature-whatif.js"></script>
+<script src="js/feature-consumption.js"></script>
+<script src="js/feature-alerts.js"></script>
+<script src="js/community.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
