@@ -1,6 +1,150 @@
 import { showToast } from '../utils/toast.js';
 
 let isOpen = false;
+
+export function initAiChat() {
+    const container = document.getElementById('globalAiChat');
+    if (!container) return;
+
+    container.innerHTML = `
+        <style>
+            #aiFab {
+                width: 60px; height: 60px; background: var(--accent); 
+                border-radius: 50%; display: flex; align-items: center; 
+                justify-content: center; font-size: 30px; cursor: pointer; 
+                box-shadow: 0 8px 24px rgba(0,0,0,0.2); transition: all 0.3s ease;
+                z-index: 1000; position: fixed; bottom: 20px; right: 20px;
+            }
+            #aiFab:hover { transform: scale(1.1) rotate(5deg); }
+
+            #aiWindow {
+                display: none; position: fixed; bottom: 90px; right: 20px; 
+                width: 350px; height: 500px; background: var(--surface); 
+                border-radius: 24px; flex-direction: column; 
+                box-shadow: 0 12px 40px rgba(0,0,0,0.15); 
+                border: 1px solid var(--border); overflow: hidden;
+                z-index: 1000; animation: slideUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+
+            @keyframes slideUp {
+                from { opacity: 0; transform: translateY(20px) scale(0.95); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+
+            .msg-bubble {
+                max-width: 85%; padding: 12px 16px; border-radius: 18px; 
+                font-size: 0.95rem; line-height: 1.4; position: relative;
+                margin-bottom: 4px;
+            }
+            
+            .bot-msg { 
+                align-self: flex-start; background: var(--surface); 
+                border: 1px solid var(--border); border-bottom-left-radius: 4px; 
+                color: var(--text-main);
+            }
+
+            .user-msg { 
+                align-self: flex-end; background: var(--accent); 
+                color: white; border-bottom-right-radius: 4px;
+                box-shadow: 0 4px 10px rgba(var(--accent-rgb), 0.3);
+            }
+
+            .typing-indicator {
+                font-style: italic; font-size: 0.8rem; color: var(--text-muted);
+                margin-left: 12px; margin-bottom: 8px; display: none;
+            }
+        </style>
+
+        <div id="aiFab">🌿</div>
+
+        <div id="aiWindow">
+            <!-- Header -->
+            <div style="background: var(--accent); padding: 20px; color: white;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-weight: 800; font-size: 1.1rem; letter-spacing: -0.5px;">SeedDown AI</div>
+                        <div style="font-size: 0.75rem; opacity: 0.9; display: flex; align-items: center; gap: 4px;">
+                            <span style="width: 8px; height: 8px; background: #4ade80; border-radius: 50%;"></span>
+                            System Sync: Optimal
+                        </div>
+                    </div>
+                    <button id="closeAi" style="background:rgba(255,255,255,0.2); border:none; color:white; cursor:pointer; width:30px; height:30px; border-radius:50%; font-size: 0.8rem;">✕</button>
+                </div>
+            </div>
+
+            <!-- Messages Area -->
+            <div id="aiMessages" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; background: var(--bg-alt);">
+                <div class="msg-bubble bot-msg">
+                    Hello! I'm your SeedDown assistant. I'm connected to your farm's sensors. Ask me anything about your plants!
+                </div>
+            </div>
+
+            <div id="typingIndicator" class="typing-indicator">SeedDown is analyzing...</div>
+
+            <!-- Input Area -->
+            <div style="padding: 16px; background: var(--surface); border-top: 1px solid var(--border);">
+                <div style="display: flex; gap: 8px; background: var(--bg); padding: 4px; border-radius: 25px; border: 1px solid var(--border);">
+                    <input id="aiInput" type="text" placeholder="Ask about your farm..." 
+                        style="flex: 1; background: transparent; border: none; padding: 10px 15px; outline: none; color: var(--text-main);">
+                    <button id="aiSend" style="background: var(--accent); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; cursor: pointer; transition: transform 0.2s;">
+                        ➤
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const fab = document.getElementById('aiFab');
+    const windowDiv = document.getElementById('aiWindow');
+    const input = document.getElementById('aiInput');
+    const msgDiv = document.getElementById('aiMessages');
+    const typingIndicator = document.getElementById('typingIndicator');
+
+    fab.addEventListener('click', () => {
+        isOpen = !isOpen;
+        windowDiv.style.display = isOpen ? 'flex' : 'none';
+        if (isOpen) input.focus();
+    });
+
+    document.getElementById('closeAi').addEventListener('click', () => {
+        isOpen = false;
+        windowDiv.style.display = 'none';
+    });
+
+    function appendBubble(text, isUser) {
+        const b = document.createElement('div');
+        b.className = `msg-bubble ${isUser ? 'user-msg' : 'bot-msg'}`;
+        b.innerText = text;
+        msgDiv.appendChild(b);
+        msgDiv.scrollTop = msgDiv.scrollHeight;
+    }
+
+    async function handleSend() {
+        const text = input.value.trim();
+        if (!text) return;
+
+        appendBubble(text, true);
+        input.value = '';
+
+        // Show typing indicator
+        typingIndicator.style.display = 'block';
+        msgDiv.scrollTop = msgDiv.scrollHeight;
+
+        // Simulate AI Logic for now
+        setTimeout(() => {
+            typingIndicator.style.display = 'none';
+            appendBubble("Based on your sensors, the soil moisture is currently 42%. I recommend a light watering in 2 hours.", false);
+        }, 1500);
+    }
+
+    document.getElementById('aiSend').addEventListener('click', handleSend);
+    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
+}
+
+/*
+import { showToast } from '../utils/toast.js';
+
+let isOpen = false;
 let chatWindow = null;
 
 export function initAiChat() {
@@ -69,3 +213,5 @@ export function initAiChat() {
     sendBtn.addEventListener('click', sendMessage);
     input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 }
+
+*/
