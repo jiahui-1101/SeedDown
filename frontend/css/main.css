@@ -24,6 +24,58 @@
     --header-h: 60px;
     --nav-h: 48px;
     --transition: 0.22s cubic-bezier(.22,.68,0,1.1);
+
+    /*
+     * MODIFIED: added colour ramp CSS variables used by WhatIf.js
+     * These allow WhatIf component styles to reference semantic colour tokens
+     * instead of hardcoded hex values, ensuring dark-mode compatibility
+     * and consistency with the design system.
+     *
+     * Convention: --{ramp}-{stop} where stop matches the palette table
+     * (50 = lightest fill, 400 = mid/interactive, 600 = border, 800 = text on light fills)
+     */
+
+    /* Green ramp — harvest ready, savings positive, available zones */
+    --green-50:  #EAF3DE;
+    --green-100: #C0DD97;
+    --green-200: #97C459;
+    --green-400: #639922;
+    --green-600: #3B6D11;
+    --green-800: #27500A;
+
+    /* Amber ramp — impact "up" (moderate increase), partial recipe match */
+    --amber-50:  #FAEEDA;
+    --amber-100: #FAC775;
+    --amber-400: #BA7517;
+    --amber-800: #633806;
+
+    /* Red ramp — impact "warn" (critical increase), zone full, expenses */
+    --red-50:  #FCEBEB;
+    --red-200: #F09595;
+    --red-400: #E24B4A;
+    --red-800: #501313;
+
+    /* Teal ramp — AI notes, readiness banner, net savings highlight */
+    --teal-50:  #E1F5EE;
+    --teal-400: #1D9E75;
+    --teal-600: #0F6E56;
+
+    /* Blue ramp — impact "down" (decrease), informational badges */
+    --blue-50:  #E6F1FB;
+    --blue-200: #85B7EB;
+    --blue-400: #378ADD;
+    --blue-600: #185FA5;
+
+    /*
+     * Aliases consumed by WhatIf.js via var(--bg-primary), var(--bg-secondary) etc.
+     * These bridge WhatIf's internal naming to the global surface tokens above,
+     * so the module works without changes if the global token names ever differ.
+     */
+    --bg-primary:    var(--surface);       /* white card backgrounds */
+    --bg-secondary:  var(--surface2);      /* muted fills, pill backgrounds */
+    --text-primary:  var(--text);
+    --text-secondary:var(--sub);
+    --border-color:  var(--border);
 }
 
 * {
