@@ -129,7 +129,7 @@ const WIF_NP_SPECIES = Object.entries(WIF_NP_DATA).map(([k, v]) => ({
 }));
 
 /* ---------- STATE (module-scoped) ---------- */
-let wif_selectedCrops = new Set(['tomato', 'carrot', 'cabbage', 'basil', 'green_onion']);
+let wif_selectedCrops = new Set(); // starts empty — user picks from what's ready
 let wif_qty     = 4;
 // MODIFIED: split rows out of data into its own mutable state variable
 let wif_cosRows = 5;
@@ -412,7 +412,7 @@ export function render() {
    ============================================================ */
 export function init() {
   // Reset module state on each mount so re-entry is clean
-  wif_selectedCrops = new Set(['tomato', 'carrot', 'cabbage', 'basil', 'green_onion']);
+  wif_selectedCrops = new Set(); // reset to empty on re-mount
   wif_qty     = 4;
   wif_cosRows = 5;
   wif_curNp   = 'spinach';
@@ -490,10 +490,19 @@ function wifUpdateHarvest() {
 function wifRenderCropSelect(days) {
   const el = document.getElementById('wif-crop-select');
   const visible = WIF_CROPS.filter(c => c.readyIn <= days);
+
+  // Auto-remove any selected crops that are no longer ready
+  wif_selectedCrops.forEach(id => {
+    if (!visible.find(c => c.id === id)) {
+      wif_selectedCrops.delete(id);
+    }
+  });
+
   if (visible.length === 0) {
     el.innerHTML = '<span style="font-size:12px;color:var(--text-secondary,#999);">No crops ready yet — move the slider forward.</span>';
     return;
   }
+
   el.innerHTML = visible.map(c => `
     <div class="wif-pill ${wif_selectedCrops.has(c.id) ? 'selected' : ''}"
          onclick="wifToggleCrop('${c.id}')">
@@ -519,14 +528,15 @@ function wifRenderRecipes() {
     return;
   }
 
+  // Static recipes — only show if at least 1 selected crop is in it
   const scored = WIF_RECIPES.map(r => {
     const match = r.ingr.filter(i => wif_selectedCrops.has(i)).length;
+    if (match === 0) return null;
     return { ...r, match, pct: Math.round((match / r.ingr.length) * 100) };
-  }).sort((a, b) => b.match - a.match);
+  }).filter(Boolean).sort((a, b) => b.match - a.match);
 
-  el.innerHTML = scored.slice(0, 4).map(r => `
+  el.innerHTML = scored.map(r => `
     <div class="wif-recipe-card">
-      <!-- MODIFIED: food emoji hero above the name for visual appetising presentation -->
       <div class="wif-recipe-hero">${r.emoji}</div>
       <div class="wif-recipe-name">
         ${r.name}
@@ -535,15 +545,136 @@ function wifRenderRecipes() {
       <div>
         ${r.ingr.map(i => {
           const crop = WIF_CROPS.find(c => c.id === i);
-          return `<span class="wif-ingr-tag ${wif_selectedCrops.has(i) ? '' : 'missing'}">${crop ? crop.emoji + ' ' + crop.name : i}</span>`;
+          const have = wif_selectedCrops.has(i);
+          return have
+            ? `<span class="wif-ingr-tag">${crop ? crop.emoji + ' ' + crop.name : i}</span>`
+            : `<span class="wif-ingr-tag" style="background:#f0f0f0;color:#999;border:0.5px dashed #ccc;">🛒 ${crop ? crop.name : i}</span>`;
         }).join('')}
       </div>
     </div>`).join('');
 
-  const top = scored[0];
-  note.textContent = top.pct === 100
-    ? `All ingredients for ${top.name} are in your harvest — perfect timing!`
-    : `${top.name} matches ${top.match}/${top.ingr.length} ingredients. Grow more to complete it.`;
+  note.textContent = scored.length > 0
+    ? `${scored.length} recipe${scored.length > 1 ? 's' : ''} match your harvest. Loading database...`
+    : 'No local matches. Loading database recipes...';
+
+  wifFetchDbRecipes([...wif_selectedCrops]);
+}
+
+async function wifFetchDbRecipes(selectedIds) {
+  const el   = document.getElementById('wif-recipe-grid');
+  const note = document.getElementById('wif-ai-recipe-note');
+
+  const keywordMap = {
+    tomato:      ['tomato', 'tomatoes'],
+    carrot:      ['carrot', 'carrots'],
+    cabbage:     ['cabbage'],
+    eggplant:    ['eggplant', 'aubergine', 'brinjal'],
+    basil:       ['basil'],
+    green_onion: ['green onion', 'green onions', 'scallion'],
+    lettuce:     ['lettuce'],
+    spinach:     ['spinach'],
+    strawberry:  ['strawberry', 'strawberries'],
+    pepper:      ['bell pepper', 'green pepper', 'capsicum'],
+  };
+
+  try {
+    // Fetch ALL selected crops in parallel
+    const results = await Promise.all(
+      selectedIds.map(id =>
+        fetch(`http://localhost:3000/api/whatif/recipes?species=${id}`)
+          .then(r => r.ok ? r.json() : { recipes: [] })
+          .catch(() => ({ recipes: [] }))
+      )
+    );
+
+    // Deduplicate by recipe name
+    const seen = new Set();
+    const allRecipes = results
+      .flatMap(r => r.recipes || [])
+      .filter(r => {
+        if (seen.has(r.name)) return false;
+        seen.add(r.name);
+        return true;
+      });
+
+    if (!allRecipes.length) {
+      note.textContent = note.textContent.replace('Loading database...', '(No DB results)');
+      return;
+    }
+
+    // For EACH recipe, determine:
+    // A) which selected crops appear → green badges (you grow these)
+    // B) which raw ingredients are NOT selected crops → grey 🛒 badges (need to buy)
+    const enriched = allRecipes.map(recipe => {
+      // Which of YOUR selected crops are in this recipe
+      const grownMatches = selectedIds.filter(id => {
+        const kws = keywordMap[id] || [id];
+        return recipe.ingredients.some(ing =>
+          kws.some(kw => ing.toLowerCase().includes(kw.toLowerCase()))
+        );
+      });
+
+      if (grownMatches.length === 0) return null; // skip — none of your crops
+
+      // All other "interesting" ingredients (not quantities/seasonings)
+      const allSelectedKws = selectedIds.flatMap(id => keywordMap[id] || [id]);
+      const otherIngredients = recipe.ingredients
+        .filter(ing => {
+          const low = ing.toLowerCase();
+          // Skip if it's already a grown crop match
+          if (allSelectedKws.some(kw => low.includes(kw))) return false;
+          // Skip pure seasonings/basics
+          const skip = ['salt','pepper','water','oil','sugar','flour','butter','egg','milk','sauce','mix','seasoning','powder','vinegar','cream','cheese','margarine'];
+          if (skip.some(s => low.includes(s))) return false;
+          return true;
+        })
+        .map(ing => {
+          // Strip quantity prefix like "1 lb.", "2 Tbsp.", "1 (16 oz.) can"
+          return ing
+            .replace(/^\d[\d\s\/]*(\(\d+[\s\w\.]+\))?\s*(lb|oz|c|pkg|tsp|tbsp|can|qt|pt|pkg|Tbsp|large|medium|small|fresh|dried|chopped|diced|sliced|cooked|frozen|thawed|drained|shredded|grated|minced|crushed|ground|boneless|skinless)\.?\s*/gi, '')
+            .replace(/^[\d\/\s\.]+/, '')
+            .trim();
+        })
+        .filter(ing => ing.length > 2 && ing.length < 40)
+        .slice(0, 4); // max 4 "buy" ingredients shown
+
+      return { recipe, grownMatches, otherIngredients };
+    }).filter(Boolean)
+      .sort((a, b) => b.grownMatches.length - a.grownMatches.length);
+
+    if (!enriched.length) {
+      note.textContent = 'No database recipes matched your selected crops.';
+      return;
+    }
+
+    // NO slice limit — show ALL matched recipes
+    const dbCards = enriched.map(({ recipe, grownMatches, otherIngredients }) => {
+      const grownBadges = grownMatches.map(id => {
+        const crop = WIF_CROPS.find(c => c.id === id);
+        return `<span class="wif-ingr-tag" style="background:var(--teal-50,#E1F5EE);color:var(--teal-600,#0F6E56);border:0.5px solid var(--teal-200,#7DD3BD);">${crop ? crop.emoji + ' ' + crop.name : id}</span>`;
+      }).join('');
+
+      const buyBadges = otherIngredients.map(ing =>
+        `<span class="wif-ingr-tag" style="background:#f0f0f0;color:#888;border:0.5px dashed #ccc;">🛒 ${ing}</span>`
+      ).join('');
+
+      return `
+        <div class="wif-recipe-card" style="border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
+          <div class="wif-recipe-hero">🍽️</div>
+          <div class="wif-recipe-name">
+            ${recipe.name.trim()}
+            <span class="wif-badge wif-badge-teal">DB</span>
+          </div>
+          <div>${grownBadges}${buyBadges}</div>
+        </div>`;
+    }).join('');
+
+    el.innerHTML += dbCards;
+    note.textContent = `${enriched.length} recipes found — green = your harvest, 🛒 = ingredients to buy.`;
+
+  } catch (err) {
+    note.textContent = note.textContent.replace('Loading database...', '(Backend offline — local only)');
+  }
 }
 
 /* ============================================================

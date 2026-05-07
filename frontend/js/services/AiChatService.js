@@ -1,6 +1,8 @@
 import { showToast } from '../utils/toast.js';
 
 let isOpen = false;
+let chatHistory = []; // tracks conversation for multi-turn
+
 
 export function initAiChat() {
     const container = document.getElementById('globalAiChat');
@@ -125,16 +127,36 @@ export function initAiChat() {
 
         appendBubble(text, true);
         input.value = '';
-
-        // Show typing indicator
         typingIndicator.style.display = 'block';
         msgDiv.scrollTop = msgDiv.scrollHeight;
 
-        // Simulate AI Logic for now
-        setTimeout(() => {
+        try {
+            const res = await fetch('http://localhost:3000/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: text,
+                    history: chatHistory
+                })
+            });
+
+            const data = await res.json();
             typingIndicator.style.display = 'none';
-            appendBubble("Based on your sensors, the soil moisture is currently 42%. I recommend a light watering in 2 hours.", false);
-        }, 1500);
+
+            if (data.reply) {
+                appendBubble(data.reply, false);
+                // Keep conversation history for multi-turn context
+                chatHistory.push({ role: 'user', content: text });
+                chatHistory.push({ role: 'assistant', content: data.reply });
+                // Cap history at 10 messages to avoid large payloads
+                if (chatHistory.length > 10) chatHistory = chatHistory.slice(-10);
+            } else {
+                appendBubble('Sorry, I had trouble connecting. Try again!', false);
+            }
+        } catch (err) {
+            typingIndicator.style.display = 'none';
+            appendBubble('Connection error — is the backend running?', false);
+        }
     }
 
     document.getElementById('aiSend').addEventListener('click', handleSend);

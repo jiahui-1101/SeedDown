@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const { chat } = require('../controllers/chatController');
 
-router.get('/', (req, res) => {
-  res.json({ message: 'sensor route working' });
-});
+router.post('/', chat);
 
 module.exports = router;

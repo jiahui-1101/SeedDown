@@ -1,0 +1,41 @@
+const express = require('express');
+const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const c = require('../controllers/whatIfController');
+
+// NEW: serve recipes from garden_recipes.json filtered by crop keyword
+router.get('/recipes', (req, res) => {
+  const { species } = req.query;
+  if (!species) return res.status(400).json({ error: 'species param required' });
+
+  const filePath = path.join(__dirname, '../../garden_recipes.json');
+  const allRecipes = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+
+  // Keywords map — same as WIF_CROPS ids
+  const keywordMap = {
+    tomato:      ['tomato', 'tomatoes'],
+    carrot:      ['carrot', 'carrots'],
+    cabbage:     ['cabbage', 'coleslaw'],
+    eggplant:    ['eggplant', 'aubergine', 'brinjal'],
+    basil:       ['basil', 'pesto'],
+    green_onion: ['green onion', 'green onions', 'scallion'],
+    lettuce:     ['lettuce', 'salad'],
+    spinach:     ['spinach'],
+    strawberry:  ['strawberry', 'strawberries'],
+    pepper:      ['bell pepper', 'green pepper', 'capsicum'],
+  };
+
+  const keywords = keywordMap[species.toLowerCase()] || [species];
+  const regex = new RegExp(keywords.join('|'), 'i');
+
+  const matched = allRecipes
+    .filter(r => r.ingredients.some(ing => regex.test(ing)))
+    .slice(0, 8);
+
+  res.json({ species, count: matched.length, recipes: matched });
+});
+
+router.post('/forecast', c.getForecast);
+
+module.exports = router;
