@@ -1,5 +1,6 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
+import * as WhatIfPro from './WhatIfPro.js';   // ← Pro What-If module
 
 export function render() {
     const container = document.getElementById('screenContainer');
@@ -30,15 +31,27 @@ export function render() {
                     <div class="com-feat" data-feature="alerts" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">🚨<div style="font-size:0.6rem;">Alerts</div></div>
                     <div class="com-feat" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">🎛️<div style="font-size:0.6rem;">Control</div></div>
                 </div>
+
+                <!-- What-If Pro panel: hidden until tile is clicked -->
+                <div id="com-whatif-panel" style="display:none; margin-top:12px;"></div>
             </div>
         </div>
     `;
-    
+
     document.getElementById('comBackBtn').addEventListener('click', () => showScreen('farmlist'));
+
     document.querySelectorAll('.com-feat[data-feature]').forEach(el => {
-        el.addEventListener('click', () => showScreen('feature', { feature: el.getAttribute('data-feature') }));
+        el.addEventListener('click', () => {
+            const feature = el.getAttribute('data-feature');
+            if (feature === 'whatif') {
+                _toggleWhatIfPanel(el);
+            } else {
+                showScreen('feature', { feature });
+            }
+        });
     });
-    // 底部导航
+
+    // Bottom nav
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.addEventListener('click', () => {
             const screen = item.getAttribute('data-screen');
@@ -46,4 +59,31 @@ export function render() {
             else if (screen === 'home') showScreen('dash-c');
         });
     });
+}
+
+/* ─────────────────────────────────────────────
+   WHAT-IF PRO PANEL — inline toggle
+   Clicking the tile a second time collapses it.
+───────────────────────────────────────────── */
+function _toggleWhatIfPanel(tile) {
+    const panel = document.getElementById('com-whatif-panel');
+    const isOpen = panel.style.display !== 'none';
+
+    // Collapse
+    if (isOpen) {
+        panel.style.display = 'none';
+        tile.style.outline = 'none';
+        return;
+    }
+
+    // Expand: inject HTML then init interactivity
+    panel.style.display = 'block';
+    panel.innerHTML = WhatIfPro.render();
+    tile.style.outline = '2px solid #60C0FF';
+
+    // Scroll smoothly so the panel comes into view
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Boot all sliders, charts, search, etc.
+    WhatIfPro.init();
 }
