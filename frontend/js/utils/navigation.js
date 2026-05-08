@@ -7,7 +7,7 @@ export function initNavigation(pages) {
 
 export async function showScreen(screenName, params = {}) {
     console.log(`[Navigation] Showing screen: ${screenName}, current: ${currentScreen}`);
-    if (currentScreen === screenName) {
+    if (currentScreen === screenName && Object.keys(params).length === 0){
         console.log(`[Navigation] Screen ${screenName} already active, skipping`);
         return;
     }
