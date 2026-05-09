@@ -9,7 +9,9 @@ app.use(cors());
 
 connectDB();
 
-// Existing recipe route (keep working)
+// IoT sensor routes for Wokwi / ESP32
+app.use('/api/sensors', require('./src/routes/sensorRoutes'));
+app.use('/api/iot', require('./src/routes/sensorRoutes'));
 app.use('/api/recipes', require('./src/routes/sensorRoutes'));
 
 // New routes
