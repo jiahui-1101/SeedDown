@@ -78,7 +78,7 @@ export function render() {
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.addEventListener('click', () => {
             const screen = item.getAttribute('data-screen');
-            if (screen === 'profile') showToast('info', 'Profile coming soon');
+             if (screen === 'profile') showScreen('profile');
             else if (screen === 'home') showScreen('home');
         });
     });

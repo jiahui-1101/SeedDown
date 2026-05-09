@@ -67,9 +67,14 @@ export function render() {
         });
     });
 
-    // 默认渲染第一个 Tab
-    renderVisitsTab('commContentArea');
-    fetchMyCoins();
+    // Bottom nav
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const screen = item.getAttribute('data-screen');
+             if (screen === 'profile') showScreen('profile');
+            else if (screen === 'home') showScreen('dash-c');
+        });
+    });
 }
 
 async function fetchMyCoins() {

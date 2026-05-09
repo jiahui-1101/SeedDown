@@ -1,7 +1,8 @@
 export const AppState = {
     mode: 'beginner',
     currentScreen: 'splash',
-    farmName: 'Farm 1 — Rack Alpha',
+    farmName: 'My Farm',
+    currentFarmId: null,
     tiles: [],
     sensors: {
         temp: { val: 34.2, unit: '°C', status: 'danger' },

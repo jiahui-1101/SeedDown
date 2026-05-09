@@ -79,13 +79,17 @@ export function render() {
         <!-- WATER USAGE CHART -->
         <div style="background:#0D1221; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #1A2A40;">
           <div style="color:#60A5FA; font-weight:600; margin-bottom:12px;">💧 Water Usage (last 24 readings)</div>
-          <canvas id="con-water-chart" height="100"></canvas>
+          <div style="position: relative; height: 150px; width: 100%;">
+          <canvas id="con-water-chart"></canvas>
+          </div>
         </div>
 
         <!-- ENERGY USAGE CHART -->
         <div style="background:#0D1221; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #1A2A40;">
           <div style="color:#FFD966; font-weight:600; margin-bottom:12px;">⚡ Energy Usage (last 24 readings)</div>
-          <canvas id="con-energy-chart" height="100"></canvas>
+          <div style="position: relative; height: 150px; width: 100%;">
+          <canvas id="con-energy-chart"></canvas>
+          </div>
         </div>
 
         <!-- RESOURCE BREAKDOWN TABLE -->
@@ -315,7 +319,7 @@ async function _renderCharts(readings) {
 
   const chartDefaults = {
     responsive: true,
-    maintainAspectRatio: true,
+    maintainAspectRatio: false,
     plugins: { legend: { display: false } },
     scales: {
       x: { ticks: { color: '#4A6A9A', font: { size: 9 } }, grid: { color: '#1A2A40' } },
