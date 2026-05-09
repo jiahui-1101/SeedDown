@@ -5,7 +5,7 @@
  * 用法: node test_sensor.js
  */
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 // ─── 模拟的 sensor 数据 (可以自己改) ────────────────────────────────
 const sensorPayloads = [

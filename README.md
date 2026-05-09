@@ -94,3 +94,56 @@ Contains reusable resources shared across systems.
 5. Data is visualized on dashboard
 ```
 
+---
+
+## 🚀 Render + Wokwi IoT Setup
+
+Deploy the backend folder to Render, then use the Render HTTPS URL in the ESP32 code.
+
+### Render backend settings
+
+Use these settings when creating the Render Web Service:
+
+```
+Root Directory: backend
+Build Command: npm install
+Start Command: npm start
+```
+
+Add Firebase environment variables in Render:
+
+```
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+```
+
+### ESP32 / Wokwi URL
+
+Open:
+
+```
+iot/vertical-farming-esp32/src/main.cpp
+```
+
+Replace this value with your Render URL:
+
+```cpp
+const char *RENDER_BACKEND_URL = "https://YOUR-RENDER-SERVICE.onrender.com";
+```
+
+The ESP32 will send data to:
+
+```
+POST /api/sensors
+GET /api/sensors/command?deviceId=farm_001&format=text
+```
+
+### Test the Render API
+
+After Render is live, run:
+
+```
+cd backend
+$env:BASE_URL="https://YOUR-RENDER-SERVICE.onrender.com"
+node test_sensor.js
+```
