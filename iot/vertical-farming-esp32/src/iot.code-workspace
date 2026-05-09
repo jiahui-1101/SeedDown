@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../../../../utmxhackathon/iot"
+		},
+		{
+			"name": "vertical-farming-esp32",
+			"path": ".."
+		}
+	],
+	"settings": {}
+}
