@@ -1,5 +1,4 @@
 node_modules/
 .env
 backend/recipes_data.csv
-backend/garden_recipes.json
 frontend/package-lock.json
