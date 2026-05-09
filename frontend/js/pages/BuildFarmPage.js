@@ -818,17 +818,24 @@ async function createField() {
     const farm = {
         id: `field_${Date.now()}`,
         name: payload.name,
-        plants: detectedPlants.length,
-        plantSlots: totalSlotsUsed(),
+        location: payload.location,
         zone: fieldInfo.location.trim() || String.fromCharCode(65 + (saved.length % 26)),
+        rackTypeId: fieldInfo.rackType,
         rackType: rack.label,
+        rackLabel: rack.label,
         targetPlant: payload.targetPlant,
         analysisGoal: payload.analysisGoal,
+        viewMode,
+        photoPreview: payload.photoPreview,
+        plants: detectedPlants.map(plant => ({ ...plant })),
+        plantSlots: totalSlotsUsed(),
+        createdAt: new Date().toISOString(),
     };
     saved.push(farm);
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
 
     AppState.newFarm = payload;
+    AppState.currentFarm = farm;
     AppState.currentFarmId = farm.id;
     AppState.farmName = farm.name;
     showToast('success', `"${farm.name}" field created`);
@@ -934,4 +941,5 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
 

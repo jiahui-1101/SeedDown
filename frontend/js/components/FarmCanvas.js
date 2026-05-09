@@ -1,6 +1,25 @@
 import { AppState } from '../store.js';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 
+const FARMS_STORAGE_KEY = 'user_farms';
+
+const RACK_OPTIONS = {
+    '3-tier': { id: '3-tier', label: '3-Tier Vertical', tiers: 3, slotsPerTier: 3, total: 9 },
+    '5-tier': { id: '5-tier', label: '5-Tier Tower', tiers: 5, slotsPerTier: 4, total: 20 },
+    wall: { id: 'wall', label: 'Wall Panel', tiers: 4, slotsPerTier: 5, total: 20 },
+};
+
+const EMOJI_COLORS = {
+    '🥬': 0x65a30d,
+    '🌿': 0x16a34a,
+    '🌱': 0x22c55e,
+    '🍅': 0xef4444,
+    '🌶️': 0xdc2626,
+    '🍓': 0xfb7185,
+    '🥒': 0x15803d,
+    '🥕': 0xf97316,
+};
+
 export const FarmCanvas = {
     canvas: null,
     renderer: null,
@@ -10,12 +29,19 @@ export const FarmCanvas = {
     rafId: null,
     resizeHandler: null,
     frame: 0,
+    field: null,
+    rack: RACK_OPTIONS['3-tier'],
+    slotPlants: [],
 
     init(selector) {
         this.destroy();
 
         this.canvas = document.getElementById(selector);
         if (!this.canvas) return;
+
+        this.field = getCurrentField();
+        this.rack = resolveRack(this.field);
+        this.slotPlants = resolveSlotPlants(this.field, this.rack);
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0xeaf4ff);
@@ -44,7 +70,7 @@ export const FarmCanvas = {
 
         this.resizeHandler = () => this.resize();
         window.addEventListener('resize', this.resizeHandler);
-        this.canvas.onclick = () => window.showToast?.('info', 'Tap + Plant to add crops to this 3D field');
+        this.canvas.onclick = () => window.showToast?.('info', `${this.rack.tiers} tiers · ${this.slotPlants.length}/${this.rack.total} plants`);
 
         this.resize();
         this.animate();
@@ -74,11 +100,11 @@ export const FarmCanvas = {
         ground.receiveShadow = true;
         this.scene.add(ground);
 
-        const rackW = 2.65;
-        const rackD = 0.75;
-        const tierH = 0.68;
-        const tiers = 3;
-        const slotsPerTier = 4;
+        const { tiers, slotsPerTier } = this.rack;
+        const slotW = slotsPerTier >= 5 ? 0.43 : slotsPerTier === 4 ? 0.5 : 0.62;
+        const rackW = Math.max(1.9, slotsPerTier * slotW + 0.15);
+        const rackD = this.rack.id === 'wall' ? 0.52 : 0.75;
+        const tierH = tiers >= 5 ? 0.52 : 0.68;
         const totalH = tierH * tiers;
 
         const poleMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.65, roughness: 0.32 });
@@ -91,12 +117,6 @@ export const FarmCanvas = {
             pole.position.set(sx * rackW / 2, totalH / 2, sz * rackD / 2);
             pole.castShadow = true;
             this.group.add(pole);
-        });
-
-        const tiles = AppState.tiles || [];
-        const filledPlants = [];
-        tiles.forEach(tile => {
-            if (tile?.plant) filledPlants.push(tile);
         });
 
         for (let tier = 0; tier < tiers; tier++) {
@@ -114,23 +134,28 @@ export const FarmCanvas = {
 
             for (let slot = 0; slot < slotsPerTier; slot++) {
                 const index = tier * slotsPerTier + slot;
-                const tile = filledPlants[index];
-                const x = (slot - (slotsPerTier - 1) / 2) * 0.58;
+                const plant = this.slotPlants[index];
+                const x = (slot - (slotsPerTier - 1) / 2) * slotW;
                 const z = 0;
                 const baseY = y + 0.05;
 
-                if (tile) this.addPlant(x, baseY, z, tile, index);
+                if (plant) this.addPlant(x, baseY, z, plant, index);
                 else this.addEmptySlot(x, baseY, z);
             }
         }
 
         this.addGamifiedBadges(rackW, totalH);
-        this.group.position.y = 0.05;
+        this.group.position.y = tiers >= 5 ? -0.12 : 0.05;
     },
 
-    addPlant(x, y, z, tile, index) {
+    addPlant(x, y, z, plant, index) {
         const palette = [0x22c55e, 0x4ade80, 0x16a34a, 0x65a30d, 0x86efac, 0x10b981];
-        const statusColor = tile.status === 'danger' ? 0xef4444 : tile.status === 'warning' ? 0xf59e0b : palette[index % palette.length];
+        const emojiColor = plant.emoji ? EMOJI_COLORS[plant.emoji] : null;
+        const statusColor = plant.status === 'danger'
+            ? 0xef4444
+            : plant.status === 'warning'
+                ? 0xf59e0b
+                : emojiColor || palette[index % palette.length];
 
         const pot = new THREE.Mesh(
             new THREE.CylinderGeometry(0.105, 0.085, 0.105, 14),
@@ -151,11 +176,12 @@ export const FarmCanvas = {
             color: statusColor,
             roughness: 0.5,
             emissive: statusColor,
-            emissiveIntensity: tile.status === 'healthy' ? 0.08 : 0.16,
+            emissiveIntensity: plant.status === 'healthy' || !plant.status ? 0.08 : 0.16,
         });
 
-        for (let i = 0; i < 5; i++) {
-            const angle = (Math.PI * 2 / 5) * i;
+        const leafCount = plant.emoji === '🍅' || plant.emoji === '🍓' ? 4 : 5;
+        for (let i = 0; i < leafCount; i++) {
+            const angle = (Math.PI * 2 / leafCount) * i;
             const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 8), leafMat);
             leaf.scale.set(1.3, 0.38, 0.72);
             leaf.position.set(x + Math.cos(angle) * 0.058, y + 0.23 + (i % 2) * 0.018, z + Math.sin(angle) * 0.052);
@@ -205,16 +231,12 @@ export const FarmCanvas = {
         this.frame += 1;
         if (this.group) {
             this.group.rotation.y = Math.sin(this.frame / 95) * 0.28;
-            this.group.position.y = 0.05 + Math.sin(this.frame / 50) * 0.012;
+            this.group.position.y += Math.sin(this.frame / 50) * 0.00025;
         }
         if (this.renderer && this.scene && this.camera) {
             this.renderer.render(this.scene, this.camera);
         }
         this.rafId = requestAnimationFrame(() => this.animate());
-    },
-
-    handleClick() {
-        window.showToast?.('info', 'Tap + Plant to add crops to this 3D field');
     },
 
     destroy() {
@@ -241,5 +263,77 @@ export const FarmCanvas = {
         this.scene = null;
         this.camera = null;
         this.group = null;
+        this.field = null;
+        this.slotPlants = [];
     },
 };
+
+function getCurrentField() {
+    const saved = loadSavedFarms();
+    return AppState.currentFarm
+        || saved.find(farm => farm.id === AppState.currentFarmId)
+        || AppState.newFarm
+        || saved[saved.length - 1]
+        || null;
+}
+
+function loadSavedFarms() {
+    try {
+        return JSON.parse(localStorage.getItem(FARMS_STORAGE_KEY)) || [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function resolveRack(field) {
+    const rawRack = String(field?.rackTypeId || field?.rackType || field?.rackLabel || '').toLowerCase();
+    if (rawRack.includes('5')) return RACK_OPTIONS['5-tier'];
+    if (rawRack.includes('wall') || rawRack.includes('grid')) return RACK_OPTIONS.wall;
+    return RACK_OPTIONS['3-tier'];
+}
+
+function resolveSlotPlants(field, rack) {
+    const sourcePlants = Array.isArray(field?.plants) ? field.plants : [];
+    const slots = [];
+
+    sourcePlants.forEach(plant => {
+        const count = Math.max(1, Number.parseInt(plant.slots || plant.count || 1, 10) || 1);
+        for (let i = 0; i < count; i++) {
+            slots.push({
+                name: plant.name || field?.targetPlant || 'Plant',
+                emoji: plant.emoji || emojiForPlant(plant.name || field?.targetPlant),
+                status: plant.status || 'healthy',
+            });
+        }
+    });
+
+    if (slots.length > 0) return slots.slice(0, rack.total);
+
+    const fallbackCount = Math.min(rack.total, Number.parseInt(field?.plantSlots || field?.plants || 0, 10) || countTiles());
+    const fallbackName = field?.targetPlant || 'Plant';
+    for (let i = 0; i < fallbackCount; i++) {
+        slots.push({
+            name: fallbackName,
+            emoji: emojiForPlant(fallbackName),
+            status: 'healthy',
+        });
+    }
+
+    return slots;
+}
+
+function countTiles() {
+    return (AppState.tiles || []).filter(tile => tile?.plant).length;
+}
+
+function emojiForPlant(name = '') {
+    const key = String(name).toLowerCase();
+    if (key.includes('lettuce') || key.includes('cabbage') || key.includes('kale')) return '🥬';
+    if (key.includes('tomato')) return '🍅';
+    if (key.includes('chili') || key.includes('pepper')) return '🌶️';
+    if (key.includes('strawberry')) return '🍓';
+    if (key.includes('cucumber')) return '🥒';
+    if (key.includes('carrot')) return '🥕';
+    if (key.includes('basil') || key.includes('mint') || key.includes('spinach')) return '🌿';
+    return '🌱';
+}
