@@ -3,6 +3,7 @@ import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
 import * as WhatIf from './WhatIf.js';
 import * as Consumption from './ConsumptionPage.js';   
+import * as AlertsList from './AlertsList.js';
 
 export function render(params = {}) {
     const { feature } = params;
@@ -16,20 +17,7 @@ export function render(params = {}) {
         content = Consumption.render();
 
     } else if (feature === 'alerts') {
-        content = `
-            <div style="padding:16px;">
-                <div class="alert-card" style="border-left:3px solid var(--danger); background:var(--surface); padding:16px; border-radius:16px; margin-bottom:12px;">
-                    <div>🌡️ Temp Spike — Tomato D1</div>
-                    <div style="font-size:0.8rem; margin-top:8px;">Critical temperature 34.2°C. Activate cooling now.</div>
-                    <button id="fixTempBtn" class="btn-outline" style="margin-top:12px;">🌀 Activate Fan</button>
-                </div>
-                <div class="alert-card" style="border-left:3px solid var(--warn); background:var(--surface); padding:16px; border-radius:16px;">
-                    <div>💧 Low Moisture — Spinach B2</div>
-                    <div style="font-size:0.8rem; margin-top:8px;">Soil moisture 22% - water immediately.</div>
-                    <button id="fixWaterBtn" class="btn-outline" style="margin-top:12px;">💧 Water Now</button>
-                </div>
-            </div>
-        `;
+        content = AlertsList.render();
     }
 
     container.innerHTML = `
@@ -55,15 +43,6 @@ export function render(params = {}) {
        Consumption.init();   // ← triggers API fetch + chart render
    }
      else if (feature === 'alerts') {
-        document.getElementById('fixTempBtn')?.addEventListener('click', () => {
-            AppState.updateSensors('temp', 28, 'ok');
-            showToast('success', '🌀 Cooling fan activated');
-            showScreen('home');
-        });
-        document.getElementById('fixWaterBtn')?.addEventListener('click', () => {
-            AppState.updateSensors('water', 65, 'ok');
-            showToast('success', '💧 Watering started');
-            showScreen('home');
-        });
+        AlertsList.init();
     }
 }
