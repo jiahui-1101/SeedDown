@@ -21,6 +21,7 @@ export function render() {
         localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(savedFarms));
     }
 
+    const isCommercial = AppState.mode === 'commercial';
 
     container.innerHTML = `
         <div class="screen active" id="farmlistScreen">
@@ -31,7 +32,23 @@ export function render() {
                     <span style="margin-left:8px; color:var(--muted);">Farms</span>
                 </div>
                 <div style="flex:1"></div>
-                <button id="switchModeBtn" class="topbar-btn" style="background:transparent; border:1px solid var(--border); padding:6px 12px; border-radius:12px;">⇄ Switch</button>
+                <div id="switchModeBtn" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <span style="font-size:0.72rem; font-weight:700; color:${!isCommercial ? 'var(--accent)' : 'var(--muted)'};">🌱</span>
+                    <div style="
+                        position:relative; width:48px; height:26px;
+                        background:${isCommercial ? 'var(--accent)' : 'var(--border)'};
+                        border-radius:100px; transition:background 0.25s;
+                    ">
+                        <div style="
+                            position:absolute; top:3px;
+                            left:${isCommercial ? '25px' : '3px'};
+                            width:20px; height:20px; border-radius:50%;
+                            background:white; box-shadow:0 1px 4px rgba(0,0,0,0.25);
+                            transition:left 0.25s;
+                        "></div>
+                    </div>
+                    <span style="font-size:0.72rem; font-weight:700; color:${isCommercial ? 'var(--accent)' : 'var(--muted)'};">🏭</span>
+                </div>
             </div>
 
             <div style="padding:16px; flex:1; overflow-y:auto;">
@@ -100,7 +117,8 @@ function _bindEvents(savedFarms) {
 
     document.getElementById('switchModeBtn').onclick = () => {
         AppState.mode = AppState.mode === 'beginner' ? 'commercial' : 'beginner';
-        showToast('info', `Switched to ${AppState.mode}`);
+        showToast('info', `Switched to ${AppState.mode === 'commercial' ? '🏭 Commercial' : '🌱 Beginner'} mode`);
+        render();
     };
 
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
