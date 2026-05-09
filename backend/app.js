@@ -1,8 +1,7 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { connectDB } = require('./src/config/db');
-
+require('dotenv').config();
 
 const app = express();
 app.use(express.json());
@@ -10,8 +9,21 @@ app.use(cors());
 
 connectDB();
 
-app.use('/api/sensors', require('./src/routes/sensorRoutes'));
-app.use('/api/iot', require('./src/routes/sensorRoutes'));
+const sensorRoutes = require('./src/routes/sensorRoutes');
+const {
+  createSensorReading,
+  getDeviceCommand
+} = require('./src/controllers/sensorController');
+
+function getLegacyDeviceCommand(req, res) {
+  if (!req.query.format) req.query.format = 'text';
+  return getDeviceCommand(req, res);
+}
+
+app.use('/api/sensors', sensorRoutes);
+app.use('/api/iot', sensorRoutes);
+app.post('/api/sensor-data', createSensorReading);
+app.get('/api/device-command', getLegacyDeviceCommand);
 app.use('/api/whatif', require('./src/routes/whatIfRoutes'));
 app.use('/api/chat', require('./src/routes/chatRoutes'));
 app.use('/api/crops', require('./src/routes/cropRoutes'));
