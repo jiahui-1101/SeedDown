@@ -12,16 +12,32 @@ import { AppState }   from '../store.js';
 const PROFILE_KEY = 'farm_profile';
 const FARMS_KEY = 'user_farms'; 
 
+/* ── PER-FARM KEY HELPER ── */
+function farmProfileKey(farmId) {
+    return `farm_profile_${farmId}`;
+}
+
 /* ── LOAD / SAVE PROFILE ── */
-function loadProfile() {
+function loadProfile(farmId) {
     try {
+        if (farmId) {
+            const perFarm = localStorage.getItem(farmProfileKey(farmId));
+            if (perFarm) return JSON.parse(perFarm);
+        }
         const saved = localStorage.getItem(PROFILE_KEY);
         return saved ? JSON.parse(saved) : null;
     } catch { return null; }
 }
 
-function saveProfile(data) {
-    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(data)); } catch {}
+function saveProfile(data, farmId) {
+    try {
+        if (farmId) {
+            localStorage.setItem(farmProfileKey(farmId), JSON.stringify(data));
+        }
+        // Save name/email globally
+        const global = { name: data.name, email: data.email };
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(global));
+    } catch {}
 }
 
 /* ── DEFAULT PROFILE ── */
@@ -48,7 +64,6 @@ function getDefaultProfile() {
 ══════════════════════════════════════════════ */
 export function render() {
     const container = document.getElementById('screenContainer');
-    const profile = { ...getDefaultProfile(), ...(loadProfile() || {}) };
 
     let savedFarms = [];
     try {
@@ -59,6 +74,9 @@ export function render() {
         AppState.currentFarmId = savedFarms[0].id;
         AppState.farmName = savedFarms[0].name;
     }
+
+    // Load profile for current farm specifically
+    const profile = { ...getDefaultProfile(), ...(loadProfile(AppState.currentFarmId) || {}) };
 
     container.innerHTML = `
         <div class="screen active" id="profileScreen">
@@ -250,8 +268,31 @@ function _bindEvents(profile, savedFarms) {
             if (selectedFarm) {
                 AppState.currentFarmId = selectedId;
                 AppState.farmName = selectedFarm.name;
-              
-                document.getElementById('profileFarmName').value = selectedFarm.name;
+
+                // Load this farm's saved settings and update all form fields
+                const farmProfile = {
+                    ...getDefaultProfile(),
+                    ...(loadProfile(selectedId) || {}),
+                    farmName: selectedFarm.name,
+                };
+
+                document.getElementById('profileFarmName').value   = farmProfile.farmName;
+                document.getElementById('profileDeviceId').value   = farmProfile.deviceId;
+                document.getElementById('profileInterval').value   = farmProfile.sensorIntervalMinutes;
+                document.getElementById('intervalVal').textContent = `${farmProfile.sensorIntervalMinutes} min`;
+                document.getElementById('profileSoil').value       = farmProfile.soilDryThreshold;
+                document.getElementById('soilVal').textContent     = farmProfile.soilDryThreshold;
+                document.getElementById('profilePhMin').value      = farmProfile.phMin;
+                document.getElementById('profilePhMax').value      = farmProfile.phMax;
+                document.getElementById('profileLight').value      = farmProfile.lightThreshold;
+                document.getElementById('lightVal').textContent    = farmProfile.lightThreshold;
+                document.getElementById('profileWaterDur').value   = farmProfile.wateringDuration;
+                document.getElementById('waterDurVal').textContent = `${farmProfile.wateringDuration}s`;
+
+                _setToggle('toggleAutoWater',     farmProfile.autoWater);
+                _setToggle('toggleNotifications', farmProfile.notifications);
+                _setToggle('toggleEcoMode',       farmProfile.ecoMode);
+
                 showToast('info', `Switched to ${selectedFarm.name}`);
             }
         });
@@ -307,18 +348,17 @@ function _bindEvents(profile, savedFarms) {
 /* ── SAVE TO LOCALSTORAGE*/
 function _doSave() {
     const profile = _collectForm();
-    
-    saveProfile(profile);
+    const currentId = AppState.currentFarmId;
+
+    saveProfile(profile, currentId); // ← now saves per-farm
 
     AppState.farmName = profile.farmName;
     AppState.notify?.();
 
     try {
         let savedFarms = JSON.parse(localStorage.getItem(FARMS_KEY)) || [];
-        const currentId = AppState.currentFarmId;
 
         if (currentId) {
-            
             savedFarms = savedFarms.map(f => {
                 if (f.id === currentId) {
                     return { ...f, name: profile.farmName };
@@ -342,7 +382,7 @@ function _doSave() {
 /* ── SYNC PREFERENCES TO BACKEND ── */
 async function _doSync() {
     const profile = _collectForm();
-    saveProfile(profile);
+    saveProfile(profile, AppState.currentFarmId); // ← now saves per-farm
 
     const icon = document.getElementById('syncBtnIcon');
     const btn  = document.getElementById('profileSyncBtn');
@@ -458,4 +498,15 @@ function _slider(sliderId, labelId, fmt) {
     const label  = document.getElementById(labelId);
     if (!slider || !label) return;
     slider.addEventListener('input', () => { label.textContent = fmt(slider.value); });
+}
+
+// ── Toggle helper for programmatic updates ──
+function _setToggle(id, checked) {
+    const cb    = document.getElementById(id);
+    const track = document.getElementById(`${id}_track`);
+    const thumb = document.getElementById(`${id}_thumb`);
+    if (!cb || !track || !thumb) return;
+    cb.checked             = checked;
+    track.style.background = checked ? 'var(--accent)' : 'var(--border)';
+    thumb.style.transform  = checked ? 'translateX(20px)' : 'none';
 }
