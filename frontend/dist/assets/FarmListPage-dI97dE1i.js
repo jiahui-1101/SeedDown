@@ -1,4 +1,4 @@
-import{A as i,s,a as l}from"./index-D2LiWf5T.js";const r="user_farms";function d(){console.log("[FarmListPage] render called");const t=document.getElementById("screenContainer");let e=[];try{e=JSON.parse(localStorage.getItem(r))||[]}catch{e=[]}e.length===0&&(e=[{id:"farm_"+Date.now(),name:"Farm 1 — Rack Alpha",plants:6,plantSlots:6,zone:"A",targetPlant:"Lettuce"}],localStorage.setItem(r,JSON.stringify(e)));const a=i.mode==="commercial";t.innerHTML=`
+import{A as i,s as r,a as c}from"./index-gEQpLTVi.js";import"https://esm.sh/three@0.160.0";const s="user_farms";function m(){console.log("[FarmListPage] render called");const t=document.getElementById("screenContainer");let e=[];try{e=JSON.parse(localStorage.getItem(s))||[]}catch{e=[]}e.length===0&&(e=[{id:"farm_"+Date.now(),name:"Farm 1 — Rack Alpha",plants:6,plantSlots:6,zone:"A",targetPlant:"Lettuce"}],localStorage.setItem(s,JSON.stringify(e)));const a=i.mode==="commercial";t.innerHTML=`
         <div class="screen active" id="farmlistScreen">
             <div class="topbar">
                 <div class="topbar-brand">
@@ -38,7 +38,7 @@ import{A as i,s,a as l}from"./index-D2LiWf5T.js";const r="user_farms";function d
                             <div style="width:44px; height:44px; background:var(--accent-l); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:24px;">🏗️</div>
                             <div style="flex:1;">
                                 <div style="font-weight:700;">${n.name}</div>
-                                <div style="font-size:0.7rem; color:var(--muted);">${m(n)}</div>
+                                <div style="font-size:0.7rem; color:var(--muted);">${v(n)}</div>
                             </div>
                             <div style="color:var(--accent);">→</div>
                         </div>
@@ -51,4 +51,4 @@ import{A as i,s,a as l}from"./index-D2LiWf5T.js";const r="user_farms";function d
                 <div class="nav-item" data-screen="profile"><span class="nav-icon">👤</span><span class="nav-lbl">Profile</span></div>
             </div>
         </div>
-    `,c()}function c(t){document.querySelectorAll(".farm-card").forEach(e=>{e.addEventListener("click",()=>{const a=e.getAttribute("data-farm-id"),n=e.getAttribute("data-farm-name");i.currentFarmId=a,i.farmName=n,console.log(`[FarmListPage] Entering Farm ID: ${a}`);const o=i.mode==="beginner"?"home":"dash-c";s(o)})}),document.getElementById("buildFarmBtn").onclick=()=>{s("buildfarm")},document.getElementById("switchModeBtn").onclick=()=>{i.mode=i.mode==="beginner"?"commercial":"beginner",l("info",`Switched to ${i.mode==="commercial"?"🏭 Commercial":"🌱 Beginner"} mode`),d()},document.querySelectorAll(".bottom-nav .nav-item").forEach(e=>{e.onclick=()=>{e.dataset.screen==="profile"&&s("profile")}})}function m(t){const e=typeof t.plants=="number"?t.plants:Array.isArray(t.plants)?t.plants.length:0,a=t.targetPlant?`${t.targetPlant} · `:"",n=t.plantSlots?`${t.plantSlots} slots`:`${e} plants`;return`${a}${n} · Zone ${t.zone||"A"}`}export{d as render};
+    `,p(e)}function p(t){document.querySelectorAll(".farm-card").forEach(e=>{e.addEventListener("click",()=>{const a=e.getAttribute("data-farm-id"),n=e.getAttribute("data-farm-name"),o=t.find(d=>d.id===a)||null;i.currentFarmId=a,i.currentFarm=o,i.farmName=n,console.log(`[FarmListPage] Entering Farm ID: ${a}`);const l=i.mode==="beginner"?"home":"dash-c";r(l)})}),document.getElementById("buildFarmBtn").onclick=()=>{r("buildfarm")},document.getElementById("switchModeBtn").onclick=()=>{i.mode=i.mode==="beginner"?"commercial":"beginner",c("info",`Switched to ${i.mode==="commercial"?"🏭 Commercial":"🌱 Beginner"} mode`),m()},document.querySelectorAll(".bottom-nav .nav-item").forEach(e=>{e.onclick=()=>{e.dataset.screen==="profile"&&(i.profileFrom="farmlist",r("profile"))}})}function v(t){const e=typeof t.plants=="number"?t.plants:Array.isArray(t.plants)?t.plants.length:0,a=t.targetPlant?`${t.targetPlant} · `:"",n=t.plantSlots?`${t.plantSlots} slots`:`${e} plants`;return`${a}${n} · Zone ${t.zone||"A"}`}export{m as render};

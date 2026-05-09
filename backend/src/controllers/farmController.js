@@ -1,12 +1,13 @@
 /**
  * farmController.js
  *
- * POST /api/farms/scan-plants   — Claude Vision plant recognition
+ * POST /api/farms/scan-plants   — Gemini/Claude Vision plant recognition
  * POST /api/farms/generate-3d   — Proxy to DA3 depth service for .glb mesh
  * POST /api/farms/create        — Persist new farm to Firestore (or local fallback)
  *
  * Env vars:
- * CLAUDE_API_KEY  — Anthropic API key for Vision calls
+ * GEMINI_API_KEY  — Google Gemini API key for Vision calls
+ * CLAUDE_API_KEY  — optional Anthropic fallback for Vision calls
  * DA3_SERVICE_URL — URL of the DA3 backend service
  */
 
@@ -14,10 +15,10 @@ const fetch = (...args) =>
     import('node-fetch').then(({ default: f }) => f(...args));
 
 // ─────────────────────────────────────────────────────────────
-// Scan Plants (Claude Vision)
+// Scan Plants (Gemini Vision, Claude fallback)
 // ─────────────────────────────────────────────────────────────
 async function scanPlants(req, res) {
-    const { image, mediaType } = req.body;
+    const { image, mediaType, targetPlant } = req.body;
 
     if (!image) {
         return res.status(400).json({
@@ -26,46 +27,127 @@ async function scanPlants(req, res) {
         });
     }
 
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
     const claudeKey = process.env.CLAUDE_API_KEY;
 
-    if (!claudeKey) {
-        console.warn('[farmController] CLAUDE_API_KEY not set');
+    try {
+        if (geminiKey) {
+            const parsed = await scanPlantsWithGemini({
+                apiKey: geminiKey,
+                image,
+                mediaType,
+                targetPlant,
+            });
+            return res.json(parsed);
+        }
+
+        if (claudeKey) {
+            const parsed = await scanPlantsWithClaude({
+                apiKey: claudeKey,
+                image,
+                mediaType,
+                targetPlant,
+            });
+            return res.json(parsed);
+        }
+
+        console.warn('[farmController] No Gemini or Claude key set for plant recognition');
+        return res.json({
+            plants: fallbackPlants(targetPlant),
+            warning: 'Set GEMINI_API_KEY to enable AI photo recognition; using target plant fallback.',
+        });
+    } catch (err) {
+        console.error('[farmController] scanPlants error:', err.message);
 
         return res.json({
-            plants: [],
-            warning: 'Set CLAUDE_API_KEY in .env to enable AI plant recognition',
+            plants: fallbackPlants(targetPlant),
+            warning: `AI photo recognition unavailable: ${err.message}`,
         });
     }
+}
 
-    try {
-        const response = await fetch(
-            'https://api.anthropic.com/v1/messages',
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': claudeKey,
-                    'anthropic-version': '2023-06-01',
-                },
-                body: JSON.stringify({
-                    model: 'claude-3-5-sonnet-20241022',
-                    max_tokens: 900,
-                    messages: [
+async function scanPlantsWithGemini({ apiKey, image, mediaType, targetPlant }) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [
+                {
+                    role: 'user',
+                    parts: [
                         {
-                            role: 'user',
-                            content: [
-                                {
-                                    type: 'image',
-                                    source: {
-                                        type: 'base64',
-                                        media_type: mediaType || 'image/jpeg',
-                                        data: image,
-                                    },
-                                },
-                                {
-                                    type: 'text',
-                                    text: `
-You are a vertical farm expert. Analyse this indoor/vertical farm photo.
+                            inline_data: {
+                                mime_type: mediaType || 'image/jpeg',
+                                data: image,
+                            },
+                        },
+                        { text: plantRecognitionPrompt(targetPlant) },
+                    ],
+                },
+            ],
+            generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 900,
+                responseMimeType: 'application/json',
+            },
+        }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || data.error) {
+        throw new Error(data.error?.message || `Gemini API error ${response.status}`);
+    }
+
+    const rawText = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('\n') || '{"plants":[]}';
+    return parsePlantRecognition(rawText);
+}
+
+async function scanPlantsWithClaude({ apiKey, image, mediaType, targetPlant }) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 900,
+            messages: [
+                {
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image',
+                            source: {
+                                type: 'base64',
+                                media_type: mediaType || 'image/jpeg',
+                                data: image,
+                            },
+                        },
+                        { type: 'text', text: plantRecognitionPrompt(targetPlant) },
+                    ],
+                },
+            ],
+        }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || data.error) {
+        throw new Error(data.error?.message || `Claude API error ${response.status}`);
+    }
+
+    const rawText = data.content?.[0]?.text || '{"plants":[]}';
+    return parsePlantRecognition(rawText);
+}
+
+function plantRecognitionPrompt(targetPlant) {
+    const hint = targetPlant ? `\nUser says the intended plant is: ${targetPlant}. Use this as a hint, but only return it if it matches the photo or the photo is unclear.` : '';
+
+    return `
+You are a vertical farm expert. Analyse this indoor/vertical farm photo.${hint}
 
 Identify every plant species you can see and estimate how many slots/pots each occupies.
 
@@ -84,65 +166,63 @@ Return ONLY valid JSON, no markdown fences, no preamble:
 }
 
 Rules:
-- confidence: 0.0–1.0
+- confidence: 0.0-1.0
 - slots: integer, estimated pot/slot count for this species visible
 - species: lowercase, underscores for spaces
 - use realistic vegetable / herb emojis
-- if photo is unclear or no plants visible, return {"plants":[]}
+- if photo is unclear but the target plant hint is useful, return one plant using the hint with lower confidence
+- if no plants are visible and no hint is useful, return {"plants":[]}
 - do NOT wrap in markdown
 - return raw JSON only
-                                    `,
-                                },
-                            ],
-                        },
-                    ],
-                }),
-            }
-        );
-
-        const data = await response.json();
-
-        if (data.error) {
-            throw new Error(data.error.message || 'Claude API error');
-        }
-
-        const rawText = data.content?.[0]?.text || '{"plants":[]}';
-
-        const cleaned = rawText
-            .replace(/```json/g, '')
-            .replace(/```/g, '')
-            .trim();
-
-        const parsed = JSON.parse(cleaned);
-
-        // Validate + sanitize
-        parsed.plants = (parsed.plants || []).map((p) => ({
-            name: p.name || 'Unknown Plant',
-            emoji: p.emoji || '🌱',
-            species: (p.species || 'unknown')
-                .toLowerCase()
-                .replace(/\s+/g, '_'),
-            confidence: Math.min(
-                1,
-                Math.max(0, parseFloat(p.confidence) || 0)
-            ),
-            slots: Math.max(
-                1,
-                Math.min(50, parseInt(p.slots) || 3)
-            ),
-        }));
-
-        return res.json(parsed);
-    } catch (err) {
-        console.error('[farmController] scanPlants error:', err.message);
-
-        return res.status(500).json({
-            error: err.message,
-            plants: [],
-        });
-    }
+`;
 }
 
+function parsePlantRecognition(rawText) {
+    const cleaned = String(rawText || '{"plants":[]}')
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    const jsonText = start >= 0 && end >= start ? cleaned.slice(start, end + 1) : '{"plants":[]}';
+    const parsed = JSON.parse(jsonText);
+    parsed.plants = sanitizePlants(parsed.plants || []);
+    return parsed;
+}
+
+function sanitizePlants(plants) {
+    return plants.map((p) => ({
+        name: p.name || 'Unknown Plant',
+        emoji: p.emoji || emojiForPlant(p.name),
+        species: (p.species || p.name || 'unknown')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, ''),
+        confidence: Math.min(1, Math.max(0, parseFloat(p.confidence) || 0)),
+        slots: Math.max(1, Math.min(50, parseInt(p.slots, 10) || 3)),
+    }));
+}
+
+function fallbackPlants(targetPlant) {
+    if (!targetPlant || !String(targetPlant).trim()) return [];
+    const name = String(targetPlant).trim();
+    return sanitizePlants([{ name, emoji: emojiForPlant(name), species: name, confidence: 0.45, slots: 3 }]);
+}
+
+function emojiForPlant(name = '') {
+    const key = String(name).toLowerCase();
+    if (key.includes('lettuce') || key.includes('cabbage') || key.includes('kale')) return '🥬';
+    if (key.includes('tomato')) return '🍅';
+    if (key.includes('chili') || key.includes('pepper')) return '🌶️';
+    if (key.includes('strawberry')) return '🍓';
+    if (key.includes('cucumber')) return '🥒';
+    if (key.includes('carrot')) return '🥕';
+    if (key.includes('bean')) return '🫘';
+    if (key.includes('pea')) return '🟢';
+    if (key.includes('basil') || key.includes('mint') || key.includes('spinach') || key.includes('cilantro') || key.includes('parsley')) return '🌿';
+    return '🌱';
+}
 // ─────────────────────────────────────────────────────────────
 // Generate 3D (DA3 Proxy)
 // ─────────────────────────────────────────────────────────────
@@ -322,3 +402,4 @@ module.exports = {
     generate3D,
     createFarm,
 };
+

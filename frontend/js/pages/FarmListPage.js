@@ -88,7 +88,9 @@ function _bindEvents(savedFarms) {
             const farmId = card.getAttribute('data-farm-id');
             const farmName = card.getAttribute('data-farm-name');
 
-            AppState.currentFarmId = farmId; 
+            const farm = savedFarms.find(item => item.id === farmId) || null;
+            AppState.currentFarmId = farmId;
+            AppState.currentFarm = farm;
             AppState.farmName = farmName;
 
             console.log(`[FarmListPage] Entering Farm ID: ${farmId}`);
@@ -125,3 +127,4 @@ function farmMeta(f) {
     const slots = f.plantSlots ? `${f.plantSlots} slots` : `${plantCount} plants`;
     return `${target}${slots} · Zone ${f.zone || 'A'}`;
 }
+

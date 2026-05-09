@@ -1,4 +1,4 @@
-import{s as e,a as o,A as n}from"./index-D2LiWf5T.js";function a(i={}){const t=document.getElementById("screenContainer");t.innerHTML=`
+import{s as e,a as o,A as n}from"./index-gEQpLTVi.js";import"https://esm.sh/three@0.160.0";function r(i={}){const t=document.getElementById("screenContainer");t.innerHTML=`
         <div class="screen active" style="background:#f8f9f5; color:#1a3c34; display:flex; flex-direction:column; font-family: 'Inter', sans-serif;">
             
             <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:white;">
@@ -66,4 +66,4 @@ import{s as e,a as o,A as n}from"./index-D2LiWf5T.js";function a(i={}){const t=d
                 </button>
             </div>
         </div>
-    `,document.getElementById("alertBackBtn").onclick=()=>e("feature",{feature:"alerts"}),document.getElementById("executeActionBtn").onclick=()=>{o("success","Smart Cooling System Activated 🌀"),n.updateSensors("temp",26,"ok"),e("home")}}export{a as render};
+    `,document.getElementById("alertBackBtn").onclick=()=>e("feature",{feature:"alerts"}),document.getElementById("executeActionBtn").onclick=()=>{o("success","Smart Cooling System Activated 🌀"),n.updateSensors("temp",26,"ok"),e("home")}}export{r as render};

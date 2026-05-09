@@ -1,4 +1,4 @@
-import{A as d,a as t,s as n}from"./index-D2LiWf5T.js";function s(){const i=document.getElementById("screenContainer");i.innerHTML=`
+import{A as t,a as d,s as n}from"./index-gEQpLTVi.js";import"https://esm.sh/three@0.160.0";function l(){const i=document.getElementById("screenContainer");i.innerHTML=`
         <div class="screen active" id="loginScreen">
             <div style="flex:1; padding:32px 24px; display:flex; flex-direction:column; justify-content:center;">
                 <div style="margin-bottom:32px;">
@@ -25,4 +25,4 @@ import{A as d,a as t,s as n}from"./index-D2LiWf5T.js";function s(){const i=docum
                 <div style="text-align:center; margin-top:24px; font-size:0.65rem; color:var(--muted);">Powered by PERSAKA <span style="color:var(--danger);">UTM</span></div>
             </div>
         </div>
-    `;const e=document.getElementById("modeBeginner"),o=document.getElementById("modeCommercial");let r="beginner";e.classList.add("sel"),e.style.borderColor="var(--accent)",e.addEventListener("click",()=>{r="beginner",e.style.borderColor="var(--accent)",o.style.borderColor="var(--border)"}),o.addEventListener("click",()=>{r="commercial",o.style.borderColor="var(--accent)",e.style.borderColor="var(--border)"}),document.getElementById("loginBtn").addEventListener("click",()=>{d.mode=r,t("success",`Logged in as ${r==="beginner"?"🌱 Beginner":"🏭 Commercial"} farmer`),n("farmlist")})}export{s as render};
+    `;const e=document.getElementById("modeBeginner"),o=document.getElementById("modeCommercial");let r="beginner";e.classList.add("sel"),e.style.borderColor="var(--accent)",e.addEventListener("click",()=>{r="beginner",e.style.borderColor="var(--accent)",o.style.borderColor="var(--border)"}),o.addEventListener("click",()=>{r="commercial",o.style.borderColor="var(--accent)",e.style.borderColor="var(--border)"}),document.getElementById("loginBtn").addEventListener("click",()=>{t.mode=r,d("success",`Logged in as ${r==="beginner"?"🌱 Beginner":"🏭 Commercial"} farmer`),n("farmlist")})}export{l as render};
