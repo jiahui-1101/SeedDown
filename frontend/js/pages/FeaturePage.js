@@ -2,6 +2,7 @@ import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
 import * as WhatIf from './WhatIf.js';
+import * as Consumption from './ConsumptionPage.js';   
 
 export function render(params = {}) {
     const { feature } = params;
@@ -12,18 +13,8 @@ export function render(params = {}) {
         content = WhatIf.render();
 
     } else if (feature === 'consumption') {
-        content = `
-            <div style="padding:16px;">
-                <div class="eco-hero" style="background:var(--ok-bg); border-radius:24px; padding:24px; text-align:center; margin-bottom:16px;"><div style="font-size:2.5rem;">A+</div><div>Eco Rating</div></div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <div class="card"><span>💧</span><div>12.4L</div><div>Water today</div><div style="color:var(--ok);">↓ 65%</div></div>
-                    <div class="card"><span>⚡</span><div>8.2 kWh</div><div>Energy</div><div style="color:var(--ok);">↓ 42%</div></div>
-                    <div class="card"><span>🌱</span><div>2.1 kg</div><div>CO₂ saved</div></div>
-                    <div class="card"><span>💰</span><div>RM 3.40</div><div>Cost today</div></div>
-                </div>
-                <div class="card" style="margin-top:16px;"><div>💡 AI Tips</div><ul><li>Reduce light by 2h → save RM0.80/day</li><li>Batch watering → save 1.2L water</li></ul></div>
-            </div>
-        `;
+        content = Consumption.render();
+
     } else if (feature === 'alerts') {
         content = `
             <div style="padding:16px;">
@@ -59,7 +50,11 @@ export function render(params = {}) {
 
     if (feature === 'whatif') {
         WhatIf.init();
-    } else if (feature === 'alerts') {
+
+     } else if (feature === 'consumption') {
+       Consumption.init();   // ← triggers API fetch + chart render
+   }
+     else if (feature === 'alerts') {
         document.getElementById('fixTempBtn')?.addEventListener('click', () => {
             AppState.updateSensors('temp', 28, 'ok');
             showToast('success', '🌀 Cooling fan activated');
