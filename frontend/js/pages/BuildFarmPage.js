@@ -402,7 +402,7 @@ async function scanPlantsFromPhoto() {
         const res = await fetch(`${API_BASE}/api/farms/scan-plants`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: photoData.base64, mediaType: photoData.mediaType }),
+            body: JSON.stringify({ image: photoData.base64, mediaType: photoData.mediaType, targetPlant: fieldInfo.targetPlant }),
         });
         const data = await res.json();
         const plants = Array.isArray(data.plants) ? data.plants : [];
@@ -941,5 +941,6 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
 
 

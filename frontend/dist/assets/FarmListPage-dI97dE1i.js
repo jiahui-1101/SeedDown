@@ -1,4 +1,4 @@
-import{A as i,s as r,a as c}from"./index-DYDVqnDN.js";import"https://esm.sh/three@0.160.0";const s="user_farms";function m(){console.log("[FarmListPage] render called");const t=document.getElementById("screenContainer");let e=[];try{e=JSON.parse(localStorage.getItem(s))||[]}catch{e=[]}e.length===0&&(e=[{id:"farm_"+Date.now(),name:"Farm 1 — Rack Alpha",plants:6,plantSlots:6,zone:"A",targetPlant:"Lettuce"}],localStorage.setItem(s,JSON.stringify(e)));const a=i.mode==="commercial";t.innerHTML=`
+import{A as i,s as r,a as c}from"./index-gEQpLTVi.js";import"https://esm.sh/three@0.160.0";const s="user_farms";function m(){console.log("[FarmListPage] render called");const t=document.getElementById("screenContainer");let e=[];try{e=JSON.parse(localStorage.getItem(s))||[]}catch{e=[]}e.length===0&&(e=[{id:"farm_"+Date.now(),name:"Farm 1 — Rack Alpha",plants:6,plantSlots:6,zone:"A",targetPlant:"Lettuce"}],localStorage.setItem(s,JSON.stringify(e)));const a=i.mode==="commercial";t.innerHTML=`
         <div class="screen active" id="farmlistScreen">
             <div class="topbar">
                 <div class="topbar-brand">
