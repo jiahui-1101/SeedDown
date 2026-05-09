@@ -1,4 +1,4 @@
-import{A as t,a as d,s as n}from"./index-DP6f9CQz.js";import"https://esm.sh/three@0.160.0";function l(){const i=document.getElementById("screenContainer");i.innerHTML=`
+import{A as t,a as d,s as n}from"./index-BM_CIG_p.js";import"https://esm.sh/three@0.160.0";function l(){const i=document.getElementById("screenContainer");i.innerHTML=`
         <div class="screen active" id="loginScreen">
             <div style="flex:1; padding:32px 24px; display:flex; flex-direction:column; justify-content:center;">
                 <div style="margin-bottom:32px;">

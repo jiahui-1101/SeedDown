@@ -1,4 +1,4 @@
-import{a as r,s as E}from"./index-DP6f9CQz.js";import"https://esm.sh/three@0.160.0";let f=[],v="";async function w(n){v=n;const e=document.getElementById(n);e.innerHTML=`
+import{a as r,s as E}from"./index-BM_CIG_p.js";import"https://esm.sh/three@0.160.0";let f=[],v="";async function w(n){v=n;const e=document.getElementById(n);e.innerHTML=`
         <div style="margin-top:15px; margin-bottom:15px;">
             <h3 style="margin:0 0 5px 0; color:#1f2937;">🏡 Neighborhood Farms</h3>
             <p style="margin:0; font-size:0.8rem; color:gray;">Visit neighbors, help out, and earn coins!</p>
