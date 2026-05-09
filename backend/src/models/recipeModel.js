@@ -1,13 +1,3 @@
-const mongoose = require('mongoose');
+const FirestoreModel = require('./firestoreModel');
 
-const recipeSchema = new mongoose.Schema({
-  name: String,
-  ingredients: [String],
-  instructions: String,
-  source: String
-}, { collection: 'kaggle_recipe' });
-
-// Text index for keyword search
-recipeSchema.index({ name: 'text', ingredients: 'text' });
-
-module.exports = mongoose.model('Recipe', recipeSchema);
+module.exports = new FirestoreModel('recipes');
