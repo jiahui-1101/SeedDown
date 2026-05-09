@@ -51,12 +51,18 @@ export const FarmCanvas = {
         this.camera.position.set(3.2, 2.4, 4.4);
         this.camera.lookAt(0, 1.0, 0);
 
-        this.renderer = new THREE.WebGLRenderer({
-            canvas: this.canvas,
-            antialias: true,
-            alpha: false,
-            preserveDrawingBuffer: true,
-        });
+        try {
+            this.renderer = new THREE.WebGLRenderer({
+                canvas: this.canvas,
+                antialias: true,
+                alpha: false,
+                preserveDrawingBuffer: true,
+            });
+        } catch (error) {
+            console.warn('[FarmCanvas] WebGL unavailable, using 2D fallback:', error.message);
+            this.renderFallback();
+            return;
+        }
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -337,3 +343,4 @@ function emojiForPlant(name = '') {
     if (key.includes('basil') || key.includes('mint') || key.includes('spinach')) return '🌿';
     return '🌱';
 }
+

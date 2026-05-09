@@ -521,16 +521,30 @@ async function init3DField(rack) {
 
     const height = 330;
     const width = Math.max(320, canvas.offsetWidth || 360);
+
+    if (!hasWebGLSupport()) {
+        draw3DFallbackCanvas(canvas, rack, width, height);
+        showToast('warning', 'WebGL is disabled, showing 2D preview');
+        return;
+    }
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = width * pixelRatio;
     canvas.height = height * pixelRatio;
 
-    const renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: true,
-        alpha: false,
-        preserveDrawingBuffer: true,
-    });
+    let renderer;
+    try {
+        renderer = new THREE.WebGLRenderer({
+            canvas,
+            antialias: true,
+            alpha: false,
+            preserveDrawingBuffer: true,
+        });
+    } catch (error) {
+        console.warn('[BuildFarm] WebGL unavailable, using 2D fallback:', error.message);
+        draw3DFallbackCanvas(canvas, rack, width, height);
+        showToast('warning', 'WebGL is disabled, showing 2D preview');
+        return;
+    }
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
@@ -741,6 +755,137 @@ function addGamifiedRewards(THREE, scene, rackW, totalH) {
     }
 }
 
+function hasWebGLSupport() {
+    try {
+        const testCanvas = document.createElement('canvas');
+        return Boolean(
+            window.WebGLRenderingContext
+            && (testCanvas.getContext('webgl2') || testCanvas.getContext('webgl') || testCanvas.getContext('experimental-webgl'))
+        );
+    } catch (error) {
+        return false;
+    }
+}
+
+function draw3DFallbackCanvas(canvas, rack, width, height) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, viewMode === 'gamified' ? '#18223a' : '#10141d');
+    gradient.addColorStop(1, viewMode === 'gamified' ? '#25345d' : '#1f2937');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    const slotPlants = [];
+    detectedPlants.forEach(plant => {
+        for (let i = 0; i < plant.slots; i++) slotPlants.push(plant);
+    });
+
+    const pad = 34;
+    const rackWidth = width - pad * 2;
+    const rackHeight = height - 68;
+    const tierGap = rackHeight / rack.tiers;
+    const slotGap = rackWidth / rack.slotsPerTier;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.beginPath();
+    ctx.ellipse(width * 0.5, height - 24, rackWidth * 0.43, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = viewMode === 'gamified' ? '#7dd3fc' : '#64748b';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pad + 8, 32);
+    ctx.lineTo(pad + 8, height - 45);
+    ctx.moveTo(width - pad - 8, 32);
+    ctx.lineTo(width - pad - 8, height - 45);
+    ctx.stroke();
+
+    for (let tier = 0; tier < rack.tiers; tier++) {
+        const y = 42 + tier * tierGap;
+        ctx.fillStyle = viewMode === 'gamified' ? '#7dd3fc' : '#708090';
+        roundRect(ctx, pad, y + tierGap * 0.56, rackWidth, 9, 5);
+        ctx.fill();
+
+        ctx.fillStyle = viewMode === 'gamified' ? '#facc15' : '#a78bfa';
+        roundRect(ctx, pad + rackWidth * 0.12, y + 7, rackWidth * 0.76, 5, 3);
+        ctx.fill();
+
+        for (let slot = 0; slot < rack.slotsPerTier; slot++) {
+            const index = tier * rack.slotsPerTier + slot;
+            const plant = slotPlants[index];
+            const x = pad + slotGap * (slot + 0.5);
+            const baseY = y + tierGap * 0.53;
+
+            ctx.fillStyle = plant ? (viewMode === 'gamified' ? '#f97316' : '#7c3aed') : 'rgba(148,163,184,0.35)';
+            ctx.beginPath();
+            ctx.ellipse(x, baseY, 13, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (plant) drawFallbackPlant(ctx, x, baseY, plant, index);
+        }
+    }
+
+    if (viewMode === 'gamified') {
+        ctx.fillStyle = '#facc15';
+        for (let i = 0; i < 5; i++) {
+            ctx.beginPath();
+            ctx.arc(width * 0.26 + i * 34, 28 + (i % 2) * 9, 7, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.86)';
+    ctx.font = '700 12px Inter, system-ui, sans-serif';
+    ctx.fillText(`${rack.tiers} tiers · ${Math.min(slotPlants.length, rack.total)}/${rack.total} plants`, 16, height - 16);
+}
+
+function drawFallbackPlant(ctx, x, y, plant, index) {
+    const colors = viewMode === 'gamified'
+        ? ['#4ade80', '#22d3ee', '#facc15', '#fb7185', '#a78bfa']
+        : ['#22c55e', '#16a34a', '#65a30d', '#15803d', '#86efac'];
+    const color = plant.emoji === '🍅' ? '#ef4444' : plant.emoji === '🌶️' ? '#dc2626' : colors[index % colors.length];
+
+    ctx.strokeStyle = '#365314';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 5);
+    ctx.lineTo(x, y - 25);
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 / 5) * i;
+        ctx.save();
+        ctx.translate(x + Math.cos(angle) * 8, y - 24 + Math.sin(angle) * 5);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 9, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
 async function handleNext() {
     if (step === 1) {
         if (!fieldInfo.name.trim()) {
@@ -941,6 +1086,7 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
 
 
 
