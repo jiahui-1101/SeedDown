@@ -48,7 +48,6 @@ function getCredential() {
   return applicationDefault();
 }
 
-
 function connectDB() {
   if (!getApps().length) {
     initializeApp({

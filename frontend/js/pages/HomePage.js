@@ -48,6 +48,11 @@ export function render() {
                         <div class="feat-card" data-feature="consumption" style="background:var(--surface); border-radius:16px; padding:16px;"><span style="font-size:28px;">⚡</span><div>Eco Save</div><div style="font-size:0.7rem;">Track savings</div></div>
                         <div class="feat-card" data-feature="alerts" style="background:var(--surface); border-radius:16px; padding:16px;"><span style="font-size:28px;">🚨</span><div>AI Alerts</div><div style="font-size:0.7rem;">Predict issues</div></div>
                         <div class="feat-card" data-feature="community" style="background:var(--surface); border-radius:16px; padding:16px;"><span style="font-size:28px;">🏘️</span><div>Community</div><div style="font-size:0.7rem;">Trade & chat</div></div>
+                        <div class="feat-card" data-feature="mall" style="background:white; border-radius:16px; padding:16px; text-align:center; box-shadow:var(--shadow-sm);">
+    <span style="font-size:28px;">🛒</span>
+    <div style="font-weight:700;">Green Mall</div>
+    <div style="font-size:0.7rem; color:var(--muted);">Spend your coins</div>
+</div>
                     </div>
                 </div>
             </div>
@@ -70,8 +75,12 @@ export function render() {
     document.querySelectorAll('.feat-card').forEach(card => {
         card.addEventListener('click', () => {
             const feature = card.getAttribute('data-feature');
-            if (feature === 'community') showScreen('community');
-            else showScreen('feature', { feature });
+            if (feature === 'community') {
+                showScreen('community');
+            } else {
+                // 这里会自动处理 'whatif', 'consumption', 'alerts' 以及新增的 'mall'
+                showScreen('feature', { feature, from: 'home' });
+            }
         });
     });
     
