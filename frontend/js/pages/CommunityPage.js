@@ -39,25 +39,12 @@ export function render() {
             <div id="commContentArea" style="padding: 0 20px; padding-bottom: 80px; overflow-y: auto; height: calc(100vh - 160px); position: relative;">
             </div>
 
-            <!-- Bottom Navigation -->
-            <div class="bottom-nav" style="position:absolute; bottom:0; width:100%;">
-                <div class="nav-item" data-screen="home"><span class="nav-icon">🏠</span><span class="nav-lbl">Home</span></div>
-                <div class="nav-item active"><span class="nav-icon">🌍</span><span class="nav-lbl">Community</span></div>
-                <div class="nav-item" data-screen="profile"><span class="nav-icon">👤</span><span class="nav-lbl">Profile</span></div>
-            </div>
         </div>
     `;
 
     // Event Listeners
     document.getElementById('communityBackBtn').addEventListener('click', () => showScreen('home'));
     
-    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const screen = item.getAttribute('data-screen');
-            if (screen) showScreen(screen);
-        });
-    });
-
     initTabs();
     
     // Default view: 默认渲染 Visits Tab，并告诉它画在 commContentArea 里面

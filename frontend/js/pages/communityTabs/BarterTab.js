@@ -163,11 +163,13 @@ function bindLogic() {
 
 async function loadItems(query = '') {
     try {
-        const res = await fetch(`http://localhost:3000/api/community/barter${query ? '?search='+query : ''}`);
-        allBarterItems = await res.json();
+        const url = `http://localhost:3000/api/community/barter${query ? '?search='+query : ''}`;
+        const res = await fetch(url);
+        allBarterItems = await res.json(); // 这里的 allBarterItems 现在来自 Firebase
         renderList();
     } catch (err) {
-        document.getElementById('barterFeedList').innerHTML = 'Error loading.';
+        console.error("Market Load Error:", err);
+        document.getElementById('barterFeedList').innerHTML = 'Market is currently closed.';
     }
 }
 
@@ -176,9 +178,11 @@ function renderList() {
     const list = document.getElementById('barterFeedList');
     
     // Pasar只显示 Available 的，My Shop 显示我发布的 + 我买的
-    const displayItems = currentBarterView === 'pasar'
-        ? allBarterItems.filter(i => i.status === 'available' && i.author !== currentUser)
-        : allBarterItems.filter(i => i.author === currentUser || i.buyer === currentUser);
+    // 在 BarterTab.js 的 renderList 函数中修改：
+
+const displayItems = currentBarterView === 'pasar'
+? allBarterItems.filter(i => i.status === 'available') // 删掉了作者过滤，现在能看到所有人的东西
+: allBarterItems.filter(i => i.author === currentUser || i.buyer === currentUser);
 
     if (displayItems.length === 0) {
         list.innerHTML = `<div style="grid-column: span 2; text-align:center; padding:40px 20px; color:gray;">
@@ -196,12 +200,20 @@ function renderList() {
         else priceTag = `🍃 ${item.priceCoins} or 🔄 ${item.lookingFor}`;
 
         // 决定卡片底部的操作按钮
-        let actionBtn = '';
-        if (currentBarterView === 'pasar' && item.status === 'available') {
-            actionBtn = `<button class="btn-primary" style="width:100%; padding:8px; border-radius:8px; font-size:0.8rem; background:#10B981; border:none;" onclick="window.reserveItem('${item.id}')">Reserve Now</button>`;
-        } else if (amIBuyer && item.status === 'reserved') {
-            actionBtn = `<button class="btn-primary" style="width:100%; padding:8px; border-radius:8px; font-size:0.8rem; background:#EAB308; border:none;" onclick="window.completeItem('${item.id}')">📦 Confirm Receipt</button>`;
-        }
+        // 找到 renderList 里定义 actionBtn 的地方
+let actionBtn = '';
+
+if (currentBarterView === 'pasar' && item.status === 'available') {
+    if (item.author === currentUser) {
+        // 如果是自己的商品，显示“管理”或“我的发布”
+        actionBtn = `<button class="btn-outline" style="width:100%; padding:8px; border-radius:8px; font-size:0.8rem; color:#10B981; border:1px solid #10B981; cursor:default;">It's your item</button>`;
+    } else {
+        // 如果是别人的商品，才显示购买按钮
+        actionBtn = `<button class="btn-primary" style="width:100%; padding:8px; border-radius:8px; font-size:0.8rem; background:#10B981; border:none;" onclick="window.reserveItem('${item.id}')">Reserve Now</button>`;
+    }
+} else if (amIBuyer && item.status === 'reserved') {
+    actionBtn = `<button class="btn-primary" style="width:100%; padding:8px; border-radius:8px; font-size:0.8rem; background:#EAB308; border:none;" onclick="window.completeItem('${item.id}')">📦 Confirm Receipt</button>`;
+}
 
         return `
         <div class="barter-card">
