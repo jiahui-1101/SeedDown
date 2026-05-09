@@ -3,7 +3,7 @@
    export render() → HTML string
    export init()   → wire up all interactivity after render()
    ============================================================ */
-
+   import { showScreen } from '../utils/navigation.js';
 /* ─────────────────────────────────────────────
    DATA
 ───────────────────────────────────────────── */
@@ -637,4 +637,19 @@ function _npRender() {
       ? `⚠ Adding ${_npQty} rows of ${sp.name} triggers ${warnings} resource warning(s). Review flagged parameters before planting. ${note}`
       : `✅ ${_npQty} rows of ${sp.name} — resource impact within acceptable range. ${note}`;
   }
+}
+
+export function renderScreen() {
+  const container = document.getElementById('screenContainer');
+  container.innerHTML = `
+      <div class="screen active" id="whatifProScreen">
+          <div style="display:flex; align-items:center; padding:12px 16px; background:#080E1A; gap:12px; border-bottom:1px solid #1C2D4A;">
+              <button id="whatifProBackBtn" style="background:transparent; border:none; color:#60A5FA; font-size:16px; cursor:pointer;">← Back</button>
+              <div style="font-weight:700; color:#C9D8F5;">🔮 What-If Pro</div>
+          </div>
+          <div style="flex:1; overflow-y:auto;">${render()}</div>
+      </div>
+  `;
+  document.getElementById('whatifProBackBtn').addEventListener('click', () => showScreen('dash-c'));
+  init();
 }
