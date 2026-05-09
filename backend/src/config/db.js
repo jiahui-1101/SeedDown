@@ -4,7 +4,7 @@ const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestor
 
 let firestore;
 
-function getCredential() {
+/*function getCredential() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
     if (serviceAccount.private_key) {
@@ -18,6 +18,12 @@ function getCredential() {
   }
 
   return applicationDefault();
+}*/
+
+function getCredential() {
+  // 终极暴力破解法：既然找不到环境变量，我们就直接在同级目录读取文件！
+  const serviceAccount = require('./firebase-service-account.json');
+  return cert(serviceAccount);
 }
 
 function connectDB() {
