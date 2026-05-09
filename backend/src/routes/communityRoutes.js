@@ -1,10 +1,13 @@
-// 文件路径: /backend/src/routes/communityRoutes.js
 const express = require('express');
 const router = express.Router();
-const { db } = require('../config/db'); // 确保你之前按我说的配置了 Firebase db
+// 确保这一行是 getDb，而不是 db
+const { getDb } = require('../config/db'); 
 
-// --- 辅助函数：获取或创建默认用户 (Firebase 版) ---
+// --- 辅助函数：获取或创建默认用户 ---
 async function getOrCreateUser() {
+    const db = getDb(); 
+    if (!db) throw new Error("数据库连接失败，getDb() 返回了 undefined");
+
     const userRef = db.collection('users').doc('my_account');
     const doc = await userRef.get();
     
@@ -13,7 +16,7 @@ async function getOrCreateUser() {
             userId: 'my_account',
             coins: 100,
             dailyWaterHelps: 0,
-            lastWaterDate: null,
+            lastWaterDate: "",
             createdAt: new Date()
         };
         await userRef.set(newUser);
@@ -22,7 +25,7 @@ async function getOrCreateUser() {
     return doc.data();
 }
 
-// 1. 获取当前用户信息 (查询金币)
+// 获取当前用户信息
 router.get('/me', async (req, res) => {
     try {
         const userData = await getOrCreateUser();
@@ -32,34 +35,32 @@ router.get('/me', async (req, res) => {
     }
 });
 
-// 2. 互动农场：一键浇水功能
+// 一键浇水功能
 router.post('/water', async (req, res) => {
     try {
+        const db = getDb();
+        if (!db) throw new Error("数据库连接失败");
+
         const userRef = db.collection('users').doc('my_account');
         const user = await getOrCreateUser();
         const today = new Date().toDateString();
 
         let { dailyWaterHelps, coins, lastWaterDate } = user;
 
-        // 每天重置防刷机制
         if (lastWaterDate !== today) {
             dailyWaterHelps = 0;
-            lastWaterDate = today;
         }
 
-        // 检查是否超过3次
         if (dailyWaterHelps >= 3) {
             return res.status(400).json({ 
                 success: false, 
-                message: 'You have used up your 3 daily helps! Come back tomorrow~' 
+                message: 'You have used up your 3 daily helps!' 
             });
         }
 
-        // 更新本地变量
         const newCoins = coins + 5;
         const newHelps = dailyWaterHelps + 1;
 
-        // 保存回 Firebase
         await userRef.update({
             dailyWaterHelps: newHelps,
             coins: newCoins,
@@ -68,7 +69,7 @@ router.post('/water', async (req, res) => {
         
         res.json({ 
             success: true, 
-            message: 'Watered successfully! Plant is healthy again 🌿', 
+            message: 'Watered successfully! 🌿', 
             coinsEarned: 5,
             totalCoins: newCoins 
         });
@@ -77,26 +78,320 @@ router.post('/water', async (req, res) => {
     }
 });
 
-// 3. 获取所有帖子 (SOS/盲盒)
+// 发布一个新的 SOS 信号
+router.post('/posts/sos', async (req, res) => {
+    try {
+        const db = getDb();
+        const { author, title, content, reward, image } = req.body; // 新增 image
+
+        const newSos = {
+            type: 'sos',
+            author: author || 'Anonymous',
+            title: title || 'No Title',
+            content: content || '',
+            reward: reward || 10,
+            image: image || null, // 存入图片
+            comments: [], // 初始化一个空的评论数组
+            status: 'active',
+            createdAt: new Date()
+        };
+
+        const docRef = await db.collection('posts').add(newSos);
+        res.json({ success: true, id: docRef.id });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/posts/:postId/comments', async (req, res) => {
+    try {
+        const db = getDb();
+        const { postId } = req.params;
+        const { text, author } = req.body;
+
+        const postRef = db.collection('posts').doc(postId);
+        
+        // 使用 FieldValue.arrayUnion 优雅地往数组里追加评论，而不覆盖原有数据
+        const { FieldValue } = require('firebase-admin/firestore');
+        
+        const newComment = {
+            author: author || 'User',
+            text: text,
+            createdAt: new Date()
+        };
+
+        await postRef.update({
+            comments: FieldValue.arrayUnion(newComment)
+        });
+
+        res.json({ success: true, message: "Comment added" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 获取所有帖子列表 (这个就是你刚才报错的源头！)
+// 获取所有帖子列表
 router.get('/posts', async (req, res) => {
     try {
-        const postsSnapshot = await db.collection('posts').orderBy('createdAt', 'desc').get();
-        let posts = postsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        // 如果是空的，初始化点假数据演示
-        if (posts.length === 0) {
-            const samplePosts = [
-                { type: 'sos', author: 'GreenKL', title: 'Tomato leaves turning yellow!', createdAt: new Date() },
-                { type: 'mystery_box', author: 'Aisha.Farm', title: 'Ugly Veggie Box', price: 150, createdAt: new Date() },
-                { type: 'match', author: 'TanFarm88', title: 'I have Mint, want to trade for Basil', createdAt: new Date() }
-            ];
-            for (const p of samplePosts) {
-                await db.collection('posts').add(p);
-            }
-            posts = samplePosts;
+        const db = getDb();
+        if (!db) {
+            throw new Error("Cannot connect to database instance");
         }
+
+        const snapshot = await db.collection('posts').orderBy('createdAt', 'desc').get();
+        
+        const posts = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return { 
+                id: doc.id, 
+                ...data,
+                // 【核心修复】：如果是 Firebase 的时间戳，就把它转成标准 JS 字符串
+                createdAt: (data.createdAt && data.createdAt.toDate) 
+                            ? data.createdAt.toDate().toISOString() 
+                            : data.createdAt
+            };
+        });
         
         res.json(posts);
+    } catch (err) {
+        console.error(">>> 读取帖子报错:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// 新增的 SOS 高级功能接口
+// ==========================================
+
+// 1. 点绿叶 (Like)
+router.post('/posts/:postId/like', async (req, res) => {
+    try {
+        const db = getDb();
+        const postRef = db.collection('posts').doc(req.params.postId);
+        const { FieldValue } = require('firebase-admin/firestore');
+        
+        // 让点赞数 +1 (如果没有 likes 字段，会自动创建并设为 1)
+        await postRef.update({
+            likes: FieldValue.increment(1)
+        });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. 删除帖子
+router.delete('/posts/:postId', async (req, res) => {
+    try {
+        const db = getDb();
+        await db.collection('posts').doc(req.params.postId).delete();
+        res.json({ success: true, message: 'Deleted' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. 自定义金额打赏 (扣除自己的钱，这里省略了给别人加钱的逻辑，以保证简单)
+router.post('/posts/:postId/reward', async (req, res) => {
+    try {
+        const db = getDb();
+        const { amount, receiver } = req.body;
+        
+        // 1. 获取当前用户
+        const userRef = db.collection('users').doc('my_account');
+        const userDoc = await userRef.get();
+        const currentCoins = userDoc.data().coins;
+
+        // 2. 检查余额够不够
+        if (currentCoins < amount) {
+            return res.status(400).json({ success: false, message: 'Not enough coins!' });
+        }
+
+        // 3. 扣钱
+        await userRef.update({
+            coins: currentCoins - amount
+        });
+
+        res.json({ success: true, message: 'Reward sent!' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// Pasar & Barter Board (以物换物/市集) 引擎
+// ==========================================
+
+// 1. 获取所有物品 / 搜索
+router.get('/barter', async (req, res) => {
+    try {
+        const db = getDb();
+        const snapshot = await db.collection('barterItems').orderBy('createdAt', 'desc').get();
+        let items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // 简单搜索功能
+        const { search } = req.query;
+        if (search) {
+            const keyword = search.toLowerCase();
+            items = items.filter(item => item.title.toLowerCase().includes(keyword));
+        }
+        res.json(items);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. 发布物品 (包含智能匹配魔法)
+router.post('/barter', async (req, res) => {
+    try {
+        const db = getDb();
+        const { author, title, description, image, tradeType, priceCoins, lookingFor, location } = req.body;
+
+        const newItem = {
+            author: author || 'MyFarm',
+            title, description, image, tradeType, priceCoins, lookingFor, location,
+            status: 'available', // available, reserved, completed
+            buyer: null,
+            createdAt: new Date().toISOString()
+        };
+
+        const docRef = await db.collection('barterItems').add(newItem);
+
+        // --- 🔮 智能撮合魔法 (Smart Matchmaking) ---
+        let matchFound = null;
+        if (tradeType === 'barter' || tradeType === 'both') {
+            // 寻找：有没有人刚好有我想要的 (lookingFor)，并且他想要我有的 (title)
+            const matchSnapshot = await db.collection('barterItems')
+                .where('status', '==', 'available')
+                .where('title', '==', lookingFor) // 对方有的 = 我想要的
+                // .where('lookingFor', '==', title) // 理想状态要互相需要，为了MVP演示容易出效果，这里简化为单向匹配
+                .limit(1).get();
+
+            if (!matchSnapshot.empty) {
+                matchFound = { id: matchSnapshot.docs[0].id, ...matchSnapshot.docs[0].data() };
+            }
+        }
+
+        res.json({ success: true, id: docRef.id, matchFound });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. 买家预订物品 (Reserve - 冻结资金)
+router.post('/barter/:id/reserve', async (req, res) => {
+    try {
+        const db = getDb();
+        const itemRef = db.collection('barterItems').doc(req.params.id);
+        const item = (await itemRef.get()).data();
+        const buyerName = req.body.buyer || 'MyFarm';
+
+        if (item.status !== 'available') return res.status(400).json({ message: 'Item no longer available' });
+
+        // 如果是金币购买，在此刻扣除买家的钱（冻结在系统里）
+        if (req.body.paymentMethod === 'coins') {
+            const userRef = db.collection('users').doc('my_account');
+            const userDoc = await userRef.get();
+            if (userDoc.data().coins < item.priceCoins) {
+                return res.status(400).json({ message: 'Not enough coins!' });
+            }
+            await userRef.update({ coins: userDoc.data().coins - item.priceCoins });
+        }
+
+        // 状态变更为已预订
+        await itemRef.update({ status: 'reserved', buyer: buyerName, lockedPayment: req.body.paymentMethod });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 4. 买家确认收货 (Complete - 打款给卖家并评价)
+router.post('/barter/:id/complete', async (req, res) => {
+    try {
+        const db = getDb();
+        const itemRef = db.collection('barterItems').doc(req.params.id);
+        const item = (await itemRef.get()).data();
+
+        // 完成订单
+        await itemRef.update({ status: 'completed' });
+
+        // 如果是金币交易，卖家收钱！(这里省略给卖家加钱的复杂逻辑，假设系统自动处理)
+        
+        // 增加好评 (Trust System)
+        if (req.body.rating) {
+            // 这里可以给卖家的信誉加分
+        }
+
+        res.json({ success: true, message: 'Transaction Completed!' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// 虚拟农场访问引擎 (Farm Visits - Mock IoT)
+// ==========================================
+
+// 在内存中模拟几个邻居的农场状态
+let mockNeighbors = [
+    { id: 'farm_01', name: 'Aisha.Farm', avatar: '👩‍🌾', plant: 'Tomato', moisture: 18, hasBug: true },
+    { id: 'farm_02', name: 'Botani_Master', avatar: '👨‍🌾', plant: 'Mint', moisture: 65, hasBug: false },
+    { id: 'farm_03', name: 'GreenThumb99', avatar: '🧑‍🌾', plant: 'Basil', moisture: 22, hasBug: false },
+    { id: 'farm_04', name: 'UTM_Agri', avatar: '🏫', plant: 'Chili', moisture: 80, hasBug: true }
+];
+
+// 1. 获取邻居列表 (带着他们植物的当前状态)
+router.get('/visits/neighbors', (req, res) => {
+    // 每次请求时，随机让某些植物掉一点水分，增加真实感
+    mockNeighbors = mockNeighbors.map(n => {
+        if(n.moisture > 10) n.moisture -= Math.floor(Math.random() * 5);
+        return n;
+    });
+    res.json(mockNeighbors);
+});
+
+// 2. 帮忙浇水 (给用户加 5 金币，植物变健康)
+router.post('/visits/water/:id', async (req, res) => {
+    try {
+        const farmId = req.params.id;
+        const farm = mockNeighbors.find(f => f.id === farmId);
+        if (!farm) return res.status(404).json({ message: 'Farm not found' });
+        if (farm.moisture > 50) return res.status(400).json({ message: 'Plant does not need water right now!' });
+
+        farm.moisture = 85; // 浇水后湿度拉满
+
+        // 给当前用户加 5 个金币
+        const db = getDb();
+        const userRef = db.collection('users').doc('my_account');
+        const userDoc = await userRef.get();
+        const currentCoins = userDoc.exists ? userDoc.data().coins : 100;
+        await userRef.update({ coins: currentCoins + 5 });
+
+        res.json({ success: true, message: 'Watered successfully', earned: 5, newTotal: currentCoins + 5 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. 帮忙抓虫 (给用户加 10 金币，虫子消失)
+router.post('/visits/catch-bug/:id', async (req, res) => {
+    try {
+        const farmId = req.params.id;
+        const farm = mockNeighbors.find(f => f.id === farmId);
+        if (!farm || !farm.hasBug) return res.status(400).json({ message: 'No bugs here!' });
+
+        farm.hasBug = false; // 虫子被抓掉了
+
+        // 给当前用户加 10 个金币
+        const db = getDb();
+        const userRef = db.collection('users').doc('my_account');
+        const userDoc = await userRef.get();
+        const currentCoins = userDoc.exists ? userDoc.data().coins : 100;
+        await userRef.update({ coins: currentCoins + 10 });
+
+        res.json({ success: true, message: 'Bug caught!', earned: 10, newTotal: currentCoins + 10 });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

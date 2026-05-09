@@ -1,76 +1,42 @@
-<<<<<<< HEAD
 const path = require('path');
 const { initializeApp, applicationDefault, cert, getApps } = require('firebase-admin/app');
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
-=======
-const path = require("path");
-const {
-  initializeApp,
-  applicationDefault,
-  cert,
-  getApps,
-} = require("firebase-admin/app");
-const {
-  getFirestore,
-  FieldValue,
-  Timestamp,
-} = require("firebase-admin/firestore");
->>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
 
 let firestore;
 
-function getCredential() {
+/*function getCredential() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-<<<<<<< HEAD
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
     if (serviceAccount.private_key) {
       serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-=======
-    const serviceAccount = JSON.parse(
-      process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
-    );
-    if (serviceAccount.private_key) {
-      serviceAccount.private_key = serviceAccount.private_key.replace(
-        /\\n/g,
-        "\n",
-      );
->>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     }
     return cert(serviceAccount);
   }
 
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-<<<<<<< HEAD
-    return cert(require(path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)));
-=======
-    return cert(
-      require(path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)),
-    );
->>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    return cert(require(path.resolve(process.env.GOOGLE_APPLICATION_CREDENTIALS)));
   }
 
   return applicationDefault();
+}*/
+
+function getCredential() {
+  // 终极暴力破解法：既然找不到环境变量，我们就直接在同级目录读取文件！
+  const serviceAccount = require('./firebase-service-account.json');
+  return cert(serviceAccount);
 }
 
 function connectDB() {
   if (!getApps().length) {
     initializeApp({
       credential: getCredential(),
-<<<<<<< HEAD
       projectId: process.env.FIREBASE_PROJECT_ID
-=======
-      projectId: process.env.FIREBASE_PROJECT_ID,
->>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     });
   }
 
   firestore = getFirestore();
-<<<<<<< HEAD
-  console.log('Firebase Firestore connected');
-=======
   firestore.settings({ ignoreUndefinedProperties: true });
-  console.log("Firebase Firestore connected");
->>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
+  console.log('Firebase Firestore connected');
   return firestore;
 }
 
@@ -82,9 +48,5 @@ module.exports = {
   connectDB,
   getDb,
   FieldValue,
-<<<<<<< HEAD
   Timestamp
-=======
-  Timestamp,
->>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
 };

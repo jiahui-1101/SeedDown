@@ -1,89 +1,83 @@
+// 文件路径: /frontend/js/pages/CommunityPage.js
 import { showScreen } from '../utils/navigation.js';
-import { showToast } from '../utils/toast.js';
-import * as WhatIfPro from './WhatIfPro.js';   // ← Pro What-If module
+// 引入我们拆分出去的三个模块
+import { renderVisitsTab } from './communityTabs/VisitsTab.js';
+import { renderBarterTab } from './communityTabs/BarterTab.js';
+import { renderSosTab } from './communityTabs/SosTab.js';
 
 export function render() {
     const container = document.getElementById('screenContainer');
     container.innerHTML = `
-        <div class="screen active" id="commercialScreen">
-            <div class="topbar" style="background:#0D1221; color:#E8F0FF;">
-                <button id="comBackBtn" style="background:transparent; border:none; color:#60A5FA;">← Back</button>
-                <div class="topbar-brand"><span style="background:#1E3A5F; padding:6px 10px; border-radius:12px;">⚙</span><span style="margin-left:8px;">NexusGrow PRO</span><span style="margin-left:8px; font-size:0.6rem;">Commercial</span></div>
+        <div class="screen active" id="communityScreen" style="background: var(--bg);">
+            
+            <!-- 顶部导航栏 -->
+            <div class="topbar">
+                <button id="communityBackBtn" class="back-btn" style="background:none;border:none;font-size:20px;">←</button>
+                <div style="font-weight:700;">🌍 Community</div>
                 <div style="flex:1"></div>
-                <div class="live-pill">🔴 Live</div>
+                <div class="live-pill" id="myCoinsDisplay" style="background:var(--green-50); color:var(--green-800); border:1px solid var(--green-200);">
+                    🍃 -- Coins
+                </div>
             </div>
-            <div class="bottom-nav">
-                <div class="nav-item active" data-screen="home"><span class="nav-icon">🏠</span><span class="nav-lbl">Home</span></div>
-                <div class="nav-item" data-screen="profile"><span class="nav-icon">👤</span><span class="nav-lbl">Profile</span></div>
-            </div>
-            <div style="flex:1; overflow-y:auto; padding:16px;">
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <div class="kpi-card" style="background:#0D1221; border-radius:16px; padding:16px;"><div style="color:#4A6A9A;">PROFIT</div><div style="font-size:1.8rem; color:#00FF88;">RM 348</div></div>
-                    <div class="kpi-card" style="background:#0D1221; border-radius:16px; padding:16px;"><div style="color:#4A6A9A;">ENERGY</div><div style="font-size:1.8rem; color:#FFD966;">24 kWh</div></div>
-                </div>
-                <div style="background:#0D1221; border-radius:16px; padding:16px; margin-top:12px;">
-                    <div style="color:#60A5FA;">📈 Profit Trend</div>
-                    <div style="height:80px; background:rgba(26,86,219,0.1); border-radius:12px; margin-top:12px; display:flex; align-items:center; justify-content:center; color:#4A6A9A;">[Chart Placeholder]</div>
-                </div>
-                <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px;">
-                    <div class="com-feat" data-feature="whatif" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">🔮<div style="font-size:0.6rem;">What-If</div></div>
-                    <div class="com-feat" data-feature="consumption" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">⚡<div style="font-size:0.6rem;">ESG Data</div></div>
-                    <div class="com-feat" data-feature="alerts" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">🚨<div style="font-size:0.6rem;">Alerts</div></div>
-                    <div class="com-feat" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">🎛️<div style="font-size:0.6rem;">Control</div></div>
-                </div>
 
-                <!-- What-If Pro panel: hidden until tile is clicked -->
-                <div id="com-whatif-panel" style="display:none; margin-top:12px;"></div>
+            <!-- 横向滚动菜单 -->
+            <div class="comm-menu-scroll">
+                <div class="comm-circle-btn active" data-tab="visits">
+                    <div class="comm-circle-icon">🏡</div>
+                    <div class="comm-circle-lbl">Farm Visits</div>
+                </div>
+                <div class="comm-circle-btn" data-tab="barter">
+                    <div class="comm-circle-icon">📦</div>
+                    <div class="comm-circle-lbl">Barter Board</div>
+                </div>
+                <div class="comm-circle-btn" data-tab="sos">
+                    <div class="comm-circle-icon">🚨</div>
+                    <div class="comm-circle-lbl">SOS Beacon</div>
+                </div>
+            </div>
+
+            <!-- 动态内容区 (子文件会把内容画在这里) -->
+            <div id="commContentArea" style="padding: 0 20px; padding-bottom: 80px; overflow-y: auto; height: calc(100vh - 160px); position: relative;">
+            </div>
+
+            <!-- 底部导航 -->
+            <div class="bottom-nav" style="position:absolute; bottom:0; width:100%;">
+                <div class="nav-item" data-screen="home"><span class="nav-icon">🏠</span><span class="nav-lbl">Home</span></div>
+                <div class="nav-item active"><span class="nav-icon">🌍</span><span class="nav-lbl">Community</span></div>
+                <div class="nav-item" data-screen="profile"><span class="nav-icon">👤</span><span class="nav-lbl">Profile</span></div>
             </div>
         </div>
     `;
 
-    document.getElementById('comBackBtn').addEventListener('click', () => showScreen('farmlist'));
-
-    document.querySelectorAll('.com-feat[data-feature]').forEach(el => {
-        el.addEventListener('click', () => {
-            const feature = el.getAttribute('data-feature');
-            if (feature === 'whatif') {
-                _toggleWhatIfPanel(el);
-            } else {
-                showScreen('feature', { feature });
-            }
+    // 绑定返回主页
+    document.getElementById('communityBackBtn').addEventListener('click', () => showScreen('home'));
+    
+    // 初始化 Tab 切换
+    const btns = document.querySelectorAll('.comm-circle-btn');
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            btns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            const tabName = btn.getAttribute('data-tab');
+            // 根据点击的 Tab，调用对应的子文件函数
+            if (tabName === 'visits') renderVisitsTab('commContentArea');
+            if (tabName === 'barter') renderBarterTab('commContentArea');
+            if (tabName === 'sos') renderSosTab('commContentArea');
         });
     });
 
-    // Bottom nav
-    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const screen = item.getAttribute('data-screen');
-            if (screen === 'profile') showToast('info', 'Profile coming soon');
-            else if (screen === 'home') showScreen('dash-c');
-        });
-    });
+    // 默认渲染第一个 Tab
+    renderVisitsTab('commContentArea');
+    fetchMyCoins();
 }
 
-/* ─────────────────────────────────────────────
-   WHAT-IF PRO PANEL — inline toggle
-   Clicking the tile a second time collapses it.
-───────────────────────────────────────────── */
-function _toggleWhatIfPanel(tile) {
-    const panel = document.getElementById('com-whatif-panel');
-    const isOpen = panel.style.display !== 'none';
-
-    // Collapse
-    if (isOpen) {
-        panel.style.display = 'none';
-        tile.style.outline = 'none';
-        return;
+async function fetchMyCoins() {
+    try {
+        const res = await fetch('http://localhost:3000/api/community/me');
+        const data = await res.json();
+        document.getElementById('myCoinsDisplay').innerText = `🍃 ${data.coins} Coins`;
+    } catch (e) {
+        console.warn("未获取到金币余额");
     }
-
-    // Expand: inject HTML then init interactivity
-    panel.style.display = 'block';
-    panel.innerHTML = WhatIfPro.render();
-    tile.style.outline = '2px solid #60C0FF';
-
-    // Scroll smoothly so the panel comes into view
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    // Boot all sliders, charts, search, etc.
-    WhatIfPro.init();
 }
