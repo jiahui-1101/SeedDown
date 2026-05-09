@@ -41,7 +41,8 @@ unsigned long lastSampleTime = 0;
 
 DHTesp dht;
 
-struct SensorData {
+struct SensorData
+{
   float temperature;
   float humidity;
   int gasRaw;
@@ -52,11 +53,13 @@ struct SensorData {
   float waterDistanceCm;
 };
 
-float mapFloat(float x, float inMin, float inMax, float outMin, float outMax) {
+float mapFloat(float x, float inMin, float inMax, float outMin, float outMax)
+{
   return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
 }
 
-float readDistanceCM() {
+float readDistanceCM()
+{
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
@@ -64,33 +67,39 @@ float readDistanceCM() {
   digitalWrite(TRIG_PIN, LOW);
 
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
-  if (duration == 0) {
+  if (duration == 0)
+  {
     return -1;
   }
 
   return duration * 0.034 / 2;
 }
 
-void buzzerOn() {
+void buzzerOn()
+{
   ledcWriteTone(BUZZER_CHANNEL, 1000);
 }
 
-void buzzerOff() {
+void buzzerOff()
+{
   ledcWriteTone(BUZZER_CHANNEL, 0);
 }
 
-void allOutputsOff() {
+void allOutputsOff()
+{
   digitalWrite(GROW_LED_PIN, LOW);
   digitalWrite(WATER_LED_PIN, LOW);
   buzzerOff();
 }
 
-void connectWiFi() {
+void connectWiFi()
+{
   Serial.print("Connecting to WiFi");
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 6);
 
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(250);
     Serial.print(".");
   }
@@ -100,7 +109,8 @@ void connectWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-SensorData readSensors() {
+SensorData readSensors()
+{
   TempAndHumidity dhtData = dht.getTempAndHumidity();
 
   SensorData data;
@@ -116,7 +126,8 @@ SensorData readSensors() {
   return data;
 }
 
-String buildSensorJson(SensorData data) {
+String buildSensorJson(SensorData data)
+{
   String json = "{";
   json += "\"deviceId\":\"farm_001\",";
   json += "\"temperature\":" + String(data.temperature, 2) + ",";
@@ -132,16 +143,19 @@ String buildSensorJson(SensorData data) {
   return json;
 }
 
-void uploadSensorData(String jsonPayload) {
+void uploadSensorData(String jsonPayload)
+{
   Serial.println("[Backend API] POST /api/sensor-data");
   Serial.println(jsonPayload);
 
-  if (MOCK_BACKEND) {
+  if (MOCK_BACKEND)
+  {
     Serial.println("[Backend API] MOCK response: 201 Created");
     return;
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED)
+  {
     Serial.println("[Backend API] WiFi not connected");
     return;
   }
@@ -163,37 +177,45 @@ void uploadSensorData(String jsonPayload) {
   http.end();
 }
 
-String mockAiCommand(SensorData data) {
-  if (data.gasRaw > GAS_DANGER_THRESHOLD) {
+String mockAiCommand(SensorData data)
+{
+  if (data.gasRaw > GAS_DANGER_THRESHOLD)
+  {
     return "BUZZER_ON";
   }
 
-  if (data.soilRaw < SOIL_DRY_THRESHOLD) {
+  if (data.soilRaw < SOIL_DRY_THRESHOLD)
+  {
     return "WATER_ON";
   }
 
-  if (data.lightRaw < DARK_THRESHOLD) {
+  if (data.lightRaw < DARK_THRESHOLD)
+  {
     return "LIGHT_ON";
   }
 
-  if (data.phValue < PH_LOW || data.phValue > PH_HIGH) {
+  if (data.phValue < PH_LOW || data.phValue > PH_HIGH)
+  {
     return "PH_WARNING";
   }
 
   return "NO_ACTION";
 }
 
-String getCommandFromBackend(SensorData data) {
+String getCommandFromBackend(SensorData data)
+{
   Serial.println("[Backend API] GET /api/device-command?deviceId=farm_001");
 
-  if (MOCK_BACKEND) {
+  if (MOCK_BACKEND)
+  {
     String command = mockAiCommand(data);
     Serial.print("[AI Command] MOCK command from backend: ");
     Serial.println(command);
     return command;
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED)
+  {
     Serial.println("[Backend API] WiFi not connected");
     return "NO_ACTION";
   }
@@ -208,42 +230,69 @@ String getCommandFromBackend(SensorData data) {
   Serial.print("[Backend API] HTTP status: ");
   Serial.println(httpCode);
 
-  String command = http.getString();
-  command.trim();
-
+  String response = http.getString();
+  response.trim();
   http.end();
 
-  if (command.length() == 0) {
+  if (response.length() == 0)
+  {
     return "NO_ACTION";
   }
 
-  return command;
+  // 解析 "COMMAND|intervalSeconds" 格式
+  int separatorIndex = response.indexOf('|');
+  if (separatorIndex != -1)
+  {
+    String intervalStr = response.substring(separatorIndex + 1);
+    unsigned long newInterval = intervalStr.toInt();
+    if (newInterval > 0)
+    {
+      sampleIntervalMs = newInterval * 1000UL;
+      Serial.print("[User Preference] Interval updated to: ");
+      Serial.print(newInterval);
+      Serial.println(" seconds");
+    }
+    return response.substring(0, separatorIndex);
+  }
+
+  return response;
 }
 
-void executeCommand(String command) {
+void executeCommand(String command)
+{
   Serial.print("[ESP32 Action] Executing command: ");
   Serial.println(command);
 
   allOutputsOff();
 
-  if (command == "WATER_ON") {
+  if (command == "WATER_ON")
+  {
     digitalWrite(WATER_LED_PIN, HIGH);
     Serial.println("Watering LED ON");
-  } else if (command == "LIGHT_ON") {
+  }
+  else if (command == "LIGHT_ON")
+  {
     digitalWrite(GROW_LED_PIN, HIGH);
     Serial.println("Grow light LED ON");
-  } else if (command == "BUZZER_ON") {
+  }
+  else if (command == "BUZZER_ON")
+  {
     buzzerOn();
     Serial.println("Buzzer ON");
-  } else if (command == "PH_WARNING") {
+  }
+  else if (command == "PH_WARNING")
+  {
     buzzerOn();
     Serial.println("pH warning alert ON");
-  } else {
+  }
+  else
+  {
     Serial.println("No action required");
   }
 }
 
-void printRealtimeMonitor(SensorData data) {
+void printRealtimeMonitor(SensorData data)
+{
   Serial.println();
   Serial.println("===== Real-Time Farm Monitor =====");
 
@@ -280,8 +329,10 @@ void printRealtimeMonitor(SensorData data) {
   Serial.println("==================================");
 }
 
-void handleSerialPreference() {
-  if (!Serial.available()) {
+void handleSerialPreference()
+{
+  if (!Serial.available())
+  {
     return;
   }
 
@@ -289,31 +340,38 @@ void handleSerialPreference() {
   input.trim();
   input.toLowerCase();
 
-  if (input.startsWith("interval ")) {
+  if (input.startsWith("interval "))
+  {
     int seconds = input.substring(9).toInt();
 
-    if (seconds > 0) {
+    if (seconds > 0)
+    {
       sampleIntervalMs = (unsigned long)seconds * 1000UL;
       Serial.print("[User Preference] New sensing interval: ");
       Serial.print(seconds);
       Serial.println(" seconds");
-    } else {
+    }
+    else
+    {
       Serial.println("[User Preference] Invalid interval");
     }
   }
 
-  if (input == "default") {
+  if (input == "default")
+  {
     sampleIntervalMs = 3600000UL;
     Serial.println("[User Preference] Sensing interval set to default: 1 hour");
   }
 
-  if (input == "demo") {
+  if (input == "demo")
+  {
     sampleIntervalMs = 5000UL;
     Serial.println("[User Preference] Sensing interval set to demo mode: 5 seconds");
   }
 }
 
-void runIoTCycle() {
+void runIoTCycle()
+{
   SensorData data = readSensors();
 
   printRealtimeMonitor(data);
@@ -328,7 +386,8 @@ void runIoTCycle() {
   Serial.println();
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   delay(1000);
 
@@ -358,12 +417,14 @@ void setup() {
   connectWiFi();
 }
 
-void loop() {
+void loop()
+{
   handleSerialPreference();
 
   unsigned long currentTime = millis();
 
-  if (currentTime - lastSampleTime >= sampleIntervalMs) {
+  if (currentTime - lastSampleTime >= sampleIntervalMs)
+  {
     lastSampleTime = currentTime;
     runIoTCycle();
   }
