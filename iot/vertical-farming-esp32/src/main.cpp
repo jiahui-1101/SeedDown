@@ -41,8 +41,12 @@ unsigned long lastSampleTime = 0;
 
 DHTesp dht;
 
+<<<<<<< HEAD
+struct SensorData {
+=======
 struct SensorData
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   float temperature;
   float humidity;
   int gasRaw;
@@ -53,6 +57,13 @@ struct SensorData
   float waterDistanceCm;
 };
 
+<<<<<<< HEAD
+float mapFloat(float x, float inMin, float inMax, float outMin, float outMax) {
+  return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+}
+
+float readDistanceCM() {
+=======
 float mapFloat(float x, float inMin, float inMax, float outMin, float outMax)
 {
   return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
@@ -60,6 +71,7 @@ float mapFloat(float x, float inMin, float inMax, float outMin, float outMax)
 
 float readDistanceCM()
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
@@ -67,14 +79,29 @@ float readDistanceCM()
   digitalWrite(TRIG_PIN, LOW);
 
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+<<<<<<< HEAD
+  if (duration == 0) {
+=======
   if (duration == 0)
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     return -1;
   }
 
   return duration * 0.034 / 2;
 }
 
+<<<<<<< HEAD
+void buzzerOn() {
+  ledcWriteTone(BUZZER_CHANNEL, 1000);
+}
+
+void buzzerOff() {
+  ledcWriteTone(BUZZER_CHANNEL, 0);
+}
+
+void allOutputsOff() {
+=======
 void buzzerOn()
 {
   ledcWriteTone(BUZZER_CHANNEL, 1000);
@@ -87,19 +114,28 @@ void buzzerOff()
 
 void allOutputsOff()
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   digitalWrite(GROW_LED_PIN, LOW);
   digitalWrite(WATER_LED_PIN, LOW);
   buzzerOff();
 }
 
+<<<<<<< HEAD
+void connectWiFi() {
+=======
 void connectWiFi()
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   Serial.print("Connecting to WiFi");
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 6);
 
+<<<<<<< HEAD
+  while (WiFi.status() != WL_CONNECTED) {
+=======
   while (WiFi.status() != WL_CONNECTED)
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     delay(250);
     Serial.print(".");
   }
@@ -109,8 +145,12 @@ void connectWiFi()
   Serial.println(WiFi.localIP());
 }
 
+<<<<<<< HEAD
+SensorData readSensors() {
+=======
 SensorData readSensors()
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   TempAndHumidity dhtData = dht.getTempAndHumidity();
 
   SensorData data;
@@ -126,8 +166,12 @@ SensorData readSensors()
   return data;
 }
 
+<<<<<<< HEAD
+String buildSensorJson(SensorData data) {
+=======
 String buildSensorJson(SensorData data)
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   String json = "{";
   json += "\"deviceId\":\"farm_001\",";
   json += "\"temperature\":" + String(data.temperature, 2) + ",";
@@ -143,6 +187,13 @@ String buildSensorJson(SensorData data)
   return json;
 }
 
+<<<<<<< HEAD
+void uploadSensorData(String jsonPayload) {
+  Serial.println("[Backend API] POST /api/sensor-data");
+  Serial.println(jsonPayload);
+
+  if (MOCK_BACKEND) {
+=======
 void uploadSensorData(String jsonPayload)
 {
   Serial.println("[Backend API] POST /api/sensor-data");
@@ -150,12 +201,17 @@ void uploadSensorData(String jsonPayload)
 
   if (MOCK_BACKEND)
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     Serial.println("[Backend API] MOCK response: 201 Created");
     return;
   }
 
+<<<<<<< HEAD
+  if (WiFi.status() != WL_CONNECTED) {
+=======
   if (WiFi.status() != WL_CONNECTED)
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     Serial.println("[Backend API] WiFi not connected");
     return;
   }
@@ -177,6 +233,22 @@ void uploadSensorData(String jsonPayload)
   http.end();
 }
 
+<<<<<<< HEAD
+String mockAiCommand(SensorData data) {
+  if (data.gasRaw > GAS_DANGER_THRESHOLD) {
+    return "BUZZER_ON";
+  }
+
+  if (data.soilRaw < SOIL_DRY_THRESHOLD) {
+    return "WATER_ON";
+  }
+
+  if (data.lightRaw < DARK_THRESHOLD) {
+    return "LIGHT_ON";
+  }
+
+  if (data.phValue < PH_LOW || data.phValue > PH_HIGH) {
+=======
 String mockAiCommand(SensorData data)
 {
   if (data.gasRaw > GAS_DANGER_THRESHOLD)
@@ -196,26 +268,38 @@ String mockAiCommand(SensorData data)
 
   if (data.phValue < PH_LOW || data.phValue > PH_HIGH)
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     return "PH_WARNING";
   }
 
   return "NO_ACTION";
 }
 
+<<<<<<< HEAD
+String getCommandFromBackend(SensorData data) {
+  Serial.println("[Backend API] GET /api/device-command?deviceId=farm_001");
+
+  if (MOCK_BACKEND) {
+=======
 String getCommandFromBackend(SensorData data)
 {
   Serial.println("[Backend API] GET /api/device-command?deviceId=farm_001");
 
   if (MOCK_BACKEND)
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     String command = mockAiCommand(data);
     Serial.print("[AI Command] MOCK command from backend: ");
     Serial.println(command);
     return command;
   }
 
+<<<<<<< HEAD
+  if (WiFi.status() != WL_CONNECTED) {
+=======
   if (WiFi.status() != WL_CONNECTED)
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     Serial.println("[Backend API] WiFi not connected");
     return "NO_ACTION";
   }
@@ -230,6 +314,21 @@ String getCommandFromBackend(SensorData data)
   Serial.print("[Backend API] HTTP status: ");
   Serial.println(httpCode);
 
+<<<<<<< HEAD
+  String command = http.getString();
+  command.trim();
+
+  http.end();
+
+  if (command.length() == 0) {
+    return "NO_ACTION";
+  }
+
+  return command;
+}
+
+void executeCommand(String command) {
+=======
   String response = http.getString();
   response.trim();
   http.end();
@@ -260,11 +359,27 @@ String getCommandFromBackend(SensorData data)
 
 void executeCommand(String command)
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   Serial.print("[ESP32 Action] Executing command: ");
   Serial.println(command);
 
   allOutputsOff();
 
+<<<<<<< HEAD
+  if (command == "WATER_ON") {
+    digitalWrite(WATER_LED_PIN, HIGH);
+    Serial.println("Watering LED ON");
+  } else if (command == "LIGHT_ON") {
+    digitalWrite(GROW_LED_PIN, HIGH);
+    Serial.println("Grow light LED ON");
+  } else if (command == "BUZZER_ON") {
+    buzzerOn();
+    Serial.println("Buzzer ON");
+  } else if (command == "PH_WARNING") {
+    buzzerOn();
+    Serial.println("pH warning alert ON");
+  } else {
+=======
   if (command == "WATER_ON")
   {
     digitalWrite(WATER_LED_PIN, HIGH);
@@ -287,12 +402,17 @@ void executeCommand(String command)
   }
   else
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     Serial.println("No action required");
   }
 }
 
+<<<<<<< HEAD
+void printRealtimeMonitor(SensorData data) {
+=======
 void printRealtimeMonitor(SensorData data)
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   Serial.println();
   Serial.println("===== Real-Time Farm Monitor =====");
 
@@ -329,10 +449,15 @@ void printRealtimeMonitor(SensorData data)
   Serial.println("==================================");
 }
 
+<<<<<<< HEAD
+void handleSerialPreference() {
+  if (!Serial.available()) {
+=======
 void handleSerialPreference()
 {
   if (!Serial.available())
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     return;
   }
 
@@ -340,38 +465,61 @@ void handleSerialPreference()
   input.trim();
   input.toLowerCase();
 
+<<<<<<< HEAD
+  if (input.startsWith("interval ")) {
+    int seconds = input.substring(9).toInt();
+
+    if (seconds > 0) {
+=======
   if (input.startsWith("interval "))
   {
     int seconds = input.substring(9).toInt();
 
     if (seconds > 0)
     {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
       sampleIntervalMs = (unsigned long)seconds * 1000UL;
       Serial.print("[User Preference] New sensing interval: ");
       Serial.print(seconds);
       Serial.println(" seconds");
+<<<<<<< HEAD
+    } else {
+=======
     }
     else
     {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
       Serial.println("[User Preference] Invalid interval");
     }
   }
 
+<<<<<<< HEAD
+  if (input == "default") {
+=======
   if (input == "default")
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     sampleIntervalMs = 3600000UL;
     Serial.println("[User Preference] Sensing interval set to default: 1 hour");
   }
 
+<<<<<<< HEAD
+  if (input == "demo") {
+=======
   if (input == "demo")
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     sampleIntervalMs = 5000UL;
     Serial.println("[User Preference] Sensing interval set to demo mode: 5 seconds");
   }
 }
 
+<<<<<<< HEAD
+void runIoTCycle() {
+=======
 void runIoTCycle()
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   SensorData data = readSensors();
 
   printRealtimeMonitor(data);
@@ -386,8 +534,12 @@ void runIoTCycle()
   Serial.println();
 }
 
+<<<<<<< HEAD
+void setup() {
+=======
 void setup()
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   Serial.begin(115200);
   delay(1000);
 
@@ -417,14 +569,22 @@ void setup()
   connectWiFi();
 }
 
+<<<<<<< HEAD
+void loop() {
+=======
 void loop()
 {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
   handleSerialPreference();
 
   unsigned long currentTime = millis();
 
+<<<<<<< HEAD
+  if (currentTime - lastSampleTime >= sampleIntervalMs) {
+=======
   if (currentTime - lastSampleTime >= sampleIntervalMs)
   {
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     lastSampleTime = currentTime;
     runIoTCycle();
   }
