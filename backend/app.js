@@ -29,6 +29,7 @@ app.use('/api/whatif', require('./src/routes/whatIfRoutes'));
 app.use('/api/chat', require('./src/routes/chatRoutes'));
 app.use('/api/crops', require('./src/routes/cropRoutes'));
 app.use('/api/community', require('./src/routes/communityRoutes'));
+app.use('/api/mall', require('./src/routes/mallRoutes'));
 
 app.get('/', (req, res) =>
   res.json({ status: 'NextLevelFarm API running' })
