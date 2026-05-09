@@ -4,6 +4,8 @@
    Export: { render, init }
    ============================================================ */
 
+import { AppState } from '../store.js';
+
 /* ---------- DATA ---------- */
 // MODIFIED: added `emoji` field to each crop; added `units` field for exact harvest count display
 const WIF_CROPS = [
@@ -735,6 +737,7 @@ function wifUpdateCost() {
 
   document.getElementById('wif-cost-ai-note').textContent = d.note;
   wifRenderSavingsChart(weeks, d);
+  wifFetchCostAi(plant, wif_cosRows, weeks);
 }
 
 function wifRenderSavingsChart(weeks, d) {
@@ -771,7 +774,7 @@ function wifDrawChart(canvas, weeks, d) {
       datasets: [{
         label: 'Net savings (RM)',
         data,
-        backgroundColor: 'var(--green-200,#97C459)',
+        backgroundColor: '#97C459',
         borderRadius: 4,
         borderSkipped: false,
       }],
@@ -793,6 +796,78 @@ function wifDrawChart(canvas, weeks, d) {
       },
     },
   });
+}
+
+/* ============================================================
+   TAB 2 — AI COST ANALYSIS
+   ============================================================ */
+
+async function wifFetchCostAi(plant, units, weeks) {
+  const noteEl = document.getElementById('wif-cost-ai-note');
+  noteEl.textContent = '🤖 Analyzing your sensor data...';
+
+  const sensors = {
+    temp:     AppState.sensors.temp.val,
+    humid:    AppState.sensors.humid.val,
+    light:    AppState.sensors.light.val,
+    water:    AppState.sensors.water.val,
+    nutrient: AppState.sensors.nutrient.val,
+  };
+
+    // Remove old card immediately so user sees it's refreshing
+  document.getElementById('wif-ai-savings-detail')?.remove();
+  noteEl.textContent = '🤖 Analyzing your sensor data...';
+
+  try {
+    const res = await fetch('http://localhost:3000/api/whatif/costsaving', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plant, units, weeks, sensors })
+    });
+
+    if (!res.ok) throw new Error('Server error');
+    const data = await res.json();
+
+    noteEl.textContent = data.insight;
+
+    const detail = document.createElement('div');
+    detail.id = 'wif-ai-savings-detail';
+
+    detail.innerHTML = `
+      <div class="wif-card" style="margin-bottom:12px;border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
+        <div class="wif-card-title">🤖 AI Resource Analysis</div>
+        <div class="wif-metric-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:10px;">
+          <div class="wif-metric">
+            <div class="wif-metric-val" style="font-size:15px;color:var(--teal-600,#0F6E56);">${data.conditionScore}%</div>
+            <div class="wif-metric-lbl">Condition: ${data.conditionLabel}</div>
+          </div>
+          <div class="wif-metric">
+            <div class="wif-metric-val" style="font-size:15px;color:var(--accent,#639922);">RM ${(data.totalSavedRM ?? 0).toFixed(2)}</div>
+            <div class="wif-metric-lbl">AI Est. Saved</div>
+          </div>
+        </div>
+        <div class="wif-cost-row wif-cost-income">
+          <span class="wif-cost-lbl">💧 Water saved</span>
+          <span style="color:var(--green-600,#3B6D11);">${(data.waterSavedLiters ?? 0).toFixed(1)}L · RM ${(data.waterCostSaved ?? 0).toFixed(2)}</span>
+        </div>
+        <div class="wif-cost-row wif-cost-income">
+          <span class="wif-cost-lbl">⚡ Energy saved</span>
+          <span style="color:var(--green-600,#3B6D11);">${(data.energySavedkWh ?? 0).toFixed(2)}kWh · RM ${(data.energyCostSaved ?? 0).toFixed(2)}</span>
+        </div>
+      </div>`;
+
+    // Insert before the chart card (3rd card in #wif-cost)
+    const costSection = document.getElementById('wif-cost');
+    const cards = costSection.querySelectorAll(':scope > .wif-card');
+    if (cards.length >= 3) {
+      cards[2].before(detail);
+    } else {
+      costSection.appendChild(detail);
+    }
+
+  } catch (err) {
+    noteEl.textContent = 'AI analysis unavailable — showing calculated estimates only.';
+  }
 }
 
 /* ============================================================
@@ -891,6 +966,69 @@ function wifUpdateNewPlant() {
       </div>`;
   }).join('');
 
-  document.getElementById('wif-np-ai-note').textContent =
-    d.ai + ` (${wif_qty} plants)`;
+  document.getElementById('wif-np-ai-note').textContent = '🤖 Predicting impact...';
+  wifFetchNewPlantAi(wif_curNp, wif_qty);
+}
+
+async function wifFetchNewPlantAi(species, quantity) {
+  const noteEl = document.getElementById('wif-np-ai-note');
+
+  const sensors = {
+    temp:     AppState.sensors.temp.val,
+    humid:    AppState.sensors.humid.val,
+    light:    AppState.sensors.light.val,
+    water:    AppState.sensors.water.val,
+    nutrient: AppState.sensors.nutrient.val,
+  };
+
+  const currentCrops = [...(window._wif_selectedCrops || ['lettuce', 'tomato', 'basil'])];
+
+  try {
+    const res = await fetch('http://localhost:3000/api/whatif/newplant', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ species, quantity, currentCrops, sensors })
+    });
+
+    if (!res.ok) throw new Error('Server error');
+    const data = await res.json();
+
+    // Update AI note
+    noteEl.textContent = data.insight;
+
+    // Show warnings if any
+    if (data.warnings?.length) {
+      noteEl.textContent += ' ⚠️ ' + data.warnings.join(' · ');
+    }
+
+    // Update impact cards with real calculated values
+    const impactMap = {
+      'Temperature': data.impacts.tempChange,
+      'Humidity':    data.impacts.humidChange,
+      'Light (h/d)': data.impacts.lightChange,
+      'Fertilizer':  data.impacts.nutrientChange,
+    };
+
+    document.querySelectorAll('.wif-impact-card').forEach(card => {
+      const nameEl = card.querySelector('.wif-impact-name');
+      const valEl  = card.querySelector('.wif-impact-val');
+      if (!nameEl || !valEl) return;
+
+      const name = nameEl.textContent.trim();
+      if (impactMap[name] !== undefined) {
+        const val = impactMap[name];
+        const sign = val > 0 ? '+' : '';
+        const unit = name.includes('Light') ? 'h' : name.includes('Temp') ? '°C' : '%';
+        valEl.textContent = val === 0 ? 'No change' : `${sign}${val}${unit}`;
+
+        // Update card color based on direction
+        card.className = 'wif-impact-card ' + (val === 0 ? 'ok' : val > 0 ? 'up' : 'down');
+        valEl.className = 'wif-impact-val ' + (val === 0 ? 'ok' : val > 0 ? 'up' : 'down');
+      }
+    });
+
+  } catch (err) {
+    const d = WIF_NP_DATA[species];
+    noteEl.textContent = d ? d.ai + ` (${quantity} plants)` : 'AI prediction unavailable.';
+  }
 }
