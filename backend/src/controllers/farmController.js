@@ -260,7 +260,16 @@ async function generate3D(req, res) {
 // Create Farm
 // ─────────────────────────────────────────────────────────────
 async function createFarm(req, res) {
-    const { name, location, rackType, plants } = req.body;
+    const {
+        name,
+        location,
+        rackType,
+        plants,
+        targetPlant,
+        analysisGoal,
+        viewMode,
+        photoPreview,
+    } = req.body;
 
     if (!name) {
         return res.status(400).json({
@@ -273,25 +282,26 @@ async function createFarm(req, res) {
         location: location || '',
         rackType: rackType || '3-tier',
         plants: plants || [],
+        targetPlant: targetPlant || '',
+        analysisGoal: analysisGoal || 'yield',
+        viewMode: viewMode || 'realistic',
+        hasPhoto: Boolean(photoPreview),
         status: 'active',
         createdAt: new Date().toISOString(),
     };
 
     // Try Firestore
     try {
-        const { db } = require('../config/db');
+        const { getDb } = require('../config/db');
+        const docRef = await getDb()
+            .collection('farms')
+            .add(farmDoc);
 
-        if (db && db.collection) {
-            const docRef = await db
-                .collection('farms')
-                .add(farmDoc);
-
-            return res.json({
-                success: true,
-                farmId: docRef.id,
-                farm: farmDoc,
-            });
-        }
+        return res.json({
+            success: true,
+            farmId: docRef.id,
+            farm: farmDoc,
+        });
     } catch (err) {
         console.warn(
             '[farmController] Firestore save skipped:',
