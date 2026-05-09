@@ -2,7 +2,10 @@ import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
 import * as WhatIf from './WhatIf.js';   // ← new What-If module
+<<<<<<< HEAD
 import * as Consumption from './ConsumptionPage.js'; 
+=======
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
 
 export function render(params = {}) {
     const { feature } = params;
@@ -14,8 +17,12 @@ export function render(params = {}) {
         content = WhatIf.render();
 
     } else if (feature === 'consumption') {
+<<<<<<< HEAD
         content = Consumption.render();
         /*content = `
+=======
+        content = `
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
             <div style="padding:16px;">
                 <div class="eco-hero" style="background:var(--ok-bg); border-radius:24px; padding:24px; text-align:center; margin-bottom:16px;"><div style="font-size:2.5rem;">A+</div><div>Eco Rating</div></div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
@@ -26,7 +33,11 @@ export function render(params = {}) {
                 </div>
                 <div class="card" style="margin-top:16px;"><div>💡 AI Tips</div><ul><li>Reduce light by 2h → save RM0.80/day</li><li>Batch watering → save 1.2L water</li></ul></div>
             </div>
+<<<<<<< HEAD
         `;*/
+=======
+        `;
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     } else if (feature === 'alerts') {
         content = `
             <div style="padding:16px;">
@@ -79,7 +90,11 @@ export function render(params = {}) {
         });
 
     } else if (feature === 'consumption') {
+<<<<<<< HEAD
         Consumption.init();   // ← triggers API fetch + chart render
+=======
+        // No extra init needed for consumption tab currently
+>>>>>>> 5ce9b3812d4f85453baecc9c4e0358f6096f9942
     }
 }
 
