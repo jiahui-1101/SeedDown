@@ -26,12 +26,14 @@ export const FarmCanvas = {
     scene: null,
     camera: null,
     group: null,
+    ctx: null,
     rafId: null,
     resizeHandler: null,
     frame: 0,
     field: null,
     rack: RACK_OPTIONS['3-tier'],
     slotPlants: [],
+    fallbackMode: false,
 
     init(selector) {
         this.destroy();
@@ -43,6 +45,15 @@ export const FarmCanvas = {
         this.rack = resolveRack(this.field);
         this.slotPlants = resolveSlotPlants(this.field, this.rack);
 
+        try {
+            this.initThree();
+        } catch (error) {
+            console.warn('[FarmCanvas] WebGL unavailable, using preview fallback:', error.message);
+            this.renderFallback();
+        }
+    },
+
+    initThree() {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0xeaf4ff);
         this.scene.fog = new THREE.Fog(0xeaf4ff, 4, 10);
@@ -51,18 +62,12 @@ export const FarmCanvas = {
         this.camera.position.set(3.2, 2.4, 4.4);
         this.camera.lookAt(0, 1.0, 0);
 
-        try {
-            this.renderer = new THREE.WebGLRenderer({
-                canvas: this.canvas,
-                antialias: true,
-                alpha: false,
-                preserveDrawingBuffer: true,
-            });
-        } catch (error) {
-            console.warn('[FarmCanvas] WebGL unavailable, using 2D fallback:', error.message);
-            this.renderFallback();
-            return;
-        }
+        this.renderer = new THREE.WebGLRenderer({
+            canvas: this.canvas,
+            antialias: true,
+            alpha: false,
+            preserveDrawingBuffer: true,
+        });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -223,7 +228,43 @@ export const FarmCanvas = {
         }
     },
 
+    renderFallback() {
+        this.fallbackMode = true;
+        this.ctx = this.canvas.getContext('2d');
+        if (!this.ctx) return;
+
+        this.resizeHandler = () => this.drawFallback();
+        window.addEventListener('resize', this.resizeHandler);
+        this.canvas.onclick = () => window.showToast?.('info', 'WebGL is disabled here, showing preview mode');
+        this.drawFallback();
+    },
+
+    drawFallback() {
+        if (!this.canvas || !this.ctx) return;
+
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const width = Math.max(320, rect.width || this.canvas.parentElement?.clientWidth || 360);
+        const height = Math.max(220, rect.height || 220);
+        this.canvas.width = Math.floor(width * dpr);
+        this.canvas.height = Math.floor(height * dpr);
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        drawRackPreview(this.ctx, width, height, this.rack, this.slotPlants, {
+            backgroundTop: '#eaf4ff',
+            backgroundBottom: '#dbeafe',
+            text: '#1f2937',
+            shelf: '#94a3b8',
+            pole: '#64748b',
+            led: '#8b5cf6',
+        });
+    },
+
     resize() {
+        if (this.fallbackMode) {
+            this.drawFallback();
+            return;
+        }
         if (!this.canvas || !this.renderer || !this.camera) return;
         const rect = this.canvas.getBoundingClientRect();
         const width = Math.max(320, rect.width || this.canvas.parentElement?.clientWidth || 360);
@@ -269,10 +310,134 @@ export const FarmCanvas = {
         this.scene = null;
         this.camera = null;
         this.group = null;
+        this.ctx = null;
         this.field = null;
         this.slotPlants = [];
+        this.fallbackMode = false;
     },
 };
+
+function drawRackPreview(ctx, width, height, rack, slotPlants, theme) {
+    const bg = ctx.createLinearGradient(0, 0, width, height);
+    bg.addColorStop(0, theme.backgroundTop);
+    bg.addColorStop(1, theme.backgroundBottom);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.save();
+    ctx.translate(width * 0.5, height * 0.53);
+    ctx.transform(1, -0.12, -0.35, 0.92, 0, 0);
+
+    const { tiers, slotsPerTier } = rack;
+    const rackWidth = Math.min(width * 0.72, 250);
+    const rackDepth = 54;
+    const tierGap = Math.min(54, (height - 62) / Math.max(tiers, 1));
+    const totalHeight = tierGap * (tiers - 1) + 18;
+    const startY = -totalHeight / 2;
+    const slotGap = rackWidth / Math.max(slotsPerTier, 1);
+
+    ctx.strokeStyle = theme.pole;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    [-1, 1].forEach(side => {
+        ctx.beginPath();
+        ctx.moveTo(side * rackWidth / 2, startY - 18);
+        ctx.lineTo(side * rackWidth / 2, startY + totalHeight + 28);
+        ctx.stroke();
+    });
+
+    for (let tier = 0; tier < tiers; tier++) {
+        const y = startY + tier * tierGap;
+        drawIsoShelf(ctx, -rackWidth / 2, y, rackWidth, rackDepth, theme.shelf);
+
+        ctx.fillStyle = theme.led;
+        roundedRect(ctx, -rackWidth * 0.36, y - 24, rackWidth * 0.72, 5, 3);
+        ctx.fill();
+
+        for (let slot = 0; slot < slotsPerTier; slot++) {
+            const index = tier * slotsPerTier + slot;
+            const plant = slotPlants[index];
+            const x = -rackWidth / 2 + slotGap * (slot + 0.5);
+            const baseY = y - 4;
+
+            ctx.fillStyle = plant ? '#7c3aed' : 'rgba(148, 163, 184, 0.42)';
+            ctx.beginPath();
+            ctx.ellipse(x, baseY, 12, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (plant) drawFallbackPlant(ctx, x, baseY, plant, index);
+        }
+    }
+
+    ctx.restore();
+
+    ctx.fillStyle = 'rgba(37, 99, 235, 0.08)';
+    ctx.beginPath();
+    ctx.ellipse(width * 0.5, height - 18, width * 0.32, 13, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = theme.text;
+    ctx.font = '700 11px Inter, system-ui, sans-serif';
+    ctx.fillText(`${rack.tiers} tiers · ${slotPlants.length}/${rack.total} plants`, 16, height - 13);
+}
+
+function drawIsoShelf(ctx, x, y, w, d, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w - d * 0.3, y + d * 0.28);
+    ctx.lineTo(x - d * 0.3, y + d * 0.28);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.14)';
+    ctx.beginPath();
+    ctx.moveTo(x - d * 0.3, y + d * 0.28);
+    ctx.lineTo(x + w - d * 0.3, y + d * 0.28);
+    ctx.lineTo(x + w - d * 0.3, y + d * 0.28 + 8);
+    ctx.lineTo(x - d * 0.3, y + d * 0.28 + 8);
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawFallbackPlant(ctx, x, y, plant, index) {
+    const colors = ['#22c55e', '#4ade80', '#16a34a', '#65a30d', '#10b981'];
+    const color = plant.emoji === '🍅' ? '#ef4444' : plant.emoji === '🌶️' ? '#dc2626' : colors[index % colors.length];
+
+    ctx.strokeStyle = '#365314';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 5);
+    ctx.lineTo(x, y - 24);
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 / 5) * i;
+        ctx.save();
+        ctx.translate(x + Math.cos(angle) * 8, y - 23 + Math.sin(angle) * 5);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 9, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+function roundedRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
 
 function getCurrentField() {
     const saved = loadSavedFarms();
@@ -343,4 +508,3 @@ function emojiForPlant(name = '') {
     if (key.includes('basil') || key.includes('mint') || key.includes('spinach')) return '🌿';
     return '🌱';
 }
-
