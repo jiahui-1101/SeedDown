@@ -26,19 +26,28 @@ function resolveCredentialPath(credentialPath) {
 
 function getCredential() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    return cert(parseServiceAccountJson(process.env.FIREBASE_SERVICE_ACCOUNT_JSON));
+    const serviceAccount = parseServiceAccountJson(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    console.log('Firebase credential source: FIREBASE_SERVICE_ACCOUNT_JSON');
+    console.log('Firebase service account project:', serviceAccount.project_id);
+    console.log('Firebase service account email:', serviceAccount.client_email);
+    return cert(serviceAccount);
   }
 
   if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
     const credentialPath = resolveCredentialPath(process.env.GOOGLE_APPLICATION_CREDENTIALS);
+    console.log('Firebase credential source: GOOGLE_APPLICATION_CREDENTIALS');
+    console.log('Firebase credential path:', credentialPath || process.env.GOOGLE_APPLICATION_CREDENTIALS);
+
     if (!credentialPath) {
       throw new Error(`Firebase service account file not found: ${process.env.GOOGLE_APPLICATION_CREDENTIALS}`);
     }
     return cert(require(credentialPath));
   }
 
+  console.warn('Firebase credential source: applicationDefault()');
   return applicationDefault();
 }
+
 
 function connectDB() {
   if (!getApps().length) {
