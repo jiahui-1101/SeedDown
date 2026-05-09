@@ -14,6 +14,7 @@ const pages = {
     splash: () => import('./pages/SplashPage.js').then(m => m.render()),
     login: () => import('./pages/LoginPage.js').then(m => m.render()),
     farmlist: () => import('./pages/FarmListPage.js').then(m => m.render()),
+    buildfarm: () => import('./pages/BuildFarmPage.js').then(m => m.render()),
     home: () => import('./pages/HomePage.js').then(m => m.render()),
     'dash-c': () => import('./pages/CommercialPage.js').then(m => m.render()),
     community: () => import('./pages/CommunityPage.js').then(m => m.render()),

@@ -1,76 +1,103 @@
 /**
  * BuildFarmPage.js
- * 3-step wizard: Photo & Info → Plant Recognition → 3D Preview
- * 
- * Step 1: Capture farm photo + enter name + choose rack type
- * Step 2: AI auto-recognises plants (via Claude Vision), user can edit/add
- * Step 3: Three.js procedural 3D rack preview; "DA3 Enhance" loads real depth mesh
+ * New Field wizard: Plant analysis setup -> photo capture -> 3D vertical preview.
  */
 
 import { AppState } from '../store.js';
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
-// ─── Module-level state ──────────────────────────────────────────────────────
+const FARMS_STORAGE_KEY = 'user_farms';
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
+
 let step = 1;
-let photoData = null;       // { base64, mediaType, dataUrl }
-let farmInfo = { name: '', location: '', rackType: '3-tier' };
-let detectedPlants = [];    // [{ name, emoji, species, confidence, slots }]
-let threeCleanup = null;    // cleanup fn for Three.js scene
+let photoData = null;
+let viewMode = 'realistic';
+let threeCleanup = null;
+let scanStarted = false;
+let fieldInfo = {
+    name: '',
+    location: '',
+    targetPlant: '',
+    analysisGoal: 'yield',
+    rackType: '3-tier',
+};
+let detectedPlants = [];
 
 const RACK_OPTIONS = [
-    { id: '3-tier',  label: '3-Tier Vertical', emoji: '🏗️', tiers: 3, slotsPerTier: 3, total: 9  },
-    { id: '5-tier',  label: '5-Tier Vertical',  emoji: '🏛️', tiers: 5, slotsPerTier: 4, total: 20 },
-    { id: 'wall',    label: 'Wall Panel',        emoji: '🧱', tiers: 4, slotsPerTier: 5, total: 20 },
+    { id: '3-tier', label: '3-Tier Vertical', icon: 'III', tiers: 3, slotsPerTier: 3, total: 9 },
+    { id: '5-tier', label: '5-Tier Tower', icon: 'V', tiers: 5, slotsPerTier: 4, total: 20 },
+    { id: 'wall', label: 'Wall Panel', icon: 'GRID', tiers: 4, slotsPerTier: 5, total: 20 },
+];
+
+const ANALYSIS_GOALS = [
+    { id: 'yield', label: 'Yield' },
+    { id: 'health', label: 'Health' },
+    { id: 'space', label: 'Space fit' },
 ];
 
 const EMOJI_MAP = {
-    lettuce:'🥬', spinach:'🌿', basil:'🌿', tomato:'🍅', carrot:'🥕',
-    cabbage:'🥬', eggplant:'🍆', mint:'🌿', kale:'🥬', cucumber:'🥒',
-    pepper:'🌶️', chili:'🌶️', strawberry:'🍓', bean:'🫘', pea:'🟢',
-    chard:'🥬', arugula:'🌿', radish:'🌱', cilantro:'🌿', parsley:'🌿',
+    lettuce: '🥬',
+    spinach: '🌿',
+    basil: '🌿',
+    tomato: '🍅',
+    carrot: '🥕',
+    cabbage: '🥬',
+    eggplant: '🍆',
+    mint: '🌿',
+    kale: '🥬',
+    cucumber: '🥒',
+    pepper: '🌶️',
+    chili: '🌶️',
+    strawberry: '🍓',
+    bean: '🫘',
+    pea: '🟢',
+    chard: '🥬',
+    arugula: '🌿',
+    radish: '🌱',
+    cilantro: '🌿',
+    parsley: '🌿',
 };
 
-// ─── Entry point ─────────────────────────────────────────────────────────────
 export function render() {
-    // Reset state
     step = 1;
     photoData = null;
-    farmInfo = { name: '', location: '', rackType: '3-tier' };
+    viewMode = 'realistic';
+    scanStarted = false;
+    fieldInfo = {
+        name: '',
+        location: '',
+        targetPlant: '',
+        analysisGoal: 'yield',
+        rackType: '3-tier',
+    };
     detectedPlants = [];
-    if (threeCleanup) { threeCleanup(); threeCleanup = null; }
+    dispose3D();
 
     const container = document.getElementById('screenContainer');
     container.innerHTML = `
         <div class="screen active" id="buildFarmScreen"
              style="display:flex;flex-direction:column;height:100vh;overflow:hidden;background:var(--bg);">
-
-            <!-- Top bar -->
             <div class="topbar" style="flex-shrink:0;">
-                <button id="bfBack"
-                    style="background:none;border:none;font-size:22px;cursor:pointer;
-                           padding:4px 8px;color:var(--text);line-height:1;">←</button>
-                <div style="font-weight:700;font-size:16px;">Build New Farm</div>
+                <button id="bfBack" aria-label="Back"
+                    style="background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;color:var(--text);line-height:1;">←</button>
+                <div>
+                    <div style="font-weight:800;font-size:16px;">New Field</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:1px;">analysis photo to 3D vertical preview</div>
+                </div>
                 <div style="width:40px;"></div>
             </div>
 
-            <!-- Step indicator -->
             <div id="bfSteps" style="flex-shrink:0;padding:12px 20px 0;"></div>
-
-            <!-- Scrollable body -->
-            <div id="bfContent"
-                 style="flex:1;overflow-y:auto;padding:16px;
-                        -webkit-overflow-scrolling:touch;"></div>
-
-            <!-- Bottom CTA -->
-            <div style="flex-shrink:0;padding:12px 16px 32px;
-                        background:var(--bg);border-top:1px solid var(--border);">
+            <div id="bfContent" style="flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;"></div>
+            <div style="flex-shrink:0;padding:12px 16px 32px;background:var(--bg);border-top:1px solid var(--border);">
                 <button id="bfNext"
-                    style="width:100%;padding:15px;border:none;border-radius:16px;
-                           background:var(--accent);color:#fff;font-size:15px;
-                           font-weight:700;cursor:pointer;transition:opacity .18s;
-                           letter-spacing:0.02em;">
-                    Continue →
+                    style="width:100%;padding:15px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:15px;font-weight:800;cursor:pointer;">
+                    Continue
                 </button>
             </div>
         </div>
@@ -81,338 +108,235 @@ export function render() {
     drawStep();
 }
 
-// ─── Step orchestration ───────────────────────────────────────────────────────
 function drawStep() {
     renderStepDots();
     const content = document.getElementById('bfContent');
-    const btn     = document.getElementById('bfNext');
+    const btn = document.getElementById('bfNext');
 
     content.innerHTML = '';
-    if (threeCleanup) { threeCleanup(); threeCleanup = null; }
+    dispose3D();
 
-    if (step === 1) { renderStep1(content); btn.textContent = '📷  Scan Plants →'; }
-    if (step === 2) { renderStep2(content); btn.textContent = '🏗️  Generate 3D →'; }
-    if (step === 3) { renderStep3(content); btn.textContent = '✅  Create Farm';   }
+    if (step === 1) {
+        renderStep1(content);
+        btn.textContent = 'Next: Add Photo';
+    }
+    if (step === 2) {
+        renderStep2(content);
+        btn.textContent = 'Generate 3D Preview';
+    }
+    if (step === 3) {
+        renderStep3(content);
+        btn.textContent = 'Create Field';
+    }
 }
 
 function renderStepDots() {
-    const labels = ['Photo & Info', 'Plants', '3D Preview'];
+    const labels = ['Plant', 'Photo', '3D'];
     document.getElementById('bfSteps').innerHTML = `
-        <div style="display:flex;align-items:flex-start;padding-bottom:10px;">
-            ${labels.map((lbl, i) => `
-                <div style="display:flex;align-items:center;flex:1;flex-direction:column;">
-                    <div style="display:flex;align-items:center;width:100%;">
-                        ${i > 0
-                            ? `<div style="flex:1;height:2px;margin-bottom:18px;
-                                   background:${i < step ? 'var(--accent)' : 'var(--border)'};
-                                   transition:background .3s;"></div>`
-                            : ''}
-                        <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;
-                            display:flex;align-items:center;justify-content:center;
-                            font-size:11px;font-weight:700;transition:all .3s;
-                            background:${i+1 <= step ? 'var(--accent)' : 'var(--border)'};
-                            color:${i+1 <= step ? '#fff' : 'var(--muted)'};">
-                            ${i+1 < step ? '✓' : i+1}
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-bottom:10px;">
+            ${labels.map((label, index) => {
+                const active = index + 1 <= step;
+                return `
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+                                    background:${active ? 'var(--accent)' : 'var(--border)'};
+                                    color:${active ? '#fff' : 'var(--muted)'};
+                                    font-size:11px;font-weight:800;flex-shrink:0;">
+                            ${index + 1 < step ? '✓' : index + 1}
                         </div>
-                        ${i < labels.length-1
-                            ? `<div style="flex:1;height:2px;margin-bottom:18px;
-                                   background:${i+1 < step ? 'var(--accent)' : 'var(--border)'};
-                                   transition:background .3s;"></div>`
-                            : ''}
+                        <div style="font-size:11px;font-weight:800;color:${index + 1 === step ? 'var(--accent)' : 'var(--muted)'};">
+                            ${label}
+                        </div>
                     </div>
-                    <div style="font-size:9px;margin-top:5px;text-align:center;
-                        color:${i+1 === step ? 'var(--accent)' : 'var(--muted)'};
-                        font-weight:${i+1 === step ? 700 : 400};letter-spacing:0.03em;">
-                        ${lbl}
-                    </div>
-                </div>
-            `).join('')}
+                `;
+            }).join('')}
         </div>
     `;
 }
 
-// ─── STEP 1 — Photo + Farm Info ───────────────────────────────────────────────
 function renderStep1(content) {
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">FIELD SETUP</div>
+                ${fieldInput('fieldNameInput', 'Field name', 'e.g. Balcony Mint Trial', fieldInfo.name)}
+                ${fieldInput('fieldLocationInput', 'Location / zone', 'e.g. Rack A, balcony, lab corner', fieldInfo.location)}
+                ${fieldInput('targetPlantInput', 'Plant for analysis', 'e.g. basil, lettuce, tomato', fieldInfo.targetPlant)}
+            </section>
 
-            <!-- Photo capture card -->
-            <div style="background:var(--surface);border-radius:18px;padding:16px;
-                        border:1px solid var(--border);box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:700;color:var(--sub);
-                            letter-spacing:.08em;margin-bottom:10px;">FARM PHOTO</div>
-
-                <div id="photoPreview"
-                     style="width:100%;height:190px;border-radius:14px;
-                            background:var(--surface2);
-                            border:2px dashed ${photoData ? 'var(--accent)' : 'var(--border)'};
-                            display:flex;flex-direction:column;align-items:center;
-                            justify-content:center;cursor:pointer;overflow:hidden;
-                            position:relative;transition:border .2s;
-                            ${photoData ? `background-image:url(${photoData.dataUrl});background-size:cover;background-position:center;` : ''}">
-                    ${!photoData ? `
-                        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
-                            <div style="font-size:40px;">📷</div>
-                            <div style="font-size:13px;color:var(--sub);font-weight:600;">
-                                Tap to capture your farm
-                            </div>
-                            <div style="font-size:11px;color:var(--muted);">
-                                Tip: full rack from front works best
-                            </div>
-                        </div>
-                    ` : `
-                        <div style="position:absolute;bottom:8px;right:8px;
-                                    background:rgba(0,0,0,.55);border-radius:8px;
-                                    padding:4px 8px;font-size:11px;color:#fff;">✓ Photo ready</div>
-                    `}
-                </div>
-
-                <input type="file" id="photoInput" accept="image/*" style="display:none;">
-                <div style="display:flex;gap:8px;margin-top:10px;">
-                    <button id="cameraBtn"
-                        style="flex:1;padding:10px;border:1px solid var(--border);
-                               border-radius:10px;background:var(--surface2);
-                               color:var(--text);font-size:13px;cursor:pointer;font-weight:500;">
-                        📷 Camera
-                    </button>
-                    <button id="galleryBtn"
-                        style="flex:1;padding:10px;border:1px solid var(--border);
-                               border-radius:10px;background:var(--surface2);
-                               color:var(--text);font-size:13px;cursor:pointer;font-weight:500;">
-                        🖼️ Gallery
-                    </button>
-                </div>
-                <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:8px;">
-                    Photo helps AI identify your plants automatically
-                </div>
-            </div>
-
-            <!-- Farm details card -->
-            <div style="background:var(--surface);border-radius:18px;padding:16px;
-                        border:1px solid var(--border);box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:700;color:var(--sub);
-                            letter-spacing:.08em;margin-bottom:10px;">FARM DETAILS</div>
-                <input id="farmNameInput" type="text"
-                    placeholder="Farm name (e.g. Rooftop Alpha)"
-                    value="${farmInfo.name}"
-                    style="width:100%;padding:11px 13px;border:1.5px solid var(--border);
-                           border-radius:11px;font-size:14px;background:var(--surface2);
-                           color:var(--text);margin-bottom:10px;outline:none;
-                           transition:border .15s;">
-                <input id="farmLocationInput" type="text"
-                    placeholder="Location / zone (optional)"
-                    value="${farmInfo.location}"
-                    style="width:100%;padding:11px 13px;border:1.5px solid var(--border);
-                           border-radius:11px;font-size:14px;background:var(--surface2);
-                           color:var(--text);outline:none;transition:border .15s;">
-            </div>
-
-            <!-- Rack type card -->
-            <div style="background:var(--surface);border-radius:18px;padding:16px;
-                        border:1px solid var(--border);box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:700;color:var(--sub);
-                            letter-spacing:.08em;margin-bottom:10px;">RACK TYPE</div>
-                <div style="display:flex;flex-direction:column;gap:8px;" id="rackOptions">
-                    ${RACK_OPTIONS.map(r => `
-                        <div class="rack-opt" data-id="${r.id}"
-                             style="display:flex;align-items:center;gap:12px;
-                                    padding:11px 13px;border-radius:12px;cursor:pointer;
-                                    border:2px solid ${farmInfo.rackType === r.id ? 'var(--accent)' : 'var(--border)'};
-                                    background:${farmInfo.rackType === r.id ? 'var(--accent-l)' : 'var(--surface2)'};
-                                    transition:all .15s;">
-                            <div style="font-size:26px;flex-shrink:0;">${r.emoji}</div>
-                            <div style="flex:1;">
-                                <div style="font-weight:700;font-size:13px;">${r.label}</div>
-                                <div style="font-size:11px;color:var(--muted);">
-                                    ${r.tiers} tiers · ${r.total} slots
-                                </div>
-                            </div>
-                            <div style="width:20px;height:20px;border-radius:50%;
-                                border:2px solid ${farmInfo.rackType === r.id ? 'var(--accent)' : 'var(--border)'};
-                                background:${farmInfo.rackType === r.id ? 'var(--accent)' : 'transparent'};
-                                display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                                ${farmInfo.rackType === r.id
-                                    ? '<div style="width:8px;height:8px;border-radius:50%;background:#fff;"></div>'
-                                    : ''}
-                            </div>
-                        </div>
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">ANALYSIS GOAL</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+                    ${ANALYSIS_GOALS.map(goal => `
+                        <button class="analysis-goal" data-id="${goal.id}"
+                            style="padding:10px 8px;border-radius:10px;border:1.5px solid ${fieldInfo.analysisGoal === goal.id ? 'var(--accent)' : 'var(--border)'};
+                                   background:${fieldInfo.analysisGoal === goal.id ? 'var(--accent-l)' : 'var(--surface2)'};
+                                   color:${fieldInfo.analysisGoal === goal.id ? 'var(--accent)' : 'var(--text)'};
+                                   font-size:12px;font-weight:800;cursor:pointer;">
+                            ${goal.label}
+                        </button>
                     `).join('')}
                 </div>
-            </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">VERTICAL STRUCTURE</div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    ${RACK_OPTIONS.map(rack => rackOption(rack)).join('')}
+                </div>
+            </section>
         </div>
     `;
 
-    // Photo input handling
-    const photoInput = document.getElementById('photoInput');
-    document.getElementById('photoPreview').addEventListener('click', () => photoInput.click());
+    bindTextInput('fieldNameInput', value => { fieldInfo.name = value; });
+    bindTextInput('fieldLocationInput', value => { fieldInfo.location = value; });
+    bindTextInput('targetPlantInput', value => {
+        fieldInfo.targetPlant = value;
+        seedTargetPlant(value);
+    });
+
+    document.querySelectorAll('.analysis-goal').forEach(button => {
+        button.addEventListener('click', () => {
+            fieldInfo.analysisGoal = button.dataset.id;
+            renderStep1(content);
+        });
+    });
+
+    document.querySelectorAll('.rack-opt').forEach(option => {
+        option.addEventListener('click', () => {
+            fieldInfo.rackType = option.dataset.id;
+            renderStep1(content);
+        });
+    });
+}
+
+function fieldInput(id, label, placeholder, value) {
+    return `
+        <label style="display:block;margin-bottom:10px;">
+            <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">${label}</span>
+            <input id="${id}" type="text" value="${escapeHTML(value)}" placeholder="${placeholder}"
+                style="width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;
+                       background:var(--surface2);color:var(--text);font-size:14px;outline:none;">
+        </label>
+    `;
+}
+
+function rackOption(rack) {
+    const selected = fieldInfo.rackType === rack.id;
+    return `
+        <button class="rack-opt" data-id="${rack.id}"
+            style="width:100%;display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;cursor:pointer;
+                   text-align:left;border:1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'};
+                   background:${selected ? 'var(--accent-l)' : 'var(--surface2)'};color:var(--text);">
+            <span style="width:42px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+                         background:${selected ? 'var(--accent)' : 'var(--surface)'};color:${selected ? '#fff' : 'var(--sub)'};
+                         font-size:10px;font-weight:900;letter-spacing:.03em;flex-shrink:0;">${rack.icon}</span>
+            <span style="flex:1;">
+                <span style="display:block;font-size:13px;font-weight:800;">${rack.label}</span>
+                <span style="display:block;font-size:11px;color:var(--muted);margin-top:2px;">${rack.tiers} tiers · ${rack.total} plant slots</span>
+            </span>
+            <span style="font-size:18px;color:${selected ? 'var(--accent)' : 'var(--muted)'};">${selected ? '✓' : '+'}</span>
+        </button>
+    `;
+}
+
+function renderStep2(content) {
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">FIELD PHOTO</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;">Capture the vertical setup so the preview can match the real field.</div>
+                    </div>
+                    <div style="font-size:11px;font-weight:800;color:var(--accent);white-space:nowrap;">${photoData ? 'READY' : 'NEEDED'}</div>
+                </div>
+
+                <div id="photoPreview"
+                     style="width:100%;height:220px;border-radius:12px;border:2px dashed ${photoData ? 'var(--accent)' : 'var(--border)'};
+                            background:${photoData ? `url(${photoData.dataUrl}) center/cover` : 'var(--surface2)'};
+                            display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;">
+                    ${photoData ? `
+                        <div style="position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.58);color:white;
+                                    padding:6px 10px;border-radius:8px;font-size:11px;font-weight:800;">Photo loaded</div>
+                    ` : `
+                        <div style="text-align:center;color:var(--muted);">
+                            <div style="font-size:36px;margin-bottom:8px;">▣</div>
+                            <div style="font-size:13px;font-weight:800;">Tap to add field photo</div>
+                            <div style="font-size:11px;margin-top:4px;">front-facing rack photo works best</div>
+                        </div>
+                    `}
+                </div>
+                <input type="file" id="photoInput" accept="image/*" style="display:none;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+                    <button id="cameraBtn" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);font-weight:800;color:var(--text);cursor:pointer;">Camera</button>
+                    <button id="galleryBtn" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);font-weight:800;color:var(--text);cursor:pointer;">Gallery</button>
+                </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">PLANTS FOR ANALYSIS</div>
+                        <div id="scanStatus" style="font-size:11px;color:var(--muted);margin-top:3px;">${photoData ? 'Ready to scan or edit manually' : 'Add a photo, or continue with manual plants'}</div>
+                    </div>
+                    <button id="scanBtn" ${!photoData ? 'disabled' : ''}
+                        style="padding:7px 10px;border-radius:20px;border:1px solid ${photoData ? 'var(--accent)' : 'var(--border)'};
+                               background:${photoData ? 'var(--accent-l)' : 'var(--surface2)'};
+                               color:${photoData ? 'var(--accent)' : 'var(--muted)'};
+                               font-size:11px;font-weight:800;cursor:${photoData ? 'pointer' : 'not-allowed'};">
+                        Scan Photo
+                    </button>
+                </div>
+                <div id="plantList" style="display:flex;flex-direction:column;gap:8px;"></div>
+                <div style="display:flex;gap:8px;margin-top:12px;">
+                    <input id="manualPlantInput" type="text" placeholder="Add plant, e.g. kale"
+                        style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:13px;outline:none;">
+                    <button id="manualAddBtn" style="padding:10px 14px;border:none;border-radius:10px;background:var(--accent);color:white;font-weight:800;cursor:pointer;">Add</button>
+                </div>
+            </section>
+        </div>
+    `;
+
+    renderPlantList();
+    bindPhotoInput(content);
+    document.getElementById('scanBtn').addEventListener('click', scanPlantsFromPhoto);
+    document.getElementById('manualAddBtn').addEventListener('click', handleManualAdd);
+    document.getElementById('manualPlantInput').addEventListener('keypress', event => {
+        if (event.key === 'Enter') handleManualAdd();
+    });
+
+    if (photoData && !scanStarted) {
+        scanStarted = true;
+        scanPlantsFromPhoto();
+    }
+}
+
+function bindPhotoInput(content) {
+    const input = document.getElementById('photoInput');
+    document.getElementById('photoPreview').addEventListener('click', () => input.click());
     document.getElementById('cameraBtn').addEventListener('click', () => {
-        photoInput.setAttribute('capture', 'environment');
-        photoInput.click();
+        input.setAttribute('capture', 'environment');
+        input.click();
     });
     document.getElementById('galleryBtn').addEventListener('click', () => {
-        photoInput.removeAttribute('capture');
-        photoInput.click();
+        input.removeAttribute('capture');
+        input.click();
     });
-    photoInput.addEventListener('change', e => {
-        const file = e.target.files[0];
+    input.addEventListener('change', event => {
+        const file = event.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = ev => {
             const dataUrl = ev.target.result;
             const [header, base64] = dataUrl.split(',');
-            const mediaType = header.match(/:(.*?);/)[1];
+            const mediaType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
             photoData = { base64, mediaType, dataUrl };
-            renderStep1(content); // re-render with preview
+            scanStarted = false;
+            renderStep2(content);
         };
         reader.readAsDataURL(file);
     });
-
-    // Text inputs
-    document.getElementById('farmNameInput').addEventListener('input', e => {
-        farmInfo.name = e.target.value;
-    });
-    document.getElementById('farmLocationInput').addEventListener('input', e => {
-        farmInfo.location = e.target.value;
-    });
-
-    // Rack selection
-    document.querySelectorAll('.rack-opt').forEach(el => {
-        el.addEventListener('click', () => {
-            farmInfo.rackType = el.dataset.id;
-            renderStep1(content);
-        });
-    });
-
-    // Focus effect on inputs
-    ['farmNameInput', 'farmLocationInput'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.addEventListener('focus', () => { el.style.borderColor = 'var(--accent)'; });
-        el.addEventListener('blur',  () => { el.style.borderColor = 'var(--border)'; });
-    });
-}
-
-// ─── STEP 2 — Plant Recognition ───────────────────────────────────────────────
-function renderStep2(content) {
-    content.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:14px;">
-
-            <!-- Photo strip + scan status -->
-            <div style="display:flex;gap:12px;align-items:center;
-                        background:var(--surface);border-radius:16px;padding:13px 14px;
-                        border:1px solid var(--border);box-shadow:var(--shadow-sm);">
-                ${photoData
-                    ? `<img src="${photoData.dataUrl}"
-                            style="width:56px;height:56px;border-radius:10px;
-                                   object-fit:cover;flex-shrink:0;">`
-                    : `<div style="width:56px;height:56px;border-radius:10px;
-                                   background:var(--surface2);display:flex;
-                                   align-items:center;justify-content:center;
-                                   font-size:26px;flex-shrink:0;">📷</div>`
-                }
-                <div style="flex:1;">
-                    <div style="font-weight:700;font-size:13px;">
-                        ${photoData ? 'Photo captured ✓' : 'No photo — manual entry'}
-                    </div>
-                    <div id="scanStatus" style="font-size:11px;color:var(--muted);margin-top:2px;">
-                        ${photoData ? '🤖 Claude Vision scanning...' : 'Add plants manually below'}
-                    </div>
-                </div>
-                <div id="scanBadge"
-                     style="font-size:10px;padding:4px 9px;border-radius:20px;
-                            background:var(--accent-l);color:var(--accent);
-                            font-weight:700;flex-shrink:0;white-space:nowrap;">
-                    ${photoData ? '🔍 Scanning' : '+ Manual'}
-                </div>
-            </div>
-
-            <!-- Detected plants list -->
-            <div style="background:var(--surface);border-radius:18px;padding:16px;
-                        border:1px solid var(--border);box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:700;color:var(--sub);
-                            letter-spacing:.08em;margin-bottom:12px;">PLANTS IN YOUR FARM</div>
-                <div id="plantList" style="display:flex;flex-direction:column;gap:8px;">
-                    ${photoData ? skeletonRows(3) : emptyPlantState()}
-                </div>
-            </div>
-
-            <!-- Manual add -->
-            <div style="background:var(--surface);border-radius:18px;padding:14px 16px;
-                        border:1px solid var(--border);box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:700;color:var(--sub);
-                            letter-spacing:.08em;margin-bottom:10px;">ADD / CORRECT MANUALLY</div>
-                <div style="display:flex;gap:8px;">
-                    <input id="manualPlantInput" type="text"
-                        placeholder="e.g. kale, mint, tomato..."
-                        style="flex:1;padding:10px 12px;border:1.5px solid var(--border);
-                               border-radius:10px;font-size:13px;background:var(--surface2);
-                               color:var(--text);outline:none;transition:border .15s;">
-                    <button id="manualAddBtn"
-                        style="padding:10px 16px;border:none;border-radius:10px;
-                               background:var(--accent);color:#fff;font-size:13px;
-                               cursor:pointer;font-weight:700;white-space:nowrap;">
-                        + Add
-                    </button>
-                </div>
-                <div style="font-size:10px;color:var(--muted);margin-top:6px;">
-                    AI may make mistakes — correct anything wrong above ☝️
-                </div>
-            </div>
-        </div>
-    `;
-
-    // Trigger AI scan if photo exists
-    if (photoData) {
-        fetchPlantScan().then(plants => {
-            detectedPlants = plants;
-            updateScanBadge(plants.length);
-            renderPlantList();
-        });
-    }
-
-    // Manual add handlers
-    const manualBtn = document.getElementById('manualAddBtn');
-    const manualInput = document.getElementById('manualPlantInput');
-    manualBtn.addEventListener('click', handleManualAdd);
-    manualInput.addEventListener('keypress', e => { if (e.key === 'Enter') handleManualAdd(); });
-    manualInput.addEventListener('focus', () => { manualInput.style.borderColor = 'var(--accent)'; });
-    manualInput.addEventListener('blur',  () => { manualInput.style.borderColor = 'var(--border)'; });
-}
-
-function skeletonRows(n) {
-    return Array(n).fill(0).map(() => `
-        <div style="height:58px;border-radius:10px;background:linear-gradient(90deg,
-             var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
-             background-size:200% 100%;animation:shimmer 1.5s infinite;">
-        </div>
-        <style>@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>
-    `).join('');
-}
-
-function emptyPlantState() {
-    return `
-        <div style="text-align:center;padding:24px 0;color:var(--muted);">
-            <div style="font-size:28px;margin-bottom:8px;">🌱</div>
-            <div style="font-size:13px;">No plants yet — add them above</div>
-        </div>
-    `;
-}
-
-function updateScanBadge(count) {
-    const badge  = document.getElementById('scanBadge');
-    const status = document.getElementById('scanStatus');
-    if (!badge) return;
-    if (count > 0) {
-        badge.textContent  = `✅ ${count} found`;
-        badge.style.background = 'var(--ok-bg)';
-        badge.style.color = 'var(--ok)';
-        if (status) status.textContent = 'Tap ✕ to remove wrong plants, adjust slots ±';
-    } else {
-        badge.textContent  = '⚠️ None detected';
-        badge.style.background = 'rgba(217,119,6,.1)';
-        badge.style.color = 'var(--warn)';
-        if (status) status.textContent = 'Could not detect plants — add manually below';
-    }
 }
 
 function renderPlantList() {
@@ -420,425 +344,318 @@ function renderPlantList() {
     if (!list) return;
 
     if (detectedPlants.length === 0) {
-        list.innerHTML = emptyPlantState();
+        list.innerHTML = `
+            <div style="padding:22px;border:1px dashed var(--border);border-radius:12px;background:var(--surface2);text-align:center;color:var(--muted);font-size:13px;">
+                No plants yet. Add the target plant or scan a photo.
+            </div>
+        `;
         return;
     }
 
-    list.innerHTML = detectedPlants.map((p, i) => `
-        <div style="display:flex;align-items:center;gap:10px;
-                    background:var(--surface2);border-radius:11px;padding:10px 12px;
-                    border:1px solid var(--border);transition:all .15s;"
-             data-idx="${i}">
-            <div style="font-size:28px;flex-shrink:0;line-height:1;">${p.emoji}</div>
+    list.innerHTML = detectedPlants.map((plant, index) => `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px;">
+            <div style="font-size:26px;line-height:1;flex-shrink:0;">${plant.emoji}</div>
             <div style="flex:1;min-width:0;">
-                <div style="font-weight:700;font-size:13px;white-space:nowrap;
-                            overflow:hidden;text-overflow:ellipsis;">${p.name}</div>
-                <div style="display:flex;gap:5px;align-items:center;margin-top:3px;flex-wrap:wrap;">
-                    ${p.confidence > 0
-                        ? `<span style="font-size:10px;padding:2px 7px;border-radius:20px;
-                                background:${p.confidence > 0.75
-                                    ? 'var(--ok-bg)' : 'rgba(217,119,6,.1)'};
-                                color:${p.confidence > 0.75 ? 'var(--ok)' : 'var(--warn)'};">
-                                ${Math.round(p.confidence * 100)}% sure
-                           </span>`
-                        : `<span style="font-size:10px;color:var(--muted);">Manual</span>`
-                    }
-                    <span style="font-size:10px;color:var(--muted);">× ${p.slots} slots</span>
+                <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(plant.name)}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:3px;">
+                    ${plant.confidence ? `${Math.round(plant.confidence * 100)}% photo match · ` : ''}${plant.species}
                 </div>
             </div>
-            <!-- Slot adjuster -->
-            <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
-                <button data-action="dec" data-idx="${i}"
-                    style="width:26px;height:26px;border-radius:50%;border:1px solid var(--border);
-                           background:var(--surface);cursor:pointer;font-size:14px;
-                           display:flex;align-items:center;justify-content:center;color:var(--text);">−</button>
-                <span style="font-size:13px;font-weight:700;min-width:20px;text-align:center;">
-                    ${p.slots}
-                </span>
-                <button data-action="inc" data-idx="${i}"
-                    style="width:26px;height:26px;border-radius:50%;border:1px solid var(--border);
-                           background:var(--surface);cursor:pointer;font-size:14px;
-                           display:flex;align-items:center;justify-content:center;color:var(--text);">+</button>
+            <div style="display:flex;align-items:center;gap:5px;">
+                <button data-action="dec" data-idx="${index}" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;">−</button>
+                <span style="font-size:13px;font-weight:900;min-width:22px;text-align:center;">${plant.slots}</span>
+                <button data-action="inc" data-idx="${index}" style="width:26px;height:26px;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;">+</button>
             </div>
-            <!-- Remove -->
-            <button data-action="remove" data-idx="${i}"
-                style="background:none;border:none;color:var(--muted);font-size:20px;
-                       cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">✕</button>
+            <button data-action="remove" data-idx="${index}" aria-label="Remove plant"
+                style="border:none;background:transparent;color:var(--muted);font-size:18px;cursor:pointer;padding:2px 4px;">×</button>
         </div>
     `).join('');
 
-    list.querySelectorAll('button[data-action]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const i = parseInt(btn.dataset.idx);
-            const a = btn.dataset.action;
-            if (a === 'remove') {
-                detectedPlants.splice(i, 1);
-            } else if (a === 'inc') {
-                detectedPlants[i].slots = Math.min(20, detectedPlants[i].slots + 1);
-            } else if (a === 'dec') {
-                detectedPlants[i].slots = Math.max(1, detectedPlants[i].slots - 1);
-            }
+    list.querySelectorAll('button[data-action]').forEach(button => {
+        button.addEventListener('click', () => {
+            const index = Number(button.dataset.idx);
+            const action = button.dataset.action;
+            if (action === 'inc') detectedPlants[index].slots = Math.min(40, detectedPlants[index].slots + 1);
+            if (action === 'dec') detectedPlants[index].slots = Math.max(1, detectedPlants[index].slots - 1);
+            if (action === 'remove') detectedPlants.splice(index, 1);
             renderPlantList();
         });
     });
 }
 
-async function fetchPlantScan() {
-    try {
-        const res = await fetch('http://localhost:3000/api/farms/scan-plants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: photoData.base64, mediaType: photoData.mediaType })
-        });
-        const data = await res.json();
-        return Array.isArray(data.plants) ? data.plants : [];
-    } catch (err) {
-        console.warn('[BuildFarm] Plant scan failed:', err.message);
-        return [];
-    }
-}
-
-function handleManualAdd() {
-    const input = document.getElementById('manualPlantInput');
-    if (!input) return;
-    const raw  = input.value.trim();
-    if (!raw)  return;
-
-    const key  = raw.toLowerCase();
-    const emoji = EMOJI_MAP[key] || '🌱';
-    const name  = raw.charAt(0).toUpperCase() + raw.slice(1);
-
-    // Don't duplicate
-    const exists = detectedPlants.find(p => p.species === key || p.name.toLowerCase() === key);
-    if (exists) {
-        showToast('info', `${exists.emoji} ${exists.name} already added`);
-        input.value = '';
+async function scanPlantsFromPhoto() {
+    if (!photoData) {
+        showToast('warning', 'Add a field photo first');
         return;
     }
 
-    detectedPlants.push({ name, emoji, species: key, confidence: 0, slots: 3 });
-    renderPlantList();
-    updateScanBadge(detectedPlants.length);
-    input.value = '';
-    showToast('success', `${emoji} ${name} added`);
+    const button = document.getElementById('scanBtn');
+    const status = document.getElementById('scanStatus');
+    if (button) {
+        button.textContent = 'Scanning...';
+        button.disabled = true;
+    }
+    if (status) status.textContent = 'AI is checking the field photo...';
+
+    try {
+        const res = await fetch(`${API_BASE}/api/farms/scan-plants`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: photoData.base64, mediaType: photoData.mediaType }),
+        });
+        const data = await res.json();
+        const plants = Array.isArray(data.plants) ? data.plants : [];
+        if (plants.length) {
+            mergePlants(plants);
+            showToast('success', `${plants.length} plant type${plants.length > 1 ? 's' : ''} detected`);
+            if (status) status.textContent = 'Review and adjust slots before generating 3D.';
+        } else {
+            if (status) status.textContent = data.warning || 'No clear plant detected. Manual list is still usable.';
+            showToast('info', 'No plant detected from photo yet');
+        }
+    } catch (error) {
+        if (status) status.textContent = 'Photo scan unavailable. Manual plant list is ready.';
+        showToast('warning', 'AI scan unavailable, continue manually');
+    } finally {
+        if (button) {
+            button.textContent = 'Scan Photo';
+            button.disabled = false;
+        }
+        renderPlantList();
+    }
 }
 
-// ─── STEP 3 — 3D Preview ──────────────────────────────────────────────────────
 function renderStep3(content) {
-    const rack      = RACK_OPTIONS.find(r => r.id === farmInfo.rackType) || RACK_OPTIONS[0];
-    const totalUsed = detectedPlants.reduce((s, p) => s + p.slots, 0);
+    const rack = currentRack();
+    const totalUsed = totalSlotsUsed();
+    const targetPlant = fieldInfo.targetPlant.trim() || detectedPlants[0]?.name || 'Plant';
 
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
-
-            <!-- 3D canvas card -->
-            <div style="background:var(--surface);border-radius:18px;overflow:hidden;
-                        border:1px solid var(--border);box-shadow:var(--shadow-sm);">
-                <!-- Card header -->
-                <div style="padding:12px 15px;border-bottom:1px solid var(--border);
-                            display:flex;justify-content:space-between;align-items:center;">
-                    <div>
-                        <div style="font-weight:700;font-size:14px;">3D Farm Template</div>
-                        <div style="font-size:11px;color:var(--muted);margin-top:1px;">
-                            Drag to orbit · Pinch to zoom
-                        </div>
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm);">
+                <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <div style="min-width:0;">
+                        <div style="font-size:14px;font-weight:900;">${escapeHTML(targetPlant)} Vertical 3D</div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:2px;">Drag to orbit · Toggle for gamified view</div>
                     </div>
-                    <div style="display:flex;gap:8px;align-items:center;">
-                        <button id="da3Btn"
-                            style="font-size:11px;padding:5px 11px;border-radius:20px;
-                                   border:1px solid var(--accent);background:var(--accent-l);
-                                   color:var(--accent);font-weight:700;cursor:pointer;
-                                   transition:all .15s;"
-                            title="Requires DA3 Python service on port 8008">
-                            📡 DA3 Depth
-                        </button>
+                    <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:3px;flex-shrink:0;">
+                        <button class="view-toggle" data-mode="realistic"
+                            style="${toggleStyle(viewMode === 'realistic')}">Real</button>
+                        <button class="view-toggle" data-mode="gamified"
+                            style="${toggleStyle(viewMode === 'gamified')}">Game</button>
                     </div>
                 </div>
-
-                <!-- Canvas -->
-                <div style="position:relative;background:#0b0f1c;">
-                    <canvas id="farmCanvas3D"
-                        style="width:100%;height:290px;display:block;"></canvas>
+                <div style="position:relative;background:#10141d;">
+                    <canvas id="farmCanvas3D" style="width:100%;height:330px;display:block;"></canvas>
                     <div id="canvas3DOverlay"
-                         style="position:absolute;inset:0;display:flex;align-items:center;
-                                justify-content:center;background:rgba(11,15,28,.7);
-                                font-size:13px;color:rgba(255,255,255,.7);">
-                        ⚙️ Loading 3D scene...
+                         style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+                                background:rgba(16,20,29,.74);color:rgba(255,255,255,.78);font-size:13px;">
+                        Building 3D field...
                     </div>
+                    ${photoData ? `
+                        <img src="${photoData.dataUrl}" alt="Field source photo"
+                             style="position:absolute;right:10px;bottom:10px;width:70px;height:70px;border-radius:10px;
+                                    object-fit:cover;border:2px solid rgba(255,255,255,.45);box-shadow:0 8px 20px rgba(0,0,0,.22);">
+                    ` : ''}
                 </div>
-            </div>
+            </section>
 
-            <!-- Summary card -->
-            <div style="background:var(--surface);border-radius:18px;padding:15px;
-                        border:1px solid var(--border);box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:700;color:var(--sub);
-                            letter-spacing:.08em;margin-bottom:12px;">FARM SUMMARY</div>
-                <div style="display:flex;flex-direction:column;gap:9px;">
-                    ${summaryRow('Farm name', farmInfo.name || 'Unnamed Farm')}
-                    ${summaryRow('Location',  farmInfo.location || '—')}
-                    ${summaryRow('Rack type', rack.label)}
-                    ${summaryRow('Plant varieties', String(detectedPlants.length))}
-                    ${summaryRow('Slots used', `${totalUsed} / ${rack.total}`, totalUsed > rack.total ? 'var(--danger)' : 'inherit')}
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">ANALYSIS SNAPSHOT</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    ${metricBlock('Target plant', targetPlant)}
+                    ${metricBlock('Goal', goalLabel(fieldInfo.analysisGoal))}
+                    ${metricBlock('Structure', rack.label)}
+                    ${metricBlock('Slots', `${totalUsed}/${rack.total}`, totalUsed > rack.total ? 'var(--danger)' : 'var(--ok)')}
                 </div>
-                <!-- Plant chips -->
-                ${detectedPlants.length > 0 ? `
-                    <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;">
-                        ${detectedPlants.map(p => `
-                            <div style="padding:4px 10px;border-radius:20px;
-                                        background:var(--ok-bg);color:var(--ok);
-                                        font-size:12px;font-weight:600;">
-                                ${p.emoji} ${p.name} ×${p.slots}
-                            </div>
-                        `).join('')}
-                    </div>
-                ` : ''}
-            </div>
-
-            <!-- DA3 info box -->
-            <div style="background:var(--accent-l);border-radius:16px;padding:14px;
-                        border:1px solid rgba(26,86,219,.15);">
-                <div style="font-weight:700;font-size:13px;color:var(--accent);margin-bottom:7px;">
-                    📡 DA3 Depth Enhancement
+                <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;">
+                    ${detectedPlants.map(plant => `
+                        <span style="padding:5px 9px;border-radius:20px;background:var(--ok-bg);color:var(--ok);font-size:12px;font-weight:800;">
+                            ${plant.emoji} ${escapeHTML(plant.name)} ×${plant.slots}
+                        </span>
+                    `).join('')}
                 </div>
-                <div style="font-size:12px;color:var(--sub);line-height:1.65;">
-                    <b>Depth Anything 3 (NESTED-GIANT-LARGE)</b> generates a real metric-scale 3D mesh
-                    from your photo — exported as <code style="background:rgba(26,86,219,.1);
-                    padding:1px 5px;border-radius:4px;">.glb</code> and loaded directly into the scene.<br><br>
-                    To enable: install &amp; start the DA3 REST backend on a GPU machine:<br>
-                    <code style="display:block;margin-top:6px;padding:7px;
-                                 background:rgba(26,86,219,.08);border-radius:8px;
-                                 font-size:11px;word-break:break-all;">
-pip install depth-anything-3<br>
-da3 backend --model-dir depth-anything/DA3NESTED-GIANT-LARGE-1.1 --port 8008
-                    </code>
-                    <div style="margin-top:8px;padding:6px 10px;border-radius:8px;
-                                background:rgba(217,119,6,.1);color:var(--warn);font-size:11px;">
-                        ⚠️ Model license: <b>CC BY-NC 4.0</b> — non-commercial use only.
-                    </div>
-                </div>
-            </div>
+            </section>
         </div>
     `;
 
-    // Init Three.js scene
-    setTimeout(() => init3DRack(rack), 120);
+    document.querySelectorAll('.view-toggle').forEach(button => {
+        button.addEventListener('click', () => {
+            viewMode = button.dataset.mode;
+            renderStep3(content);
+        });
+    });
 
-    // DA3 enhance button
-    document.getElementById('da3Btn').addEventListener('click', triggerDA3);
+    setTimeout(() => init3DField(rack), 100);
 }
 
-function summaryRow(label, value, color = 'inherit') {
+function toggleStyle(active) {
+    return [
+        'border:none',
+        'border-radius:8px',
+        'padding:7px 10px',
+        'font-size:11px',
+        'font-weight:900',
+        'cursor:pointer',
+        `background:${active ? 'var(--accent)' : 'transparent'}`,
+        `color:${active ? '#fff' : 'var(--muted)'}`,
+    ].join(';');
+}
+
+function metricBlock(label, value, color = 'var(--text)') {
     return `
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:13px;color:var(--sub);">${label}</span>
-            <span style="font-size:13px;font-weight:700;color:${color};">${value}</span>
+        <div style="border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--surface2);min-height:62px;">
+            <div style="font-size:10px;color:var(--muted);font-weight:800;margin-bottom:5px;">${label}</div>
+            <div style="font-size:13px;color:${color};font-weight:900;line-height:1.25;">${escapeHTML(String(value))}</div>
         </div>
     `;
 }
 
-// ─── Three.js 3D rack ─────────────────────────────────────────────────────────
-async function init3DRack(rack) {
+async function init3DField(rack) {
     const canvas = document.getElementById('farmCanvas3D');
     const overlay = document.getElementById('canvas3DOverlay');
     if (!canvas) return;
 
-    let THREE, OrbitControls;
-    try {
-        THREE = await import('https://unpkg.com/three@0.160.0/build/three.module.js');
-        const oc = await import('https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js');
-        OrbitControls = oc.OrbitControls;
-    } catch (e) {
-        if (overlay) overlay.innerHTML = '⚠️ 3D preview needs internet. Check connection.';
-        return;
-    }
-
-    // Hide overlay
     if (overlay) overlay.style.display = 'none';
 
-    const W = canvas.offsetWidth;
-    const H = 290;
-    canvas.width  = W * Math.min(devicePixelRatio, 2);
-    canvas.height = H * Math.min(devicePixelRatio, 2);
+    const height = 330;
+    const width = Math.max(320, canvas.offsetWidth || 360);
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = width * pixelRatio;
+    canvas.height = height * pixelRatio;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.setSize(W, H);
+    const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: false,
+        preserveDrawingBuffer: true,
+    });
+    renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(width, height);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
-    // Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0b0f1c);
-    scene.fog = new THREE.FogExp2(0x0b0f1c, 0.03);
+    scene.background = new THREE.Color(viewMode === 'gamified' ? 0x18223a : 0x10141d);
+    scene.fog = new THREE.FogExp2(viewMode === 'gamified' ? 0x18223a : 0x10141d, 0.028);
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(48, W/H, 0.1, 80);
-    camera.position.set(3.2, 2.0, 3.2);
+    const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 80);
+    camera.position.set(3.3, 2.25, 3.7);
 
-    // ── Lighting ──
-    scene.add(new THREE.AmbientLight(0x334466, 1.8));
-
-    const sun = new THREE.DirectionalLight(0xffffff, 2.5);
-    sun.position.set(6, 10, 6);
+    scene.add(new THREE.AmbientLight(viewMode === 'gamified' ? 0x7894ff : 0x42516f, 1.55));
+    const sun = new THREE.DirectionalLight(0xffffff, viewMode === 'gamified' ? 3.4 : 2.3);
+    sun.position.set(5, 8, 5);
     sun.castShadow = true;
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far  = 30;
-    sun.shadow.camera.left = sun.shadow.camera.bottom = -5;
-    sun.shadow.camera.right = sun.shadow.camera.top = 5;
     sun.shadow.mapSize.set(1024, 1024);
     scene.add(sun);
 
-    // ── Rack dimensions ──
     const { tiers, slotsPerTier } = rack;
-    const slotW   = 0.42;
-    const rackW   = slotsPerTier * slotW + 0.08;
-    const rackD   = 0.55;
-    const tierH   = 0.65;
-    const totalH  = tiers * tierH;
+    const slotW = 0.42;
+    const rackW = slotsPerTier * slotW + 0.1;
+    const rackD = viewMode === 'gamified' ? 0.72 : 0.58;
+    const tierH = 0.66;
+    const totalH = tiers * tierH;
 
-    // ── Ground plane ──
-    const gnd = new THREE.Mesh(
-        new THREE.PlaneGeometry(10, 10),
-        new THREE.MeshStandardMaterial({ color: 0x111520, roughness: 0.95, metalness: 0.05 })
-    );
-    gnd.rotation.x = -Math.PI / 2;
-    gnd.receiveShadow = true;
-    scene.add(gnd);
+    const groundMat = new THREE.MeshStandardMaterial({
+        color: viewMode === 'gamified' ? 0x1d2b52 : 0x161b24,
+        roughness: 0.9,
+        metalness: 0.02,
+    });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
 
-    // ── Materials ──
-    const poleMat  = new THREE.MeshStandardMaterial({ color: 0x52637a, roughness: 0.25, metalness: 0.92 });
-    const shelfMat = new THREE.MeshStandardMaterial({ color: 0x6b7888, roughness: 0.45, metalness: 0.75 });
-    const barMat   = new THREE.MeshStandardMaterial({ color: 0x3c4a5c, roughness: 0.35, metalness: 0.85 });
+    const poleMat = new THREE.MeshStandardMaterial({
+        color: viewMode === 'gamified' ? 0x5b7cfa : 0x59687c,
+        roughness: 0.3,
+        metalness: 0.75,
+    });
+    const shelfMat = new THREE.MeshStandardMaterial({
+        color: viewMode === 'gamified' ? 0x7dd3fc : 0x708090,
+        roughness: 0.42,
+        metalness: 0.55,
+    });
+    const accentMat = new THREE.MeshStandardMaterial({
+        color: viewMode === 'gamified' ? 0xfacc15 : 0xa78bfa,
+        emissive: viewMode === 'gamified' ? 0x854d0e : 0x5b21b6,
+        emissiveIntensity: viewMode === 'gamified' ? 0.45 : 0.2,
+        roughness: 0.5,
+    });
 
-    // ── Corner poles ──
-    const poleGeo = new THREE.BoxGeometry(0.038, totalH, 0.038);
-    [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx,sz]) => {
+    const poleGeo = new THREE.BoxGeometry(0.045, totalH, 0.045);
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
         const pole = new THREE.Mesh(poleGeo, poleMat);
-        pole.position.set(sx * rackW/2, totalH/2, sz * rackD/2);
+        pole.position.set(sx * rackW / 2, totalH / 2, sz * rackD / 2);
         pole.castShadow = true;
         scene.add(pole);
     });
 
-    // Assign plants to slots (fill row by row)
     const slotPlants = [];
-    detectedPlants.forEach(p => { for (let k=0; k<p.slots; k++) slotPlants.push(p); });
+    detectedPlants.forEach(plant => {
+        for (let i = 0; i < plant.slots; i++) slotPlants.push(plant);
+    });
 
-    const PLANT_GREENS = [0x22c55e, 0x16a34a, 0x4ade80, 0x86efac, 0x15803d, 0x86efac];
-
-    // ── Per-tier: shelf + LED + plants ──
-    for (let t = 0; t < tiers; t++) {
-        const baseY = t * tierH;
-
-        // Shelf
-        const shelf = new THREE.Mesh(
-            new THREE.BoxGeometry(rackW, 0.022, rackD),
-            shelfMat
-        );
-        shelf.position.set(0, baseY + 0.011, 0);
-        shelf.receiveShadow = true;
+    for (let tier = 0; tier < tiers; tier++) {
+        const y = tier * tierH;
+        const shelf = new THREE.Mesh(new THREE.BoxGeometry(rackW, 0.035, rackD), shelfMat);
+        shelf.position.set(0, y + 0.018, 0);
         shelf.castShadow = true;
+        shelf.receiveShadow = true;
         scene.add(shelf);
 
-        // Horizontal cross-bars (front + back at shelf level)
-        for (const zOff of [-rackD/2, rackD/2]) {
-            const bar = new THREE.Mesh(
-                new THREE.BoxGeometry(rackW + 0.04, 0.018, 0.018),
-                barMat
-            );
-            bar.position.set(0, baseY, zOff);
-            scene.add(bar);
-        }
+        const lightBar = new THREE.Mesh(new THREE.BoxGeometry(rackW * 0.86, 0.018, 0.035), accentMat);
+        lightBar.position.set(0, y + tierH - 0.07, -rackD / 2 + 0.06);
+        scene.add(lightBar);
 
-        // LED grow-light strip (mounted on back of upper shelf edge)
-        const ledMat = new THREE.MeshStandardMaterial({
-            color: 0xd946ef,
-            emissive: 0xd946ef,
-            emissiveIntensity: 3.5,
-            transparent: true,
-            opacity: 0.9,
-        });
-        const led = new THREE.Mesh(new THREE.BoxGeometry(rackW * 0.8, 0.012, 0.03), ledMat);
-        led.position.set(0, baseY + tierH - 0.04, -rackD/2 + 0.05);
-        scene.add(led);
+        const growLight = new THREE.PointLight(viewMode === 'gamified' ? 0xfacc15 : 0xa78bfa, 0.75, 1.4);
+        growLight.position.set(0, y + tierH * 0.7, 0);
+        scene.add(growLight);
 
-        // LED point light
-        const ledLight = new THREE.PointLight(0xd946ef, 0.9, 1.4);
-        ledLight.position.set(0, baseY + tierH * 0.7, 0);
-        scene.add(ledLight);
-
-        // ── Plants per slot ──
-        for (let s = 0; s < slotsPerTier; s++) {
-            const slotIdx = t * slotsPerTier + s;
-            const plant   = slotPlants[slotIdx];
-            const px      = (s - (slotsPerTier - 1) / 2) * slotW;
-            const py      = baseY + 0.022;
-            const pz      = 0;
+        for (let slot = 0; slot < slotsPerTier; slot++) {
+            const slotIndex = tier * slotsPerTier + slot;
+            const plant = slotPlants[slotIndex];
+            const x = (slot - (slotsPerTier - 1) / 2) * slotW;
+            const z = 0;
+            const baseY = y + 0.05;
 
             if (!plant) {
-                // Empty slot marker
-                const emptyMat = new THREE.MeshStandardMaterial({
-                    color: 0x1e2d3d, roughness: 0.9, transparent: true, opacity: 0.6
-                });
-                const holder = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.015, 8), emptyMat);
-                holder.position.set(px, py + 0.008, pz);
-                scene.add(holder);
+                const empty = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.07, 0.07, 0.018, viewMode === 'gamified' ? 6 : 16),
+                    new THREE.MeshStandardMaterial({ color: 0x243044, transparent: true, opacity: 0.58, roughness: 0.9 })
+                );
+                empty.position.set(x, baseY, z);
+                scene.add(empty);
                 continue;
             }
 
-            // Pot
-            const potMat = new THREE.MeshStandardMaterial({ color: 0x6d28d9, roughness: 0.7 });
-            const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.05, 0.055, 8), potMat);
-            pot.position.set(px, py + 0.028, pz);
-            pot.castShadow = true;
-            scene.add(pot);
-
-            // Soil
-            const soilMat = new THREE.MeshStandardMaterial({ color: 0x3d2008, roughness: 0.95 });
-            const soil = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.01, 8), soilMat);
-            soil.position.set(px, py + 0.058, pz);
-            scene.add(soil);
-
-            // Stem
-            const stemMat = new THREE.MeshStandardMaterial({ color: 0x365314, roughness: 0.8 });
-            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.075, 6), stemMat);
-            stem.position.set(px, py + 0.095, pz);
-            scene.add(stem);
-
-            // Leaves (hemisphere)
-            const leafColor = PLANT_GREENS[slotIdx % PLANT_GREENS.length];
-            const leafMat   = new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.85 });
-            const leaf = new THREE.Mesh(
-                new THREE.SphereGeometry(0.095, 9, 6, 0, Math.PI*2, 0, Math.PI*0.6),
-                leafMat
-            );
-            leaf.position.set(px, py + 0.135, pz);
-            leaf.castShadow = true;
-            scene.add(leaf);
-
-            // Small glow beneath leaves
-            const glow = new THREE.PointLight(leafColor, 0.25, 0.4);
-            glow.position.set(px, py + 0.13, pz);
-            scene.add(glow);
+            addPlantModel(THREE, scene, plant, x, baseY, z, slotIndex);
         }
     }
 
-    // ── OrbitControls ──
+    if (viewMode === 'gamified') addGamifiedRewards(THREE, scene, rackW, totalH);
+
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping  = true;
-    controls.dampingFactor  = 0.07;
-    controls.maxPolarAngle  = Math.PI * 0.82;
-    controls.minDistance    = 1.8;
-    controls.maxDistance    = 9;
-    controls.target.set(0, totalH * 0.38, 0);
-    controls.autoRotate     = true;
-    controls.autoRotateSpeed = 0.7;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.target.set(0, totalH * 0.42, 0);
+    controls.minDistance = 1.7;
+    controls.maxDistance = 8;
+    controls.maxPolarAngle = Math.PI * 0.82;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = viewMode === 'gamified' ? 1.0 : 0.55;
     controls.addEventListener('start', () => { controls.autoRotate = false; });
 
-    // ── Animation loop ──
+    const resizeObserver = new ResizeObserver(() => {
+        const nextWidth = Math.max(320, canvas.offsetWidth || width);
+        camera.aspect = nextWidth / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(nextWidth, height);
+    });
+    resizeObserver.observe(canvas);
+
     let rafId;
     const tick = () => {
         rafId = requestAnimationFrame(tick);
@@ -847,132 +664,272 @@ async function init3DRack(rack) {
     };
     tick();
 
-    // ── Resize handling ──
-    const ro = new ResizeObserver(() => {
-        const nw = canvas.offsetWidth;
-        camera.aspect = nw / H;
-        camera.updateProjectionMatrix();
-        renderer.setSize(nw, H);
-    });
-    ro.observe(canvas);
-
-    // ── Store cleanup ──
     threeCleanup = () => {
         cancelAnimationFrame(rafId);
-        renderer.dispose();
+        resizeObserver.disconnect();
         controls.dispose();
-        ro.disconnect();
-        scene.traverse(obj => {
-            if (obj.geometry) obj.geometry.dispose();
-            if (obj.material) {
-                if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-                else obj.material.dispose();
+        scene.traverse(object => {
+            if (object.geometry) object.geometry.dispose();
+            if (object.material) {
+                if (Array.isArray(object.material)) object.material.forEach(material => material.dispose());
+                else object.material.dispose();
             }
         });
+        renderer.dispose();
     };
 }
 
-// ─── DA3 depth enhancement ────────────────────────────────────────────────────
-async function triggerDA3() {
-    if (!photoData) { showToast('warning', 'No photo to enhance'); return; }
+function addPlantModel(THREE, scene, plant, x, y, z, slotIndex) {
+    const leafPalette = viewMode === 'gamified'
+        ? [0x4ade80, 0x22d3ee, 0xfacc15, 0xfb7185, 0xa78bfa]
+        : [0x22c55e, 0x16a34a, 0x65a30d, 0x15803d, 0x86efac];
+    const leafColor = leafPalette[slotIndex % leafPalette.length];
 
-    const btn = document.getElementById('da3Btn');
-    if (btn) { btn.textContent = '⏳ Processing...'; btn.disabled = true; }
+    const potMat = new THREE.MeshStandardMaterial({
+        color: viewMode === 'gamified' ? 0xf97316 : 0x7c3aed,
+        roughness: 0.68,
+    });
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.058, 0.07, viewMode === 'gamified' ? 6 : 16), potMat);
+    pot.position.set(x, y + 0.035, z);
+    pot.castShadow = true;
+    scene.add(pot);
 
-    try {
-        const res = await fetch('http://localhost:3000/api/farms/generate-3d', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: photoData.base64, mediaType: photoData.mediaType })
-        });
-        const data = await res.json();
+    const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.008, 0.008, 0.095, 8),
+        new THREE.MeshStandardMaterial({ color: 0x365314, roughness: 0.82 })
+    );
+    stem.position.set(x, y + 0.105, z);
+    scene.add(stem);
 
-        if (data.glbUrl) {
-            showToast('success', '📡 DA3 mesh ready! Loading...');
-            await loadGLBIntoScene(data.glbUrl);
-        } else {
-            showToast('warning', data.hint || 'DA3 service not running. See setup info below.');
-        }
-    } catch {
-        showToast('warning', 'DA3 service offline — start it on port 8008 first');
-    } finally {
-        if (btn) { btn.textContent = '📡 DA3 Depth'; btn.disabled = false; }
-    }
-}
+    const leafMat = new THREE.MeshStandardMaterial({
+        color: leafColor,
+        roughness: viewMode === 'gamified' ? 0.48 : 0.86,
+        emissive: viewMode === 'gamified' ? leafColor : 0x000000,
+        emissiveIntensity: viewMode === 'gamified' ? 0.12 : 0,
+    });
 
-async function loadGLBIntoScene(glbUrl) {
-    try {
-        const { GLTFLoader } = await import(
-            'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js'
+    const leafCount = viewMode === 'gamified' ? 5 : 3;
+    for (let i = 0; i < leafCount; i++) {
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 8), leafMat);
+        const angle = (Math.PI * 2 / leafCount) * i;
+        leaf.scale.set(1.25, 0.42, 0.7);
+        leaf.position.set(
+            x + Math.cos(angle) * 0.05,
+            y + 0.15 + (i % 2) * 0.016,
+            z + Math.sin(angle) * 0.045
         );
-        const loader = new GLTFLoader();
-        // GLB loading is async; for now show success
-        // In a full integration: loader.load(glbUrl, gltf => { scene.add(gltf.scene); })
-        showToast('success', 'DA3 .glb loaded into scene ✓');
-    } catch (e) {
-        showToast('error', 'Failed to load GLB model');
+        leaf.rotation.set(0.25, angle, -0.25);
+        leaf.castShadow = true;
+        scene.add(leaf);
     }
 }
 
-// ─── Navigation ───────────────────────────────────────────────────────────────
+function addGamifiedRewards(THREE, scene, rackW, totalH) {
+    const coinMat = new THREE.MeshStandardMaterial({
+        color: 0xfacc15,
+        emissive: 0x854d0e,
+        emissiveIntensity: 0.35,
+        roughness: 0.35,
+        metalness: 0.35,
+    });
+    for (let i = 0; i < 5; i++) {
+        const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.014, 18), coinMat);
+        coin.rotation.x = Math.PI / 2;
+        coin.position.set((i - 2) * rackW / 5, totalH + 0.18 + (i % 2) * 0.08, -0.42);
+        scene.add(coin);
+    }
+}
+
 async function handleNext() {
     if (step === 1) {
-        if (!farmInfo.name.trim()) {
-            showToast('warning', 'Please enter a farm name');
+        if (!fieldInfo.name.trim()) {
+            showToast('warning', 'Enter a field name');
             return;
         }
+        if (!fieldInfo.targetPlant.trim()) {
+            showToast('warning', 'Enter the plant for analysis');
+            return;
+        }
+        seedTargetPlant(fieldInfo.targetPlant);
         step = 2;
         drawStep();
+        return;
+    }
 
-    } else if (step === 2) {
-        if (detectedPlants.length === 0) {
-            showToast('warning', 'Add at least one plant to continue');
+    if (step === 2) {
+        if (!photoData) {
+            showToast('warning', 'Add a field photo before generating 3D');
             return;
         }
+        if (detectedPlants.length === 0) {
+            seedTargetPlant(fieldInfo.targetPlant || 'Plant');
+        }
         step = 3;
-        // Step 3 renders itself after drawStep clears content
         drawStep();
-        renderStep3(document.getElementById('bfContent'));
+        return;
+    }
 
-    } else if (step === 3) {
-        await createFarm();
+    if (step === 3) {
+        await createField();
     }
 }
 
 function handleBack() {
     if (step === 1) {
-        if (threeCleanup) { threeCleanup(); threeCleanup = null; }
+        dispose3D();
         showScreen('farmlist');
-    } else {
-        step--;
-        drawStep();
+        return;
     }
+    step -= 1;
+    drawStep();
 }
 
-async function createFarm() {
-    const btn = document.getElementById('bfNext');
-    if (btn) { btn.textContent = '⏳ Creating...'; btn.disabled = true; }
+async function createField() {
+    const button = document.getElementById('bfNext');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Creating...';
+    }
 
+    const rack = currentRack();
     const payload = {
-        name:     farmInfo.name  || 'New Farm',
-        location: farmInfo.location,
-        rackType: farmInfo.rackType,
-        plants:   detectedPlants,
+        name: fieldInfo.name.trim(),
+        location: fieldInfo.location.trim(),
+        rackType: fieldInfo.rackType,
+        targetPlant: fieldInfo.targetPlant.trim(),
+        analysisGoal: fieldInfo.analysisGoal,
+        viewMode,
+        photoPreview: photoData?.dataUrl || null,
+        plants: detectedPlants,
     };
 
     try {
-        await fetch('http://localhost:3000/api/farms/create', {
+        await fetch(`${API_BASE}/api/farms/create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
-    } catch { /* backend offline – that's OK, we still update local state */ }
+    } catch (error) {
+        console.warn('[BuildFarm] create field API unavailable:', error.message);
+    }
 
-    // Update app state so FarmListPage shows the new farm
+    const saved = loadSavedFarms();
+    const farm = {
+        id: `field_${Date.now()}`,
+        name: payload.name,
+        plants: detectedPlants.length,
+        plantSlots: totalSlotsUsed(),
+        zone: fieldInfo.location.trim() || String.fromCharCode(65 + (saved.length % 26)),
+        rackType: rack.label,
+        targetPlant: payload.targetPlant,
+        analysisGoal: payload.analysisGoal,
+    };
+    saved.push(farm);
+    localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
+
     AppState.newFarm = payload;
-    AppState.farmName = payload.name;
+    AppState.currentFarmId = farm.id;
+    AppState.farmName = farm.name;
+    showToast('success', `"${farm.name}" field created`);
+    dispose3D();
+    setTimeout(() => showScreen('farmlist'), 500);
+}
 
-    showToast('success', `🌱 "${payload.name}" created!`);
-    if (threeCleanup) { threeCleanup(); threeCleanup = null; }
-    setTimeout(() => showScreen('farmlist'), 700);
+function handleManualAdd() {
+    const input = document.getElementById('manualPlantInput');
+    if (!input) return;
+    const raw = input.value.trim();
+    if (!raw) return;
+    mergePlants([plantFromName(raw, 3, 0)]);
+    input.value = '';
+    renderPlantList();
+    showToast('success', `${raw} added`);
+}
+
+function seedTargetPlant(value) {
+    const raw = value.trim();
+    if (!raw) return;
+    if (!detectedPlants.some(plant => plant.name.toLowerCase() === raw.toLowerCase())) {
+        detectedPlants.unshift(plantFromName(raw, 4, 0));
+    }
+}
+
+function mergePlants(plants) {
+    plants.forEach(plant => {
+        const normalized = normalizePlant(plant);
+        const existing = detectedPlants.find(item => item.species === normalized.species);
+        if (existing) {
+            existing.slots = Math.max(existing.slots, normalized.slots);
+            existing.confidence = Math.max(existing.confidence || 0, normalized.confidence || 0);
+        } else {
+            detectedPlants.push(normalized);
+        }
+    });
+}
+
+function plantFromName(name, slots = 3, confidence = 0) {
+    const key = name.toLowerCase().trim();
+    return normalizePlant({
+        name: key.charAt(0).toUpperCase() + key.slice(1),
+        emoji: EMOJI_MAP[key] || '🌱',
+        species: key.replace(/\s+/g, '_'),
+        confidence,
+        slots,
+    });
+}
+
+function normalizePlant(plant) {
+    const name = plant.name || 'Plant';
+    const species = (plant.species || name).toLowerCase().trim().replace(/\s+/g, '_');
+    return {
+        name,
+        emoji: plant.emoji || EMOJI_MAP[species] || '🌱',
+        species,
+        confidence: Math.max(0, Math.min(1, Number(plant.confidence) || 0)),
+        slots: Math.max(1, Math.min(40, Number.parseInt(plant.slots, 10) || 3)),
+    };
+}
+
+function currentRack() {
+    return RACK_OPTIONS.find(rack => rack.id === fieldInfo.rackType) || RACK_OPTIONS[0];
+}
+
+function totalSlotsUsed() {
+    return detectedPlants.reduce((sum, plant) => sum + plant.slots, 0);
+}
+
+function goalLabel(id) {
+    return ANALYSIS_GOALS.find(goal => goal.id === id)?.label || id;
+}
+
+function bindTextInput(id, onInput) {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener('input', event => onInput(event.target.value));
+    input.addEventListener('focus', () => { input.style.borderColor = 'var(--accent)'; });
+    input.addEventListener('blur', () => { input.style.borderColor = 'var(--border)'; });
+}
+
+function loadSavedFarms() {
+    try {
+        return JSON.parse(localStorage.getItem(FARMS_STORAGE_KEY)) || [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function dispose3D() {
+    if (threeCleanup) {
+        threeCleanup();
+        threeCleanup = null;
+    }
+}
+
+function escapeHTML(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
