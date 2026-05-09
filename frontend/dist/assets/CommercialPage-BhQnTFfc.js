@@ -1,11 +1,4 @@
-import { showScreen } from '../utils/navigation.js';
-import { showToast } from '../utils/toast.js';
-import * as WhatIfPro from './WhatIfPro.js';   // ← Pro What-If module
-import { AppState } from '../store.js'; 
-
-export function render() {
-    const container = document.getElementById('screenContainer');
-    container.innerHTML = `
+import{s as i,A as d}from"./index-BM_CIG_p.js";import"https://esm.sh/three@0.160.0";function n(){const t=document.getElementById("screenContainer");t.innerHTML=`
         <div class="screen active" id="commercialScreen">
             <div class="topbar" style="background:#0D1221; color:#E8F0FF;">
                 <button id="comBackBtn" style="background:transparent; border:none; color:#60A5FA;">← Back</button>
@@ -37,30 +30,4 @@ export function render() {
                 <div id="com-whatif-panel" style="display:none; margin-top:12px;"></div>
             </div>
         </div>
-    `;
-
-    document.getElementById('comBackBtn').addEventListener('click', () => showScreen('farmlist'));
-
-    document.querySelectorAll('.com-feat[data-feature]').forEach(el => {
-        el.addEventListener('click', () => {
-            const feature = el.getAttribute('data-feature');
-            if (feature === 'whatif') {
-                showScreen('whatif-pro');
-            } else {
-                showScreen('feature', { feature, from: 'dash-c' });
-            }
-        });
-    });
-
-    // Bottom nav
-    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const screen = item.getAttribute('data-screen');
-             if (screen === 'profile') {
-                AppState.profileFrom = 'dash-c';
-                showScreen('profile');
-             }
-            else if (screen === 'home') showScreen('dash-c');
-        });
-    });
-}
+    `,document.getElementById("comBackBtn").addEventListener("click",()=>i("farmlist")),document.querySelectorAll(".com-feat[data-feature]").forEach(e=>{e.addEventListener("click",()=>{const a=e.getAttribute("data-feature");a==="whatif"?i("whatif-pro"):i("feature",{feature:a,from:"dash-c"})})}),document.querySelectorAll(".bottom-nav .nav-item").forEach(e=>{e.addEventListener("click",()=>{const a=e.getAttribute("data-screen");a==="profile"?(d.profileFrom="dash-c",i("profile")):a==="home"&&i("dash-c")})})}export{n as render};

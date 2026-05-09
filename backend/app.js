@@ -4,7 +4,7 @@ const { connectDB } = require('./src/config/db');
 require('dotenv').config();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '12mb' }));
 app.use(cors());
 
 connectDB();
@@ -24,6 +24,7 @@ app.use('/api/sensors', sensorRoutes);
 app.use('/api/iot', sensorRoutes);
 app.post('/api/sensor-data', createSensorReading);
 app.get('/api/device-command', getLegacyDeviceCommand);
+app.use('/api/farms', require('./src/routes/farmRoutes'));
 app.use('/api/whatif', require('./src/routes/whatIfRoutes'));
 app.use('/api/chat', require('./src/routes/chatRoutes'));
 app.use('/api/crops', require('./src/routes/cropRoutes'));

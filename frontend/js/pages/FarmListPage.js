@@ -16,7 +16,7 @@ export function render() {
 
     if (savedFarms.length === 0) {
         savedFarms = [
-            { id: 'farm_' + Date.now(), name: 'Farm 1 — Rack Alpha', plants: 6, zone: 'A' }
+            { id: 'farm_' + Date.now(), name: 'Farm 1 — Rack Alpha', plants: 6, plantSlots: 6, zone: 'A', targetPlant: 'Lettuce' }
         ];
         localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(savedFarms));
     }
@@ -53,8 +53,8 @@ export function render() {
 
             <div style="padding:16px; flex:1; overflow-y:auto;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <div style="font-size:0.7rem; font-weight:700; color:var(--sub);">SELECT FARM (${savedFarms.length})</div>
-                    <button id="buildFarmBtn" class="btn-outline" style="padding:6px 12px;">+ Build New</button>
+                    <div style="font-size:0.7rem; font-weight:700; color:var(--sub);">SELECT FIELD (${savedFarms.length})</div>
+                    <button id="buildFarmBtn" class="btn-outline" style="padding:6px 12px;">+ New Field</button>
                 </div>
                 
                 <div id="farmList" style="display:flex; flex-direction:column; gap:10px;">
@@ -63,7 +63,7 @@ export function render() {
                             <div style="width:44px; height:44px; background:var(--accent-l); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:24px;">🏗️</div>
                             <div style="flex:1;">
                                 <div style="font-weight:700;">${f.name}</div>
-                                <div style="font-size:0.7rem; color:var(--muted);">${f.plants} plants · Zone ${f.zone}</div>
+                                <div style="font-size:0.7rem; color:var(--muted);">${farmMeta(f)}</div>
                             </div>
                             <div style="color:var(--accent);">→</div>
                         </div>
@@ -88,7 +88,9 @@ function _bindEvents(savedFarms) {
             const farmId = card.getAttribute('data-farm-id');
             const farmName = card.getAttribute('data-farm-name');
 
-            AppState.currentFarmId = farmId; 
+            const farm = savedFarms.find(item => item.id === farmId) || null;
+            AppState.currentFarmId = farmId;
+            AppState.currentFarm = farm;
             AppState.farmName = farmName;
 
             console.log(`[FarmListPage] Entering Farm ID: ${farmId}`);
@@ -100,19 +102,7 @@ function _bindEvents(savedFarms) {
 
 
     document.getElementById('buildFarmBtn').onclick = () => {
-        const newName = prompt("Enter Farm Name:");
-        if (newName && newName.trim()) {
-            const newFarm = {
-                id: 'farm_' + Date.now(),
-                name: newName.trim(),
-                plants: 0,
-                zone: String.fromCharCode(65 + (savedFarms.length % 26))
-            };
-            savedFarms.push(newFarm);
-            localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(savedFarms));
-            render(); 
-            showToast('success', 'New farm created!');
-        }
+        showScreen('buildfarm');
     };
 
     document.getElementById('switchModeBtn').onclick = () => {
@@ -123,7 +113,18 @@ function _bindEvents(savedFarms) {
 
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.onclick = () => {
-            if (item.dataset.screen === 'profile') showScreen('profile');
+            if (item.dataset.screen === 'profile') {
+                AppState.profileFrom = 'farmlist';
+                showScreen('profile');
+            }
         };
     });
 }
+
+function farmMeta(f) {
+    const plantCount = typeof f.plants === 'number' ? f.plants : (Array.isArray(f.plants) ? f.plants.length : 0);
+    const target = f.targetPlant ? `${f.targetPlant} · ` : '';
+    const slots = f.plantSlots ? `${f.plantSlots} slots` : `${plantCount} plants`;
+    return `${target}${slots} · Zone ${f.zone || 'A'}`;
+}
+

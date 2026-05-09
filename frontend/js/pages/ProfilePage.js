@@ -299,13 +299,13 @@ function _bindEvents(profile, savedFarms) {
     }
 
     _on('profileBackBtn', 'click', () => {
-        showScreen('farmlist');
+        showScreen(AppState.profileFrom || 'home');
     });
 
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.addEventListener('click', () => {
             const screen = item.getAttribute('data-screen');
-            if (screen === 'farmlist') showScreen('farmlist');
+            if (screen === 'farmlist') showScreen(AppState.profileFrom || 'home');
         });
     });
 
@@ -375,7 +375,7 @@ function _doSave() {
     showToast('success', '✅ Profile saved!');
 
     setTimeout(() => {
-        showScreen('farmlist');
+        showScreen(AppState.profileFrom || 'home');
     }, 400);
 }
 
