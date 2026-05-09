@@ -1,6 +1,7 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import * as WhatIfPro from './WhatIfPro.js';   // ← Pro What-If module
+import { AppState } from '../store.js'; 
 
 export function render() {
     const container = document.getElementById('screenContainer');
@@ -26,10 +27,10 @@ export function render() {
                     <div style="height:80px; background:rgba(26,86,219,0.1); border-radius:12px; margin-top:12px; display:flex; align-items:center; justify-content:center; color:#4A6A9A;">[Chart Placeholder]</div>
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:12px;">
-                    <div class="com-feat" data-feature="whatif" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">🔮<div style="font-size:0.6rem;">What-If</div></div>
-                    <div class="com-feat" data-feature="consumption" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">⚡<div style="font-size:0.6rem;">ESG Data</div></div>
-                    <div class="com-feat" data-feature="alerts" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">🚨<div style="font-size:0.6rem;">Alerts</div></div>
-                    <div class="com-feat" style="background:#0D1221; border-radius:12px; padding:12px; text-align:center;">🎛️<div style="font-size:0.6rem;">Control</div></div>
+                    <div class="com-feat" data-feature="whatif" style="background:#C9D8F5; border-radius:12px; padding:12px; text-align:center;">🔮<div style="font-size:0.6rem;">What-If</div></div>
+                    <div class="com-feat" data-feature="consumption" style="background:#C9D8F5; border-radius:12px; padding:12px; text-align:center;">⚡<div style="font-size:0.6rem;">ESG Data</div></div>
+                    <div class="com-feat" data-feature="alerts" style="background:#C9D8F5; border-radius:12px; padding:12px; text-align:center;">🚨<div style="font-size:0.6rem;">Alerts</div></div>
+                    <div class="com-feat" style="background:#C9D8F5; border-radius:12px; padding:12px; text-align:center;">🎛️<div style="font-size:0.6rem;">Control</div></div>
                 </div>
 
                 <!-- What-If Pro panel: hidden until tile is clicked -->
@@ -44,9 +45,9 @@ export function render() {
         el.addEventListener('click', () => {
             const feature = el.getAttribute('data-feature');
             if (feature === 'whatif') {
-                _toggleWhatIfPanel(el);
+                showScreen('whatif-pro');
             } else {
-                showScreen('feature', { feature });
+                showScreen('feature', { feature, from: 'dash-c' });
             }
         });
     });
@@ -55,35 +56,11 @@ export function render() {
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.addEventListener('click', () => {
             const screen = item.getAttribute('data-screen');
-             if (screen === 'profile') showScreen('profile');
+             if (screen === 'profile') {
+                AppState.profileFrom = 'dash-c';
+                showScreen('profile');
+             }
             else if (screen === 'home') showScreen('dash-c');
         });
     });
-}
-
-/* ─────────────────────────────────────────────
-   WHAT-IF PRO PANEL — inline toggle
-   Clicking the tile a second time collapses it.
-───────────────────────────────────────────── */
-function _toggleWhatIfPanel(tile) {
-    const panel = document.getElementById('com-whatif-panel');
-    const isOpen = panel.style.display !== 'none';
-
-    // Collapse
-    if (isOpen) {
-        panel.style.display = 'none';
-        tile.style.outline = 'none';
-        return;
-    }
-
-    // Expand: inject HTML then init interactivity
-    panel.style.display = 'block';
-    panel.innerHTML = WhatIfPro.render();
-    tile.style.outline = '2px solid #60C0FF';
-
-    // Scroll smoothly so the panel comes into view
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    // Boot all sliders, charts, search, etc.
-    WhatIfPro.init();
 }

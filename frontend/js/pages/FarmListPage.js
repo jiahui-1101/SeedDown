@@ -123,7 +123,10 @@ function _bindEvents(savedFarms) {
 
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.onclick = () => {
-            if (item.dataset.screen === 'profile') showScreen('profile');
+            if (item.dataset.screen === 'profile') {
+                AppState.profileFrom = 'farmlist';
+                showScreen('profile');
+            }
         };
     });
 }

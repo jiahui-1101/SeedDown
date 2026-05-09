@@ -6,7 +6,7 @@ import * as Consumption from './ConsumptionPage.js';
 import * as AlertsList from './AlertsList.js';
 
 export function render(params = {}) {
-    const { feature } = params;
+    const { feature, from = 'home' } = params;
     const container = document.getElementById('screenContainer');
     let content = '';
 
@@ -34,7 +34,7 @@ export function render(params = {}) {
         </div>
     `;
 
-    document.getElementById('featureBackBtn').addEventListener('click', () => showScreen('home'));
+    document.getElementById('featureBackBtn').addEventListener('click', () => showScreen(from));
 
     if (feature === 'whatif') {
         WhatIf.init();
