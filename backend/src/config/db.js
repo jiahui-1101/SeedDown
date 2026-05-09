@@ -1,20 +1,36 @@
-const path = require('path');
-const { initializeApp, applicationDefault, cert, getApps } = require('firebase-admin/app');
-const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
+const path = require("path");
+const {
+  initializeApp,
+  applicationDefault,
+  cert,
+  getApps,
+} = require("firebase-admin/app");
+const {
+  getFirestore,
+  FieldValue,
+  Timestamp,
+} = require("firebase-admin/firestore");
 
 let firestore;
 
 function getCredential() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    const serviceAccount = JSON.parse(
+      process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+    );
     if (serviceAccount.private_key) {
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+      serviceAccount.private_key = serviceAccount.private_key.replace(
+        /\\n/g,
+        "\n",
+      );
     }
     return cert(serviceAccount);
   }
 
   if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-    return cert(require(path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)));
+    return cert(
+      require(path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH)),
+    );
   }
 
   return applicationDefault();
@@ -24,12 +40,13 @@ function connectDB() {
   if (!getApps().length) {
     initializeApp({
       credential: getCredential(),
-      projectId: process.env.FIREBASE_PROJECT_ID
+      projectId: process.env.FIREBASE_PROJECT_ID,
     });
   }
 
   firestore = getFirestore();
-  console.log('Firebase Firestore connected');
+  firestore.settings({ ignoreUndefinedProperties: true });
+  console.log("Firebase Firestore connected");
   return firestore;
 }
 
@@ -41,5 +58,5 @@ module.exports = {
   connectDB,
   getDb,
   FieldValue,
-  Timestamp
+  Timestamp,
 };
