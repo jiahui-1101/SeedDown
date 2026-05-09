@@ -20,6 +20,7 @@ const pages = {
    feature: (params) => import('./pages/FeaturePage.js').then(m => m.render(params)),
     'sensor-detail': (p) => import('./pages/SensorDetailPage.js').then(m => m.render(p)),
     profile: () => import('./pages/ProfilePage.js').then(m => m.render()),
+    'alert-detail': (p) => import('./pages/AlertDetailPage.js').then(m => m.render(p))
 };
 
 document.addEventListener('DOMContentLoaded', () => {
