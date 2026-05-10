@@ -4,9 +4,14 @@ import * as THREE from 'https://esm.sh/three@0.160.0';
 const FARMS_STORAGE_KEY = 'user_farms';
 
 const RACK_OPTIONS = {
-    '3-tier': { id: '3-tier', label: '3-Tier Vertical', tiers: 3, slotsPerTier: 3, total: 9 },
-    '5-tier': { id: '5-tier', label: '5-Tier Tower', tiers: 5, slotsPerTier: 4, total: 20 },
-    wall: { id: 'wall', label: 'Wall Panel', tiers: 4, slotsPerTier: 5, total: 20 },
+    '2-tier': { id: '2-tier', label: '2-Tier Starter Rack', tiers: 2, slotsPerTier: 3, total: 6 },
+    '3-tier': { id: '3-tier', label: '3-Tier Vertical Rack', tiers: 3, slotsPerTier: 3, total: 9 },
+    '4-tier': { id: '4-tier', label: '4-Tier Grow Shelf', tiers: 4, slotsPerTier: 4, total: 16 },
+    '5-tier': { id: '5-tier', label: '5-Tier Tower Rack', tiers: 5, slotsPerTier: 4, total: 20 },
+    wall: { id: 'wall', label: 'Wall Panel Grid', tiers: 4, slotsPerTier: 5, total: 20 },
+    'a-frame': { id: 'a-frame', label: 'A-Frame Pyramid', tiers: 4, slotsPerTier: 4, total: 16 },
+    'nft-channel': { id: 'nft-channel', label: 'NFT Channel Rows', tiers: 3, slotsPerTier: 6, total: 18 },
+    hanging: { id: 'hanging', label: 'Hanging Column Farm', tiers: 5, slotsPerTier: 3, total: 15 },
 };
 
 const EMOJI_COLORS = {
@@ -190,7 +195,7 @@ export const FarmCanvas = {
             emissiveIntensity: plant.status === 'healthy' || !plant.status ? 0.08 : 0.16,
         });
 
-        const leafCount = plant.emoji === '🍅' || plant.emoji === '🍓' ? 4 : 5;
+        const leafCount = plant.emoji === '🍅' || plant.emoji === '🍓' ? 4 : plant.emoji === '🥬' ? 7 : 5;
         for (let i = 0; i < leafCount; i++) {
             const angle = (Math.PI * 2 / leafCount) * i;
             const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 8), leafMat);
@@ -199,6 +204,65 @@ export const FarmCanvas = {
             leaf.rotation.set(0.22, angle, -0.25);
             leaf.castShadow = true;
             this.group.add(leaf);
+        }
+
+        this.addSpeciesDetails(x, y, z, plant, statusColor);
+    },
+
+    addSpeciesDetails(x, y, z, plant, statusColor) {
+        const species = String(plant.species || plant.name || '').toLowerCase();
+
+        if (species.includes('tomato') || plant.emoji === '🍅') {
+            const fruitMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.42, emissive: 0x7f1d1d, emissiveIntensity: 0.08 });
+            [-0.055, 0.055, 0].forEach((offset, i) => {
+                const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), fruitMat);
+                fruit.position.set(x + offset, y + 0.245 + i * 0.018, z + (i === 2 ? 0.055 : -0.02));
+                fruit.castShadow = true;
+                this.group.add(fruit);
+            });
+            return;
+        }
+
+        if (species.includes('cucumber') || plant.emoji === '🥒') {
+            const cucumberMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.55, emissive: 0x052e16, emissiveIntensity: 0.06 });
+            [-0.04, 0.055].forEach((offset, i) => {
+                const cucumber = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 8), cucumberMat);
+                cucumber.scale.set(0.72, 1.8, 0.62);
+                cucumber.rotation.z = i === 0 ? 0.7 : -0.55;
+                cucumber.position.set(x + offset, y + 0.25 + i * 0.025, z + 0.025);
+                cucumber.castShadow = true;
+                this.group.add(cucumber);
+            });
+            return;
+        }
+
+        if (species.includes('carrot') || plant.emoji === '🥕') {
+            const carrot = new THREE.Mesh(
+                new THREE.ConeGeometry(0.038, 0.12, 12),
+                new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5 })
+            );
+            carrot.rotation.x = Math.PI;
+            carrot.position.set(x, y + 0.105, z + 0.035);
+            carrot.castShadow = true;
+            this.group.add(carrot);
+            return;
+        }
+
+        if (species.includes('lettuce') || species.includes('cabbage') || species.includes('kale') || plant.emoji === '🥬') {
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 10), new THREE.MeshStandardMaterial({ color: statusColor, roughness: 0.72 }));
+            head.scale.set(1.35, 0.78, 1.2);
+            head.position.set(x, y + 0.2, z);
+            head.castShadow = true;
+            this.group.add(head);
+            return;
+        }
+
+        if (species.includes('eggplant') || species.includes('aubergine') || plant.emoji === '🍆') {
+            const eggplant = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 9), new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.45 }));
+            eggplant.scale.set(0.82, 1.35, 0.82);
+            eggplant.position.set(x + 0.045, y + 0.24, z + 0.035);
+            eggplant.castShadow = true;
+            this.group.add(eggplant);
         }
     },
 
@@ -458,43 +522,78 @@ function loadSavedFarms() {
 
 function resolveRack(field) {
     const rawRack = String(field?.rackTypeId || field?.rackType || field?.rackLabel || '').toLowerCase();
+    if (rawRack.includes('2')) return RACK_OPTIONS['2-tier'];
+    if (rawRack.includes('4')) return RACK_OPTIONS['4-tier'];
     if (rawRack.includes('5')) return RACK_OPTIONS['5-tier'];
     if (rawRack.includes('wall') || rawRack.includes('grid')) return RACK_OPTIONS.wall;
+    if (rawRack.includes('frame')) return RACK_OPTIONS['a-frame'];
+    if (rawRack.includes('nft') || rawRack.includes('channel')) return RACK_OPTIONS['nft-channel'];
+    if (rawRack.includes('hanging') || rawRack.includes('column')) return RACK_OPTIONS.hanging;
     return RACK_OPTIONS['3-tier'];
 }
 
 function resolveSlotPlants(field, rack) {
     const sourcePlants = Array.isArray(field?.plants) ? field.plants : [];
-    const slots = [];
+    const slots = Array(rack.total).fill(null);
+    const used = new Set();
 
     sourcePlants.forEach(plant => {
+        if (plant.slotIndex !== undefined && plant.slotIndex !== null) {
+            const index = Number(plant.slotIndex);
+            if (Number.isInteger(index) && index >= 0 && index < rack.total) {
+                slots[index] = normalizePlantForSlot(plant, field);
+                used.add(index);
+            }
+            return;
+        }
+
         const count = Math.max(1, Number.parseInt(plant.slots || plant.count || 1, 10) || 1);
         for (let i = 0; i < count; i++) {
-            slots.push({
-                name: plant.name || field?.targetPlant || 'Plant',
-                emoji: plant.emoji || emojiForPlant(plant.name || field?.targetPlant),
-                status: plant.status || 'healthy',
-            });
+            const index = firstFreeSlot(slots, used);
+            if (index === -1) return;
+            slots[index] = normalizePlantForSlot(plant, field);
+            used.add(index);
         }
     });
 
-    if (slots.length > 0) return slots.slice(0, rack.total);
+    if (slots.some(Boolean)) return slots;
 
     const fallbackCount = Math.min(rack.total, Number.parseInt(field?.plantSlots || field?.plants || 0, 10) || countTiles());
     const fallbackName = field?.targetPlant || 'Plant';
     for (let i = 0; i < fallbackCount; i++) {
-        slots.push({
+        slots[i] = {
             name: fallbackName,
             emoji: emojiForPlant(fallbackName),
+            species: speciesKey(fallbackName),
             status: 'healthy',
-        });
+        };
     }
 
     return slots;
 }
 
+function normalizePlantForSlot(plant, field) {
+    const name = plant.name || field?.targetPlant || 'Plant';
+    return {
+        name,
+        emoji: plant.emoji || emojiForPlant(name),
+        species: plant.species || speciesKey(name),
+        status: plant.status || 'healthy',
+    };
+}
+
+function firstFreeSlot(slots, used) {
+    for (let i = 0; i < slots.length; i++) {
+        if (!slots[i] && !used.has(i)) return i;
+    }
+    return -1;
+}
 function countTiles() {
     return (AppState.tiles || []).filter(tile => tile?.plant).length;
+}
+
+function speciesKey(name = '') {
+    return String(name || 'plant').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
 function emojiForPlant(name = '') {
