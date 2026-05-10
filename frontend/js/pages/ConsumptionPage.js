@@ -24,12 +24,12 @@ const RM_PER_KWH = 0.218;
 /* ── RENDER ── returns HTML string (called by FeaturePage.js) */
 export function render() {
   return `
-    <div id="consumptionRoot" style="padding:16px; min-height:100%; background:var(--bg, #0a0f1e); color:var(--text, #E8F0FF);">
+    <div id="consumptionRoot" style="padding:16px; min-height:100%; background:#F0F4F8; color:#1A2B3C;">
 
       <!-- ── LOADING STATE ── -->
       <div id="con-loading" style="text-align:center; padding:40px 0;">
         <div style="font-size:2rem; animation:spin 1s linear infinite; display:inline-block;">⚙️</div>
-        <div style="margin-top:8px; color:#4A6A9A; font-size:0.85rem;">Fetching farm data…</div>
+        <div style="margin-top:8px; color:#64748B; font-size:0.85rem;">Fetching farm data…</div>
       </div>
 
       <!-- ── MAIN CONTENT (hidden until data loads) ── -->
@@ -37,91 +37,92 @@ export function render() {
 
         <!-- ECO RATING HERO -->
         <div id="con-hero" style="
-          background: linear-gradient(135deg, #0D2A1F 0%, #0A1E2A 100%);
-          border: 1px solid #1A4A30;
+          background: linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%);
           border-radius:24px; padding:24px; text-align:center; margin-bottom:16px;
           position:relative; overflow:hidden;
+          box-shadow: 0 4px 24px rgba(45,106,79,0.25);
         ">
-          <div style="position:absolute;top:-20px;right:-20px;font-size:5rem;opacity:0.08;">🌱</div>
-          <div id="con-grade" style="font-size:3rem; font-weight:900; color:#00FF88; line-height:1;">A+</div>
-          <div style="color:#4ADE80; font-size:0.85rem; margin-top:4px;">Eco Efficiency Rating</div>
-          <div id="con-grade-note" style="font-size:0.75rem; color:#4A6A9A; margin-top:8px;">
+          <div style="position:absolute;top:-20px;right:-20px;font-size:5rem;opacity:0.12;">🌱</div>
+          <div id="con-grade" style="font-size:3rem; font-weight:900; color:#D8F3DC; line-height:1;">A+</div>
+          <div style="color:#B7E4C7; font-size:0.85rem; margin-top:4px;">Eco Efficiency Rating</div>
+          <div id="con-grade-note" style="font-size:0.75rem; color:#95D5B2; margin-top:8px;">
             Your farm is operating in the top efficiency range.
           </div>
         </div>
 
         <!-- KPI CARDS GRID -->
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-          <div class="card" style="background:#0D1221; border-radius:16px; padding:16px; border:1px solid #1A2A40;">
+          <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
             <div style="font-size:1.4rem;">💧</div>
-            <div id="con-water-today" style="font-size:1.5rem; font-weight:700; color:#60A5FA; margin:4px 0;">—</div>
-            <div style="color:#4A6A9A; font-size:0.75rem;">Water Used Today</div>
-            <div id="con-water-vs" style="color:#4ADE80; font-size:0.7rem; margin-top:4px;"></div>
+            <div id="con-water-today" style="font-size:1.5rem; font-weight:700; color:#2563EB; margin:4px 0;">—</div>
+            <div style="color:#64748B; font-size:0.75rem;">Water Used Today</div>
+            <div id="con-water-vs" style="color:#16A34A; font-size:0.7rem; margin-top:4px;"></div>
           </div>
-          <div class="card" style="background:#0D1221; border-radius:16px; padding:16px; border:1px solid #1A2A40;">
+          <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
             <div style="font-size:1.4rem;">⚡</div>
-            <div id="con-energy-today" style="font-size:1.5rem; font-weight:700; color:#FFD966; margin:4px 0;">—</div>
-            <div style="color:#4A6A9A; font-size:0.75rem;">Energy Used Today</div>
-            <div id="con-energy-vs" style="color:#4ADE80; font-size:0.7rem; margin-top:4px;"></div>
+            <div id="con-energy-today" style="font-size:1.5rem; font-weight:700; color:#D97706; margin:4px 0;">—</div>
+            <div style="color:#64748B; font-size:0.75rem;">Energy Used Today</div>
+            <div id="con-energy-vs" style="color:#16A34A; font-size:0.7rem; margin-top:4px;"></div>
           </div>
-          <div class="card" style="background:#0D1221; border-radius:16px; padding:16px; border:1px solid #1A2A40;">
+          <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
             <div style="font-size:1.4rem;">🌿</div>
-            <div id="con-co2" style="font-size:1.5rem; font-weight:700; color:#4ADE80; margin:4px 0;">—</div>
-            <div style="color:#4A6A9A; font-size:0.75rem;">CO₂ Saved (vs. soil farm)</div>
+            <div id="con-co2" style="font-size:1.5rem; font-weight:700; color:#16A34A; margin:4px 0;">—</div>
+            <div style="color:#64748B; font-size:0.75rem;">CO₂ Saved (vs. soil farm)</div>
           </div>
-          <div class="card" style="background:#0D1221; border-radius:16px; padding:16px; border:1px solid #1A2A40;">
+          <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
             <div style="font-size:1.4rem;">💰</div>
-            <div id="con-cost" style="font-size:1.5rem; font-weight:700; color:#FBBF24; margin:4px 0;">—</div>
-            <div style="color:#4A6A9A; font-size:0.75rem;">Utility Cost Today</div>
+            <div id="con-cost" style="font-size:1.5rem; font-weight:700; color:#B45309; margin:4px 0;">—</div>
+            <div style="color:#64748B; font-size:0.75rem;">Utility Cost Today</div>
           </div>
         </div>
 
-        <!-- WATER USAGE CHART -->
-        <div style="background:#0D1221; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #1A2A40;">
-          <div style="color:#60A5FA; font-weight:600; margin-bottom:12px;">💧 Water Usage (last 24 readings)</div>
-          <div style="position: relative; height: 150px; width: 100%;">
-          <canvas id="con-water-chart"></canvas>
-          </div>
-        </div>
+     <!-- WATER USAGE CHART -->
+<div style="background:#FFFFFF; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+  <div style="color:#2563EB; font-weight:600; margin-bottom:12px;">💧 Water Usage (last 24 readings)</div>
+  <div style="position:relative; width:100%; height:220px;">
+    <canvas id="con-water-chart" style="position:absolute; top:0; left:0; width:100% !important; height:100% !important;"></canvas>
+  </div>
+</div>
 
-        <!-- ENERGY USAGE CHART -->
-        <div style="background:#0D1221; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #1A2A40;">
-          <div style="color:#FFD966; font-weight:600; margin-bottom:12px;">⚡ Energy Usage (last 24 readings)</div>
-          <div style="position: relative; height: 150px; width: 100%;">
-          <canvas id="con-energy-chart"></canvas>
-          </div>
-        </div>
+<!-- ENERGY USAGE CHART -->
+<div style="background:#FFFFFF; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+  <div style="color:#D97706; font-weight:600; margin-bottom:12px;">⚡ Energy Usage (last 24 readings)</div>
+  <div style="position:relative; width:100%; height:160px;">
+    <canvas id="con-energy-chart" style="position:absolute; top:0; left:0; width:100% !important; height:100% !important;"></canvas>
+  </div>
+</div>
 
         <!-- RESOURCE BREAKDOWN TABLE -->
-        <div style="background:#0D1221; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #1A2A40;">
-          <div style="color:#E8F0FF; font-weight:600; margin-bottom:12px;">📊 Resource Breakdown</div>
+        <div style="background:#FFFFFF; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+          <div style="color:#1A2B3C; font-weight:600; margin-bottom:12px;">📊 Resource Breakdown</div>
           <div id="con-breakdown" style="display:flex; flex-direction:column; gap:10px;">
             <!-- Populated by JS -->
           </div>
         </div>
 
         <!-- AI TIPS (dynamic) -->
-        <div style="background:linear-gradient(135deg, #0A1E2A, #0D1221); border-radius:16px; padding:16px; border:1px solid #1A3A50;">
-          <div style="color:#60A5FA; font-weight:600; margin-bottom:12px;">🤖 AI Eco Tips</div>
+        <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+          <div style="color:#1A2B3C; font-weight:600; margin-bottom:12px;">🤖 AI Eco Tips</div>
           <div id="con-ai-tips" style="display:flex; flex-direction:column; gap:8px;">
             <!-- Populated by JS based on real sensor data -->
           </div>
         </div>
 
         <!-- LAST UPDATED -->
-        <div id="con-last-updated" style="text-align:center; color:#4A6A9A; font-size:0.7rem; margin-top:12px; padding-bottom:16px;"></div>
+        <div id="con-last-updated" style="text-align:center; color:#94A3B8; font-size:0.7rem; margin-top:12px; padding-bottom:16px;"></div>
 
       </div><!-- end #con-content -->
 
       <!-- ERROR STATE -->
       <div id="con-error" style="display:none; text-align:center; padding:40px 16px;">
         <div style="font-size:2rem;">⚠️</div>
-        <div style="color:#F87171; margin-top:8px; font-size:0.9rem;">Could not connect to backend.</div>
-        <div style="color:#4A6A9A; font-size:0.75rem; margin-top:4px;">Using simulated data for demo.</div>
+        <div style="color:#DC2626; margin-top:8px; font-size:0.9rem;">Could not connect to backend.</div>
+        <div style="color:#64748B; font-size:0.75rem; margin-top:4px;">Using simulated data for demo.</div>
         <button id="con-retry-btn" style="
           margin-top:16px; padding:8px 20px;
-          background:#1E3A5F; color:#60A5FA;
-          border:1px solid #2A5A8F; border-radius:12px; cursor:pointer;
+          background:#EFF6FF; color:#2563EB;
+          border:1px solid #BFDBFE; border-radius:12px; cursor:pointer;
+          font-weight:600;
         ">🔄 Retry</button>
       </div>
 
@@ -129,7 +130,7 @@ export function render() {
     <style>
       @keyframes spin { to { transform: rotate(360deg); } }
       .con-progress-track {
-        background: #1A2A40;
+        background: #E2E8F0;
         border-radius: 100px;
         height: 8px;
         flex: 1;
@@ -157,9 +158,12 @@ async function _loadData() {
 
   try {
     // Attempt to fetch real backend data
+    const deviceId = AppState.currentFarmId || 'farm_001';
     const [historyRes, latestRes] = await Promise.all([
-      fetch(`${BASE_URL}/api/sensors/history?deviceId=farm_001&limit=24`),
-      fetch(`${BASE_URL}/api/sensors/latest?deviceId=farm_001`)
+      fetch(`${BASE_URL}/api/sensors/history?deviceId=${deviceId}&limit=24`), 
+      fetch(`${BASE_URL}/api/sensors/latest?deviceId=${deviceId}`)  ,          
+     // fetch(`${BASE_URL}/api/sensors/history?deviceId=farm_001&limit=24`),
+      //fetch(`${BASE_URL}/api/sensors/latest?deviceId=farm_001`)
     ]);
 
     if (!historyRes.ok || !latestRes.ok) throw new Error('API error');
@@ -289,7 +293,6 @@ function _calcGrade(metrics) {
 
 /* ── PRIVATE: RENDER CHARTS (Chart.js, lazy-loaded from CDN) ── */
 async function _renderCharts(readings) {
-  // Load Chart.js from CDN if not already loaded
   if (!window.Chart) {
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -300,30 +303,35 @@ async function _renderCharts(readings) {
     });
   }
 
-  // Prepare labels (show time of each reading)
+  // ── 不 reverse，直接用原本順序（舊→新，左→右）──
   const labels = readings.map((r, i) => {
     const d = new Date(r.createdAt || r.timestamp || Date.now() - (readings.length - i) * 3600000);
     return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-  }).reverse();
+  });
 
-  // Water: waterLevel percentage from sensor
-  const waterData = readings.map(r => r.waterLevel ?? r.waterDistanceCm ?? 70).reverse();
-
-  // Energy proxy: use light value (lower light = grow light ON = more energy)
+  const waterData  = readings.map(r => r.waterLevel ?? r.waterDistanceCm ?? 70);
   const energyData = readings.map(r => {
     const lightRaw = r.lightRaw ?? r.light ?? 2000;
     const temp     = r.temperature ?? 25;
-    // Estimate instantaneous Wh: light ON + fan contribution
     return ((lightRaw < 1500 ? WATTS_LIGHT : 0) + (temp > 28 ? WATTS_FAN : 0)) / 10;
-  }).reverse();
+  });
 
   const chartDefaults = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: { legend: { display: false } },
+    layout: { padding: { top: 8, bottom: 0, left: 0, right: 0 } },
     scales: {
-      x: { ticks: { color: '#4A6A9A', font: { size: 9 } }, grid: { color: '#1A2A40' } },
-      y: { ticks: { color: '#4A6A9A', font: { size: 9 } }, grid: { color: '#1A2A40' } }
+      x: {
+        ticks: { color: '#94A3B8', font: { size: 9 }, maxRotation: 45, minRotation: 45 },
+        grid:  { color: '#F1F5F9' },
+        border: { color: '#E2E8F0' }
+      },
+      y: {
+        ticks: { color: '#94A3B8', font: { size: 9 } },
+        grid:  { color: '#F1F5F9' },
+        border: { color: '#E2E8F0' }
+      }
     }
   };
 
@@ -337,19 +345,31 @@ async function _renderCharts(readings) {
         labels,
         datasets: [{
           data: waterData,
-          borderColor: '#60A5FA',
-          backgroundColor: 'rgba(96,165,250,0.1)',
+          borderColor: '#2563EB',
+          backgroundColor: (ctx) => {
+            const chart = ctx.chart;
+            const { ctx: c, chartArea } = chart;
+            if (!chartArea) return 'rgba(37,99,235,0.08)';
+            const gradient = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, 'rgba(37,99,235,0.18)');
+            gradient.addColorStop(1, 'rgba(37,99,235,0.01)');
+            return gradient;
+          },
           fill: true,
           tension: 0.4,
-          pointRadius: 3,
-          pointBackgroundColor: '#60A5FA',
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#2563EB',
+          pointBorderColor: '#fff',
+          pointBorderWidth: 1.5,
+          borderWidth: 2,
         }]
       },
-      options: { ...chartDefaults, scales: { ...chartDefaults.scales, y: { ...chartDefaults.scales.y, min: 0, max: 100 } } }
+      options: { ...chartDefaults }
     });
   }
 
-  // Energy chart
+  // Energy chart — 加深顏色
   const eCtx = document.getElementById('con-energy-chart');
   if (eCtx) {
     if (eCtx._chart) eCtx._chart.destroy();
@@ -359,10 +379,11 @@ async function _renderCharts(readings) {
         labels,
         datasets: [{
           data: energyData,
-          backgroundColor: energyData.map(v => v > 5 ? 'rgba(251,146,60,0.7)' : 'rgba(255,217,102,0.5)'),
-          borderColor: energyData.map(v => v > 5 ? '#FB923C' : '#FFD966'),
+          backgroundColor: energyData.map(v => v > 5 ? 'rgba(217,119,6,0.85)' : 'rgba(217,119,6,0.5)'),
+          borderColor: energyData.map(v => v > 5 ? '#92400E' : '#B45309'),
           borderWidth: 1,
-          borderRadius: 4,
+          borderRadius: 6,
+          borderSkipped: false,
         }]
       },
       options: { ...chartDefaults }
@@ -372,19 +393,17 @@ async function _renderCharts(readings) {
 
 /* ── PRIVATE: RESOURCE BREAKDOWN BARS ── */
 function _renderBreakdown(metrics) {
-  const total = metrics.waterLiters + metrics.energyKwh * 10; // weighted total
-
   const items = [
-    { label:'💧 Water Pump',       value: metrics.waterActivations, unit:'activations', pct: metrics.waterActivations / Math.max(metrics.totalReadings, 1) * 100, color:'#60A5FA' },
-    { label:'💡 Grow Lights',      value: metrics.lightHours,       unit:'hrs ON',      pct: metrics.lightHours / Math.max(metrics.totalReadings, 1) * 100,       color:'#FFD966' },
-    { label:'🌀 Cooling Fan',      value: metrics.fanHours,         unit:'hrs ON',      pct: metrics.fanHours / Math.max(metrics.totalReadings, 1) * 100,         color:'#4ADE80' },
+    { label:'💧 Water Pump',  value: metrics.waterActivations, unit:'activations', pct: metrics.waterActivations / Math.max(metrics.totalReadings, 1) * 100, color:'#2563EB' },
+    { label:'💡 Grow Lights', value: metrics.lightHours,       unit:'hrs ON',      pct: metrics.lightHours / Math.max(metrics.totalReadings, 1) * 100,       color:'#D97706' },
+    { label:'🌀 Cooling Fan', value: metrics.fanHours,         unit:'hrs ON',      pct: metrics.fanHours / Math.max(metrics.totalReadings, 1) * 100,         color:'#16A34A' },
   ];
 
   _el('con-breakdown').innerHTML = items.map(item => `
     <div>
-      <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:0.8rem;">
-        <span style="color:#B0C4DE;">${item.label}</span>
-        <span style="color:#E8F0FF; font-weight:600;">${item.value} ${item.unit}</span>
+      <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.8rem;">
+        <span style="color:#374151; font-weight:500;">${item.label}</span>
+        <span style="color:#1A2B3C; font-weight:700;">${item.value} ${item.unit}</span>
       </div>
       <div class="con-progress-track">
         <div class="con-progress-fill" style="width:${Math.min(item.pct, 100).toFixed(1)}%; background:${item.color};"></div>
@@ -450,13 +469,16 @@ function _renderAiTips(readings, latest, metrics) {
     });
   }
 
-  _el('con-ai-tips').innerHTML = tips.map(t => `
+_el('con-ai-tips').innerHTML = tips.map(t => `
     <div style="
-      background:#0A1E2A; border-left:3px solid ${t.color};
+      background:#F8FAFC; border-left:3px solid ${t.color};
       border-radius:0 12px 12px 0; padding:12px;
+      border-top: 1px solid #F1F5F9;
+      border-right: 1px solid #F1F5F9;
+      border-bottom: 1px solid #F1F5F9;
     ">
       <div style="font-weight:600; color:${t.color}; font-size:0.85rem;">${t.icon} ${t.title}</div>
-      <div style="color:#B0C4DE; font-size:0.78rem; margin-top:4px; line-height:1.4;">${t.desc}</div>
+      <div style="color:#475569; font-size:0.78rem; margin-top:4px; line-height:1.4;">${t.desc}</div>
     </div>
   `).join('');
 }
