@@ -7,6 +7,7 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast }  from '../utils/toast.js';
 import { AppState }   from '../store.js';
+import { saveFarmsToFirestore, saveFarmProfileToFirestore, saveGlobalProfileToFirestore } from '../utils/firebase.js';
 
 /* ── LOCAL STORAGE KEYS ── */
 const PROFILE_KEY = 'farm_profile';
@@ -349,6 +350,7 @@ function _bindEvents(profile, savedFarms) {
 function _doSave() {
     const profile = _collectForm();
     const currentId = AppState.currentFarmId;
+    const uid       = AppState.uid;
 
     saveProfile(profile, currentId); // ← now saves per-farm
 
@@ -357,16 +359,18 @@ function _doSave() {
 
     try {
         let savedFarms = JSON.parse(localStorage.getItem(FARMS_KEY)) || [];
-
         if (currentId) {
-            savedFarms = savedFarms.map(f => {
-                if (f.id === currentId) {
-                    return { ...f, name: profile.farmName };
-                }
-                return f;
-            });
+            savedFarms = savedFarms.map(f =>
+                f.id === currentId ? { ...f, name: profile.farmName } : f
+            );
             localStorage.setItem(FARMS_KEY, JSON.stringify(savedFarms));
-            console.log(`[ProfilePage] Updated farm ID ${currentId} with name: ${profile.farmName}`);
+
+            // Sync to Firestore 
+            if (uid) {
+                saveFarmProfileToFirestore(uid, currentId, profile);
+                saveFarmsToFirestore(uid, savedFarms);
+                saveGlobalProfileToFirestore(uid, { name: profile.name, email: profile.email });
+            }
         }
     } catch (e) {
         console.error('Error updating farm list names:', e);
