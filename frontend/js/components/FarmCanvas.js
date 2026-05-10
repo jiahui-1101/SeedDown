@@ -4,9 +4,14 @@ import * as THREE from 'https://esm.sh/three@0.160.0';
 const FARMS_STORAGE_KEY = 'user_farms';
 
 const RACK_OPTIONS = {
-    '3-tier': { id: '3-tier', label: '3-Tier Vertical', tiers: 3, slotsPerTier: 3, total: 9 },
-    '5-tier': { id: '5-tier', label: '5-Tier Tower', tiers: 5, slotsPerTier: 4, total: 20 },
-    wall: { id: 'wall', label: 'Wall Panel', tiers: 4, slotsPerTier: 5, total: 20 },
+    '2-tier': { id: '2-tier', label: '2-Tier Starter Rack', tiers: 2, slotsPerTier: 3, total: 6 },
+    '3-tier': { id: '3-tier', label: '3-Tier Vertical Rack', tiers: 3, slotsPerTier: 3, total: 9 },
+    '4-tier': { id: '4-tier', label: '4-Tier Grow Shelf', tiers: 4, slotsPerTier: 4, total: 16 },
+    '5-tier': { id: '5-tier', label: '5-Tier Tower Rack', tiers: 5, slotsPerTier: 4, total: 20 },
+    wall: { id: 'wall', label: 'Wall Panel Grid', tiers: 4, slotsPerTier: 5, total: 20 },
+    'a-frame': { id: 'a-frame', label: 'A-Frame Pyramid', tiers: 4, slotsPerTier: 4, total: 16 },
+    'nft-channel': { id: 'nft-channel', label: 'NFT Channel Rows', tiers: 3, slotsPerTier: 6, total: 18 },
+    hanging: { id: 'hanging', label: 'Hanging Column Farm', tiers: 5, slotsPerTier: 3, total: 15 },
 };
 
 const EMOJI_COLORS = {
@@ -176,30 +181,50 @@ export const FarmCanvas = {
         pot.castShadow = true;
         this.group.add(pot);
 
-        const stem = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.012, 0.012, 0.15, 8),
-            new THREE.MeshStandardMaterial({ color: 0x365314, roughness: 0.75 })
+        const base = new THREE.Mesh(
+            new THREE.SphereGeometry(0.095, 14, 8),
+            new THREE.MeshStandardMaterial({
+                color: statusColor,
+                roughness: 0.62,
+                emissive: statusColor,
+                emissiveIntensity: 0.08,
+            })
         );
-        stem.position.set(x, y + 0.16, z);
-        this.group.add(stem);
+        base.scale.set(1.15, 0.58, 1.05);
+        base.position.set(x, y + 0.135, z);
+        base.castShadow = true;
+        this.group.add(base);
 
-        const leafMat = new THREE.MeshStandardMaterial({
-            color: statusColor,
-            roughness: 0.5,
-            emissive: statusColor,
-            emissiveIntensity: plant.status === 'healthy' || !plant.status ? 0.08 : 0.16,
-        });
+        const emojiSprite = this.createEmojiSprite(plant.emoji || emojiForPlant(plant.name || plant.species));
+        emojiSprite.position.set(x, y + 0.335, z + 0.03);
+        emojiSprite.scale.set(0.36, 0.36, 1);
+        this.group.add(emojiSprite);
+    },
 
-        const leafCount = plant.emoji === '🍅' || plant.emoji === '🍓' ? 4 : 5;
-        for (let i = 0; i < leafCount; i++) {
-            const angle = (Math.PI * 2 / leafCount) * i;
-            const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 8), leafMat);
-            leaf.scale.set(1.3, 0.38, 0.72);
-            leaf.position.set(x + Math.cos(angle) * 0.058, y + 0.23 + (i % 2) * 0.018, z + Math.sin(angle) * 0.052);
-            leaf.rotation.set(0.22, angle, -0.25);
-            leaf.castShadow = true;
-            this.group.add(leaf);
-        }
+    createEmojiSprite(emoji) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, 128, 128);
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.beginPath();
+        ctx.arc(64, 64, 50, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(15,23,42,0.12)';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.font = '72px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji || '🌱', 64, 67);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+        const sprite = new THREE.Sprite(material);
+        sprite.userData.texture = texture;
+        return sprite;
     },
 
     addEmptySlot(x, y, z) {
@@ -296,6 +321,7 @@ export const FarmCanvas = {
         if (this.scene) {
             this.scene.traverse(obj => {
                 if (obj.geometry) obj.geometry.dispose();
+                if (obj.userData?.texture) obj.userData.texture.dispose();
                 if (obj.material) {
                     if (Array.isArray(obj.material)) obj.material.forEach(mat => mat.dispose());
                     else obj.material.dispose();
@@ -458,43 +484,78 @@ function loadSavedFarms() {
 
 function resolveRack(field) {
     const rawRack = String(field?.rackTypeId || field?.rackType || field?.rackLabel || '').toLowerCase();
+    if (rawRack.includes('2')) return RACK_OPTIONS['2-tier'];
+    if (rawRack.includes('4')) return RACK_OPTIONS['4-tier'];
     if (rawRack.includes('5')) return RACK_OPTIONS['5-tier'];
     if (rawRack.includes('wall') || rawRack.includes('grid')) return RACK_OPTIONS.wall;
+    if (rawRack.includes('frame')) return RACK_OPTIONS['a-frame'];
+    if (rawRack.includes('nft') || rawRack.includes('channel')) return RACK_OPTIONS['nft-channel'];
+    if (rawRack.includes('hanging') || rawRack.includes('column')) return RACK_OPTIONS.hanging;
     return RACK_OPTIONS['3-tier'];
 }
 
 function resolveSlotPlants(field, rack) {
     const sourcePlants = Array.isArray(field?.plants) ? field.plants : [];
-    const slots = [];
+    const slots = Array(rack.total).fill(null);
+    const used = new Set();
 
     sourcePlants.forEach(plant => {
+        if (plant.slotIndex !== undefined && plant.slotIndex !== null) {
+            const index = Number(plant.slotIndex);
+            if (Number.isInteger(index) && index >= 0 && index < rack.total) {
+                slots[index] = normalizePlantForSlot(plant, field);
+                used.add(index);
+            }
+            return;
+        }
+
         const count = Math.max(1, Number.parseInt(plant.slots || plant.count || 1, 10) || 1);
         for (let i = 0; i < count; i++) {
-            slots.push({
-                name: plant.name || field?.targetPlant || 'Plant',
-                emoji: plant.emoji || emojiForPlant(plant.name || field?.targetPlant),
-                status: plant.status || 'healthy',
-            });
+            const index = firstFreeSlot(slots, used);
+            if (index === -1) return;
+            slots[index] = normalizePlantForSlot(plant, field);
+            used.add(index);
         }
     });
 
-    if (slots.length > 0) return slots.slice(0, rack.total);
+    if (slots.some(Boolean)) return slots;
 
     const fallbackCount = Math.min(rack.total, Number.parseInt(field?.plantSlots || field?.plants || 0, 10) || countTiles());
     const fallbackName = field?.targetPlant || 'Plant';
     for (let i = 0; i < fallbackCount; i++) {
-        slots.push({
+        slots[i] = {
             name: fallbackName,
             emoji: emojiForPlant(fallbackName),
+            species: speciesKey(fallbackName),
             status: 'healthy',
-        });
+        };
     }
 
     return slots;
 }
 
+function normalizePlantForSlot(plant, field) {
+    const name = plant.name || field?.targetPlant || 'Plant';
+    return {
+        name,
+        emoji: plant.emoji || emojiForPlant(name),
+        species: plant.species || speciesKey(name),
+        status: plant.status || 'healthy',
+    };
+}
+
+function firstFreeSlot(slots, used) {
+    for (let i = 0; i < slots.length; i++) {
+        if (!slots[i] && !used.has(i)) return i;
+    }
+    return -1;
+}
 function countTiles() {
     return (AppState.tiles || []).filter(tile => tile?.plant).length;
+}
+
+function speciesKey(name = '') {
+    return String(name || 'plant').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
 function emojiForPlant(name = '') {
