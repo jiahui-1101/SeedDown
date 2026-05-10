@@ -15,7 +15,7 @@ const pages = {
     login: () => import("./pages/LoginPage.js").then((m) => m.render()),
     farmlist: () => import("./pages/FarmListPage.js").then((m) => m.render()),
     
-    // 💡 这是 Jia Hui 新加的页面
+   
     buildfarm: () => import("./pages/BuildFarmPage.js?v=3d-esm-1").then((m) => m.render()),
 
     home: () => import("./pages/HomePage.js").then((m) => m.render()),
@@ -24,7 +24,8 @@ const pages = {
     feature: (params) => import("./pages/FeaturePage.js").then((m) => m.render(params)),
     "sensor-detail": (p) => import("./pages/SensorDetailPage.js").then((m) => m.render(p)),
     profile: () => import("./pages/ProfilePage.js").then((m) => m.render()),
-    
+    "profit-detail": () => import("./pages/ProfitDetailPage.js").then((m) => m.render()),
+    "energy-detail": () => import("./pages/EnergyDetailPage.js").then((m) => m.render()),
     // 💡 保留你辛苦修好的 alert-detail，带 init 的
     "alert-detail": (params) => import("./pages/AlertDetailPage.js").then((m) => { 
         m.render(params); 
