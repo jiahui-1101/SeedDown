@@ -1,6 +1,24 @@
 let pageModules = {};
 let currentScreen = null;
 
+const fallbackPageModules = {
+    splash: () => import("../pages/SplashPage.js").then((m) => m.render()),
+    login: () => import("../pages/LoginPage.js").then((m) => m.render()),
+    farmlist: () => import("../pages/FarmListPage.js").then((m) => m.render()),
+    buildfarm: () => import("../pages/BuildFarmPage.js").then((m) => m.render()),
+    home: () => import("../pages/HomePage.js").then((m) => m.render()),
+    "dash-c": () => import("../pages/CommercialPage.js").then((m) => m.render()),
+    community: () => import("../pages/CommunityPage.js").then((m) => m.render()),
+    feature: (params) => import("../pages/FeaturePage.js").then((m) => m.render(params)),
+    "sensor-detail": (params) => import("../pages/SensorDetailPage.js").then((m) => m.render(params)),
+    profile: () => import("../pages/ProfilePage.js").then((m) => m.render()),
+    "alert-detail": (params) => import("../pages/AlertDetailPage.js").then((m) => {
+        m.render(params);
+        m.init?.();
+    }),
+    "whatif-pro": () => import("../pages/WhatIfPro.js").then((m) => m.renderScreen()),
+};
+
 export function initNavigation(pages) {
     pageModules = pages;
 }
@@ -12,7 +30,7 @@ export async function showScreen(screenName, params = {}) {
         return;
     }
     currentScreen = screenName;
-    const loader = pageModules[screenName];
+    const loader = pageModules[screenName] || fallbackPageModules[screenName];
     if (!loader) {
         console.error(`[Navigation] Screen "${screenName}" not found in pageModules`);
         window.showToast?.('error', `Screen "${screenName}" not found`);
