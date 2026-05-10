@@ -4,6 +4,34 @@
    export init()   → wire up all interactivity after render()
    ============================================================ */
    import { showScreen } from '../utils/navigation.js';
+
+   //helpers
+   const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3000' : window.location.origin;
+
+function getPlantedCrops() {
+  try {
+    const farms = JSON.parse(localStorage.getItem('user_farms') || '[]');
+    const currentFarm = window.AppState?.currentFarm || farms[farms.length - 1];
+    return currentFarm?.plants || null;
+  } catch { return null; }
+}
+
+async function fetchSensorData() {
+  try {
+    const res = await fetch(`${API_BASE}/api/sensors/latest?deviceId=farm_001`);
+    const data = await res.json();
+    return {
+      temp:     data.temperature  ?? data.temp     ?? 28,
+      humid:    data.humidity     ?? data.humid     ?? 68,
+      light:    data.light        ?? data.lux       ?? 82,
+      water:    data.soilMoisture ?? data.water     ?? 45,
+      nutrient: data.nutrient     ?? data.ec        ?? 78,
+    };
+  } catch {
+    return { temp:28, humid:68, light:82, water:45, nutrient:78 };
+  }
+}
 /* ─────────────────────────────────────────────
    DATA
 ───────────────────────────────────────────── */
@@ -293,6 +321,39 @@ export function init() {
   _npQty      = 10;
   _npSpecies  = NP_SPECIES_DB[0];
   _npFiltered = [...NP_SPECIES_DB];
+
+  // Populate dropdowns from real farm data
+  const planted = getPlantedCrops();
+  if (planted?.length) {
+    const harvestSel = document.getElementById('pro-crop-sel');
+    const costSel    = document.getElementById('pro-cost-crop');
+    
+    const opts = planted.map(p =>
+      `<option value="${p.species}">${p.emoji || '🌱'} ${p.name}</option>`
+    ).join('');
+    
+    if (harvestSel) harvestSel.innerHTML = opts;
+    if (costSel)    costSel.innerHTML    = opts;
+  }
+
+  // Update zones from farm structure
+  const farms = JSON.parse(localStorage.getItem('user_farms') || '[]');
+  const currentFarm = window.AppState?.currentFarm || farms[farms.length - 1];
+  if (currentFarm?.plants?.length) {
+    // Update FARM_ZONES with real data
+    FARM_ZONES.length = 0;
+    const rack = currentFarm.rackTypeId || '3-tier';
+    const tiers = parseInt(rack) || 3;
+    currentFarm.plants.slice(0, tiers).forEach((p, i) => {
+      FARM_ZONES.push({
+        id: String.fromCharCode(65 + i),
+        crop: p.name,
+        rows: p.slots || 3,
+        fill: 70 + Math.random() * 20 | 0,
+        harvIn: 7 + i * 3
+      });
+    });
+  }
 
   _bindTabs();
   _bindForecast();

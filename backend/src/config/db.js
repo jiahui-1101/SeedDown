@@ -23,7 +23,7 @@ function resolveCredentialPath(credentialPath) {
 
   return candidates.find((candidate) => fs.existsSync(candidate));
 }
-
+/*
 function getCredential() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     const serviceAccount = parseServiceAccountJson(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
@@ -47,12 +47,13 @@ function getCredential() {
   console.warn('Firebase credential source: applicationDefault()');
   return applicationDefault();
 }
+  */
 
-/*function getCredential() {
+function getCredential() {
   // 终极暴力破解法：既然找不到环境变量，我们就直接在同级目录读取文件！
-  const serviceAccount = require('./firebase-service-account.json');
+  const serviceAccount = require('../../firebase-service-account.json');
   return cert(serviceAccount);
-}*/
+}
 
 
 

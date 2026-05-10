@@ -467,9 +467,9 @@
     ]
   },
   {
-    "species": "apple",
-    "commonName": "apple",
-    "emoji": "🍎",
+    "species": "banana",
+    "commonName": "banana",
+    "emoji": "🌱",
     "requirements": {
       "tempMin": 18,
       "tempMax": 28,
@@ -493,7 +493,37 @@
       "nutrientChange": 5
     },
     "recipeKeywords": [
-      "apple"
+      "banana"
+    ]
+  },
+  {
+    "species": "cherry",
+    "commonName": "cherry",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 12
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "cherry"
     ]
   },
   {

@@ -138,6 +138,7 @@ Sentence 1: describe current ${plant} conditions. Sentence 2: mention RM ${total
 
 exports.getNewPlantImpact = async (req, res) => {
   try {
+    // ✅ FIX: destructure FIRST before using any variables
     const { species, quantity, currentCrops, sensors } = req.body;
 
     const temp     = sensors?.temp     ?? 28;
@@ -146,16 +147,41 @@ exports.getNewPlantImpact = async (req, res) => {
     const water    = sensors?.water    ?? 45;
     const nutrient = sensors?.nutrient ?? 78;
 
-    const scale    = quantity / 4;
+    // ✅ FIX: guard against missing species
+    if (!species) {
+      return res.status(400).json({ error: 'species is required' });
+    }
+
+    // ✅ FIX: unsuitablePlants check is now INSIDE try, after destructuring
+    const unsuitablePlants = ['mango', 'oak', 'pine', 'apple', 'orange', 'banana', 'coconut', 'tree', 'palm', 'bamboo', 'sugarcane'];
+    const isUnsuitable = unsuitablePlants.some(u => species.toLowerCase().includes(u));
+
+    if (isUnsuitable) {
+      const prompt = `You are an indoor vertical farming expert for NextLevelFarm.
+A user wants to add "${species}" to their indoor vertical farm.
+Explain in exactly 2 sentences why this is not suitable for indoor vertical farming.
+Be specific about why ${species} cannot grow in a rack/shelf system indoors.`;
+
+      const raw = await askClaude('', prompt, 150);
+      return res.json({
+        unsuitable: true,
+        impacts: { tempChange:0, humidChange:0, lightChange:0, waterChange:0, nutrientChange:0 },
+        projected: { temp, humid, light, water, nutrient },
+        warnings: [`"${species}" is not suitable for indoor vertical farming`],
+        insight: raw.replace(/```/g, '').trim()
+      });
+    }
+
+    const scale    = (quantity || 1) / 4;
     const cropSpec = findCrop(species);
     const base     = cropSpec?.impacts || { tempChange:0, humidChange:0, lightChange:0, waterChange:0, nutrientChange:0 };
 
     const impacts = {
-      tempChange:     parseFloat(((base.tempChange     || 0) * scale).toFixed(1)),
-      humidChange:    parseFloat(((base.humidChange    || 0) * scale).toFixed(1)),
+      tempChange:     parseFloat(Math.min((base.tempChange     || 0) * scale,  8).toFixed(1)),
+      humidChange:    parseFloat(Math.min((base.humidChange    || 0) * scale, 30).toFixed(1)),
       lightChange:    parseFloat(((base.lightChange    || 0) * scale).toFixed(1)),
-      waterChange:    parseFloat(((base.waterChange    || 0) * scale).toFixed(1)),
-      nutrientChange: parseFloat(((base.nutrientChange || 0) * scale).toFixed(1)),
+      waterChange:    parseFloat(Math.min((base.waterChange    || 0) * scale, 40).toFixed(1)),
+      nutrientChange: parseFloat(Math.min((base.nutrientChange || 0) * scale, 30).toFixed(1)),
     };
 
     const projected = {
@@ -167,10 +193,11 @@ exports.getNewPlantImpact = async (req, res) => {
     };
 
     const warnings = [];
-    if (projected.temp     > 32) warnings.push(`temperature will reach ${projected.temp}°C (danger)`);
+    //if (projected.temp     > 32) warnings.push(`temperature will reach ${projected.temp}°C (danger)`);
     if (projected.humid    > 85) warnings.push(`humidity will reach ${projected.humid}% (mold risk)`);
     if (projected.water    > 80) warnings.push(`soil moisture will reach ${projected.water}% (overwatered)`);
-    if (projected.nutrient > 95) warnings.push(`nutrient level will reach ${projected.nutrient}% (excess)`);
+    // nutrientChange is in % points added, not absolute — only warn if change is very large
+    if (impacts.nutrientChange > 20) warnings.push(`nutrient demand increases significantly (+${impacts.nutrientChange}%)`);
 
     const prompt = `Agricultural AI for NextLevelFarm indoor garden.
 Current crops: ${currentCrops?.join(', ') || 'mixed vegetables'}
@@ -187,6 +214,63 @@ Write exactly 2 sentences: is it safe to add ${quantity} ${species}? What one ac
 
   } catch (err) {
     console.error('New plant impact error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+// ── POST /api/whatif/newplant-ai ─────────────────────────────────────────────
+
+exports.newPlantAiAnalysis = async (req, res) => {
+  try {
+    const { species, quantity, currentCrops, sensors } = req.body;
+
+    if (!species) {
+      return res.status(400).json({ error: 'species is required' });
+    }
+
+    const temp     = sensors?.temp     ?? 28;
+    const humid    = sensors?.humid    ?? 68;
+    const light    = sensors?.light    ?? 82;
+    const water    = sensors?.water    ?? 45;
+    const nutrient = sensors?.nutrient ?? 78;
+
+    const cropSpec = findCrop(species);
+
+    const prompt = `You are an agricultural AI expert for NextLevelFarm indoor vertical farm.
+Species requested: ${species} (${quantity || 1} plants)
+Current crops in farm: ${currentCrops?.join(', ') || 'mixed vegetables'}
+Current sensors: Humidity ${humid}%, Light ${light}%, Moisture ${water}%, Nutrients ${nutrient}%
+Projected after adding: Humidity ${projected.humid}%, Moisture ${projected.water}%, Nutrients ${projected.nutrient}%
+${cropSpec ? `Known crop data: growth days ${cropSpec.growthDays}, water needs ${cropSpec.waterNeeds}, light needs ${cropSpec.lightNeeds}` : `No crop data found for "${species}" in database — use general knowledge.`}
+
+Respond in valid JSON only. No markdown, no explanation outside the JSON.
+{
+  "suitable": true or false,
+  "compatibilityScore": 0-100,
+  "reason": "one sentence why suitable or not",
+  "careAdvice": "one sentence on how to care for this plant in this environment",
+  "warnings": ["array of warning strings, empty array if none"],
+  "estimatedHarvestDays": number or null
+}`;
+
+    const raw = await askClaude('', prompt, 300);
+
+    let parsed;
+    try {
+      const clean = raw.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch {
+      return res.status(500).json({ error: 'AI returned invalid JSON', raw });
+    }
+
+    res.json({
+      species,
+      quantity: quantity || 1,
+      cropSpec: cropSpec || null,
+      analysis: parsed
+    });
+
+  } catch (err) {
+    console.error('New plant AI analysis error:', err);
     res.status(500).json({ error: err.message });
   }
 };
