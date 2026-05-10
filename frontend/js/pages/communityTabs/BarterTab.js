@@ -1,5 +1,28 @@
 // 文件路径: /frontend/js/pages/communityTabs/BarterTab.js
 import { showToast } from '../../utils/toast.js';
+// 删掉原来的 PLACEHOLDERS 数组，换成这个
+const CATEGORY_IMAGES = {
+    tomato:   'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31?w=300&q=80',
+    chilli:   'https://images.unsplash.com/photo-1621955964441-c173e01c135b?w=300&q=80',
+    mint:     'https://images.unsplash.com/photo-1628556270448-4d4e4148e1b1?w=300&q=80',
+    basil:    'https://images.unsplash.com/photo-1518779578993-ec3579fee39f?w=300&q=80',
+    spinach:  'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=300&q=80',
+    compost:  'https://images.unsplash.com/photo-1601599561213-832382fd07ba?w=300&q=80',
+    veggie:   'https://images.unsplash.com/photo-1566842600175-97dca3b105e4?w=300&q=80',
+    seed:     'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=300&q=80',
+    default:  'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=300&q=80',
+};
+
+const DEFAULT_IMG = CATEGORY_IMAGES.default;
+
+function getItemImage(item) {
+    if (item.image) return item.image;
+    const title = (item.title || '').toLowerCase();
+    for (const [key, url] of Object.entries(CATEGORY_IMAGES)) {
+        if (title.includes(key)) return url;
+    }
+    return DEFAULT_IMG;
+}
 
 let currentBarterView = 'pasar'; // 'pasar' 或 'myshop'
 let allBarterItems = [];
@@ -220,7 +243,8 @@ if (currentBarterView === 'pasar' && item.status === 'available') {
             <!-- 状态标签 -->
             <div class="status-badge status-${item.status}">${item.status.toUpperCase()}</div>
             
-            <img src="${item.image || 'https://via.placeholder.com/150?text=No+Photo'}" class="barter-img">
+           <img src="${getItemImage(item)}" class="barter-img"
+     onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1540420773420-3366772f4999?w=300&q=80'">
             
             <div style="padding:10px; display:flex; flex-direction:column; flex:1;">
                 <h4 style="margin:0 0 5px 0; font-size:0.95rem;">${item.title}</h4>
