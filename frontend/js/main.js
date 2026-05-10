@@ -15,8 +15,8 @@ const pages = {
     login: () => import("./pages/LoginPage.js").then((m) => m.render()),
     farmlist: () => import("./pages/FarmListPage.js").then((m) => m.render()),
     
-   
-    buildfarm: () => import("./pages/BuildFarmPage.js?v=3d-esm-1").then((m) => m.render()),
+    // 💡 这是 Jia Hui 新加的页面
+    buildfarm: () => import("./pages/BuildFarmPage.js?v=3d-esm-2").then((m) => m.render()),
 
     home: () => import("./pages/HomePage.js").then((m) => m.render()),
     "dash-c": () => import("./pages/CommercialPage.js").then((m) => m.render()),
