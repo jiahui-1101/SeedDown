@@ -65,18 +65,18 @@ export function render() {
                     </button>
                 </div>
 
-                <div style="margin:0 16px 12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:16px;box-shadow:var(--shadow-sm);">
+             <div style="margin:0 16px 12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:16px;box-shadow:var(--shadow-sm);">
                     <div style="display:flex;align-items:center;margin-bottom:12px;">
                         <div style="width:4px;height:16px;background:var(--ok);border-radius:4px;margin-right:8px;"></div>
                         <div style="font-size:1.02rem;font-weight:800;color:var(--text);">Live Data</div>
                     </div>
                     <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
-                        ${sensorCard('🌡️', 'TEMP', 'pro-temp', '--', 'var(--danger)', '#FEE2E2')}
-                        ${sensorCard('💧', 'HUMID', 'pro-humid', '--', 'var(--accent)', 'var(--accent-l)')}
-                        ${sensorCard('☀️', 'LIGHT', 'pro-light', '--', 'var(--ok)', 'var(--ok-bg)')}
-                        ${sensorCard('🧪', 'PH', 'pro-ph', '--', 'var(--warn)', '#FFFBEB')}
-                        ${sensorCard('💦', 'WATER', 'pro-water', '--', 'var(--accent)', 'var(--accent-l)')}
-                        ${sensorCard('🧬', 'GAS', 'pro-gas', '--', 'var(--ok)', 'var(--ok-bg)')}
+                        ${sensorCard('🌡️', 'Temp', 'pro-temp', '--', 'var(--danger)', '#FEE2E2', 'temp')}
+                        ${sensorCard('💧', 'Humid', 'pro-humid', '--', 'var(--accent)', 'var(--accent-l)', 'humid')}
+                        ${sensorCard('☀️', 'Light', 'pro-light', '--', 'var(--ok)', 'var(--ok-bg)', 'light')}
+                        ${sensorCard('🧪', 'pH', 'pro-ph', '--', 'var(--warn)', '#FFFBEB', 'ph')}
+                        ${sensorCard('💦', 'Water', 'pro-water', '--', 'var(--accent)', 'var(--accent-l)', 'water')}
+                        ${sensorCard('🧬', 'Gas', 'pro-gas', '--', 'var(--ok)', 'var(--ok-bg)', 'nutrient')}
                     </div>
                 </div>
 
@@ -98,7 +98,7 @@ export function render() {
         </div>
     `;
 
-    bindEvents();
+    bindEvents()
     initCommercialFarm();
     initProDashboard();
 }
@@ -144,6 +144,16 @@ function bindEvents() {
             } else if (screen === 'home') {
                 showScreen('dash-c');
             }
+        });
+    });
+
+   document.querySelectorAll('.pro-sensor-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const sk = card.getAttribute('data-key');
+            const sl = card.getAttribute('data-label');
+            clearInterval(AppState.proInterval);
+            // 传入 key 和 name，对齐 sensor-detail 的参数
+            showScreen('sensor-detail', { key: sk, name: sl });
         });
     });
 }
@@ -211,9 +221,9 @@ async function fetchAIGlobalAdvice(currentData) {
     }
 }
 
-function sensorCard(icon, label, id, value, color, bg) {
+function sensorCard(icon, label, id, value, color, bg, key) {
     return `
-        <div style="background:${bg};border-radius:12px;padding:12px;min-height:90px;position:relative;overflow:hidden;">
+        <div class="pro-sensor-card" data-key="${key}" data-label="${label}" style="background:${bg};border-radius:12px;padding:12px;min-height:90px;position:relative;overflow:hidden;cursor:pointer;">
             <div style="position:absolute;top:-5px;right:-5px;font-size:36px;opacity:.12;">${icon}</div>
             <div style="font-size:14px;opacity:.7;">${icon}</div>
             <div style="margin-top:14px;">
