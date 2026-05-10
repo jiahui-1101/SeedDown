@@ -31,9 +31,14 @@ let fieldInfo = {
 let detectedPlants = [];
 
 const RACK_OPTIONS = [
-    { id: '3-tier', label: '3-Tier Vertical', icon: 'III', tiers: 3, slotsPerTier: 3, total: 9 },
-    { id: '5-tier', label: '5-Tier Tower', icon: 'V', tiers: 5, slotsPerTier: 4, total: 20 },
-    { id: 'wall', label: 'Wall Panel', icon: 'GRID', tiers: 4, slotsPerTier: 5, total: 20 },
+    { id: '2-tier', label: '2-Tier Starter Rack', icon: 'II', tiers: 2, slotsPerTier: 3, total: 6, shape: 'rack', desc: 'compact shelf for desk or balcony trials' },
+    { id: '3-tier', label: '3-Tier Vertical Rack', icon: 'III', tiers: 3, slotsPerTier: 3, total: 9, shape: 'rack', desc: 'balanced demo rack with 9 plant slots' },
+    { id: '4-tier', label: '4-Tier Grow Shelf', icon: 'IV', tiers: 4, slotsPerTier: 4, total: 16, shape: 'rack', desc: 'larger home rack for mixed greens' },
+    { id: '5-tier', label: '5-Tier Tower Rack', icon: 'V', tiers: 5, slotsPerTier: 4, total: 20, shape: 'tower', desc: 'tall structure with dense stacking' },
+    { id: 'wall', label: 'Wall Panel Grid', icon: 'GRID', tiers: 4, slotsPerTier: 5, total: 20, shape: 'wall', desc: 'flat wall-mounted grow panel' },
+    { id: 'a-frame', label: 'A-Frame Pyramid', icon: 'A', tiers: 4, slotsPerTier: 4, total: 16, shape: 'aframe', desc: 'slanted frame for two-sided access' },
+    { id: 'nft-channel', label: 'NFT Channel Rows', icon: 'NFT', tiers: 3, slotsPerTier: 6, total: 18, shape: 'channel', desc: 'hydroponic channel layout for leafy crops' },
+    { id: 'hanging', label: 'Hanging Column Farm', icon: 'COL', tiers: 5, slotsPerTier: 3, total: 15, shape: 'column', desc: 'vertical column pots for herbs and vines' },
 ];
 
 const ANALYSIS_GOALS = [
@@ -96,9 +101,13 @@ export function render() {
 
             <div id="bfSteps" style="flex-shrink:0;padding:12px 20px 0;"></div>
             <div id="bfContent" style="flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;"></div>
-            <div style="flex-shrink:0;padding:12px 16px 32px;background:var(--bg);border-top:1px solid var(--border);">
+                        <div style="flex-shrink:0;padding:12px 16px 32px;background:var(--bg);border-top:1px solid var(--border);display:grid;grid-template-columns:0.82fr 1.18fr;gap:10px;">
+                <button id="bfCancel"
+                    style="padding:15px;border:1.5px solid var(--border);border-radius:12px;background:var(--surface2);color:var(--text);font-size:14px;font-weight:800;cursor:pointer;">
+                    Cancel
+                </button>
                 <button id="bfNext"
-                    style="width:100%;padding:15px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:15px;font-weight:800;cursor:pointer;">
+                    style="padding:15px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:15px;font-weight:800;cursor:pointer;">
                     Continue
                 </button>
             </div>
@@ -106,6 +115,7 @@ export function render() {
     `;
 
     document.getElementById('bfBack').addEventListener('click', handleBack);
+    document.getElementById('bfCancel').addEventListener('click', handleCancel);
     document.getElementById('bfNext').addEventListener('click', handleNext);
     drawStep();
 }
@@ -113,6 +123,7 @@ export function render() {
 function drawStep() {
     renderStepDots();
     const content = document.getElementById('bfContent');
+    const cancelBtn = document.getElementById('bfCancel');
     const btn = document.getElementById('bfNext');
 
     content.innerHTML = '';
@@ -120,18 +131,20 @@ function drawStep() {
 
     if (step === 1) {
         renderStep1(content);
+        cancelBtn.textContent = 'Cancel';
         btn.textContent = 'Next: Add Photo';
     }
     if (step === 2) {
         renderStep2(content);
+        cancelBtn.textContent = 'Exit';
         btn.textContent = 'Generate 3D Preview';
     }
     if (step === 3) {
         renderStep3(content);
+        cancelBtn.textContent = 'Preview Only';
         btn.textContent = 'Create Field';
     }
 }
-
 function renderStepDots() {
     const labels = ['Plant', 'Photo', '3D'];
     document.getElementById('bfSteps').innerHTML = `
@@ -163,7 +176,8 @@ function renderStep1(content) {
                 <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">FIELD SETUP</div>
                 ${fieldInput('fieldNameInput', 'Field name', 'e.g. Balcony Mint Trial', fieldInfo.name)}
                 ${fieldInput('fieldLocationInput', 'Location / zone', 'e.g. Rack A, balcony, lab corner', fieldInfo.location)}
-                ${fieldInput('targetPlantInput', 'Plant for analysis', 'e.g. basil, lettuce, tomato', fieldInfo.targetPlant)}
+                ${fieldInput('targetPlantInput', 'Plants for analysis', 'e.g. basil, lettuce, tomato', fieldInfo.targetPlant)}
+                ${plantTargetSummary()}
             </section>
 
             <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
@@ -194,7 +208,8 @@ function renderStep1(content) {
     bindTextInput('fieldLocationInput', value => { fieldInfo.location = value; });
     bindTextInput('targetPlantInput', value => {
         fieldInfo.targetPlant = value;
-        seedTargetPlant(value);
+        syncTargetPlants(value);
+        renderTargetPlantChips();
     });
 
     document.querySelectorAll('.analysis-goal').forEach(button => {
@@ -223,6 +238,31 @@ function fieldInput(id, label, placeholder, value) {
     `;
 }
 
+function targetPlantChipsHtml() {
+    const plants = parseTargetPlants(fieldInfo.targetPlant);
+    if (!plants.length) {
+        return '<div style="font-size:11px;color:var(--muted);line-height:1.4;">Add one or many plants. Use commas, semicolons, or new lines.</div>';
+    }
+
+    return plants.map(name => `
+        <span style="display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border-radius:999px;background:var(--accent-l);color:var(--accent);font-size:11px;font-weight:800;">
+            <span>${escapeHTML(emojiForName(name))}</span>${escapeHTML(name)}
+        </span>
+    `).join('');
+}
+
+function plantTargetSummary() {
+    return `
+        <div id="targetPlantChips" style="display:flex;flex-wrap:wrap;gap:6px;margin:-2px 0 10px;">
+            ${targetPlantChipsHtml()}
+        </div>
+    `;
+}
+
+function renderTargetPlantChips() {
+    const chips = document.getElementById('targetPlantChips');
+    if (chips) chips.innerHTML = targetPlantChipsHtml();
+}
 function rackOption(rack) {
     const selected = fieldInfo.rackType === rack.id;
     return `
@@ -236,6 +276,7 @@ function rackOption(rack) {
             <span style="flex:1;">
                 <span style="display:block;font-size:13px;font-weight:800;">${rack.label}</span>
                 <span style="display:block;font-size:11px;color:var(--muted);margin-top:2px;">${rack.tiers} tiers · ${rack.total} plant slots</span>
+                <span style="display:block;font-size:10px;color:var(--sub);margin-top:3px;line-height:1.25;">${escapeHTML(rack.desc || '')}</span>
             </span>
             <span style="font-size:18px;color:${selected ? 'var(--accent)' : 'var(--muted)'};">${selected ? '✓' : '+'}</span>
         </button>
@@ -584,10 +625,10 @@ async function init3DField(rack) {
     scene.add(sun);
 
     const { tiers, slotsPerTier } = rack;
-    const slotW = 0.42;
+    const slotW = rack.shape === 'channel' ? 0.34 : rack.shape === 'wall' ? 0.36 : rack.shape === 'column' ? 0.46 : 0.42;
     const rackW = slotsPerTier * slotW + 0.1;
-    const rackD = viewMode === 'gamified' ? 0.72 : 0.58;
-    const tierH = 0.66;
+    const rackD = rack.shape === 'wall' ? 0.34 : rack.shape === 'column' ? 1.0 : viewMode === 'gamified' ? 0.72 : 0.58;
+    const tierH = rack.tiers >= 5 ? 0.54 : 0.66;
     const totalH = tiers * tierH;
 
     const groundMat = new THREE.MeshStandardMaterial({
@@ -909,11 +950,11 @@ async function handleNext() {
             showToast('warning', 'Enter a field name');
             return;
         }
-        if (!fieldInfo.targetPlant.trim()) {
-            showToast('warning', 'Enter the plant for analysis');
+        if (parseTargetPlants(fieldInfo.targetPlant).length === 0) {
+            showToast('warning', 'Enter at least one plant for analysis');
             return;
         }
-        seedTargetPlant(fieldInfo.targetPlant);
+        syncTargetPlants(fieldInfo.targetPlant);
         step = 2;
         drawStep();
         return;
@@ -925,7 +966,7 @@ async function handleNext() {
             return;
         }
         if (detectedPlants.length === 0) {
-            seedTargetPlant(fieldInfo.targetPlant || 'Plant');
+            syncTargetPlants(fieldInfo.targetPlant || 'Plant');
         }
         step = 3;
         drawStep();
@@ -939,14 +980,18 @@ async function handleNext() {
 
 function handleBack() {
     if (step === 1) {
-        dispose3D();
-        showScreen('farmlist');
+        handleCancel();
         return;
     }
     step -= 1;
     drawStep();
 }
 
+function handleCancel() {
+    dispose3D();
+    showToast('info', 'New field creation cancelled');
+    showScreen('farmlist');
+}
 async function createField() {
     const button = document.getElementById('bfNext');
     if (button) {
@@ -1010,18 +1055,36 @@ function handleManualAdd() {
     if (!input) return;
     const raw = input.value.trim();
     if (!raw) return;
-    mergePlants([plantFromName(raw, 3, 0)]);
+    mergePlants([plantFromName(raw, 3, 0, 'manual')]);
     input.value = '';
     renderPlantList();
     showToast('success', `${raw} added`);
 }
 
-function seedTargetPlant(value) {
-    const raw = value.trim();
-    if (!raw) return;
-    if (!detectedPlants.some(plant => plant.name.toLowerCase() === raw.toLowerCase())) {
-        detectedPlants.unshift(plantFromName(raw, 4, 0));
-    }
+function parseTargetPlants(value) {
+    const seen = new Set();
+    return String(value || '')
+        .split(/[,;\n]+/)
+        .map(name => name.trim())
+        .filter(Boolean)
+        .filter(name => {
+            const key = name.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+}
+
+function syncTargetPlants(value) {
+    const names = parseTargetPlants(value);
+    const targetSpecies = new Set(names.map(name => name.toLowerCase().replace(/\s+/g, '_')));
+    detectedPlants = detectedPlants.filter(plant => plant.source !== 'target' || targetSpecies.has(plant.species));
+
+    names.slice().reverse().forEach(name => {
+        const next = plantFromName(name, 4, 0, 'target');
+        const existing = detectedPlants.find(plant => plant.species === next.species);
+        if (!existing) detectedPlants.unshift(next);
+    });
 }
 
 function mergePlants(plants) {
@@ -1031,21 +1094,30 @@ function mergePlants(plants) {
         if (existing) {
             existing.slots = Math.max(existing.slots, normalized.slots);
             existing.confidence = Math.max(existing.confidence || 0, normalized.confidence || 0);
+            existing.source = normalized.source || existing.source;
         } else {
             detectedPlants.push(normalized);
         }
     });
 }
 
-function plantFromName(name, slots = 3, confidence = 0) {
-    const key = name.toLowerCase().trim();
+function plantFromName(name, slots = 3, confidence = 0, source = 'target') {
+    const key = String(name || '').toLowerCase().trim();
     return normalizePlant({
         name: key.charAt(0).toUpperCase() + key.slice(1),
-        emoji: EMOJI_MAP[key] || '🌱',
+        emoji: emojiForName(key),
         species: key.replace(/\s+/g, '_'),
         confidence,
         slots,
+        source,
     });
+}
+
+function emojiForName(name = '') {
+    const key = String(name).toLowerCase().replace(/_/g, ' ');
+    if (EMOJI_MAP[key]) return EMOJI_MAP[key];
+    const matched = Object.keys(EMOJI_MAP).find(item => key.includes(item));
+    return matched ? EMOJI_MAP[matched] : '🌱';
 }
 
 function normalizePlant(plant) {
@@ -1053,13 +1125,13 @@ function normalizePlant(plant) {
     const species = (plant.species || name).toLowerCase().trim().replace(/\s+/g, '_');
     return {
         name,
-        emoji: plant.emoji || EMOJI_MAP[species] || '🌱',
+        emoji: plant.emoji || emojiForName(species),
         species,
         confidence: Math.max(0, Math.min(1, Number(plant.confidence) || 0)),
         slots: Math.max(1, Math.min(40, Number.parseInt(plant.slots, 10) || 3)),
+        source: plant.source || 'ai',
     };
 }
-
 function currentRack() {
     return RACK_OPTIONS.find(rack => rack.id === fieldInfo.rackType) || RACK_OPTIONS[0];
 }
