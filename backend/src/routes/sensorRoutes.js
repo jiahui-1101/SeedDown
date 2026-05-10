@@ -34,4 +34,5 @@ router.post('/command-result', markCommandExecuted);
 router.get('/preferences', getPreferences);
 router.put('/preferences', updatePreferences);
 
+
 module.exports = router;

@@ -89,3 +89,18 @@ exports.updatePreferences = async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 };
+
+// --- 放在 sensorController.js 最下面 ---
+
+exports.analyzeFarmData = async (req, res) => {
+  try {
+    const { type, data } = req.body; // type 是 'profit' 或 'energy'
+    // 呼叫 service 层的 AI 分析功能
+    const insight = await sensorService.analyzeWithAI(type, data);
+    res.json({ ok: true, insight });
+  } catch (err) {
+    console.error('AI Analysis error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+};
+
