@@ -495,5 +495,35 @@
     "recipeKeywords": [
       "apple"
     ]
+  },
+  {
+    "species": "cc",
+    "commonName": "cc",
+    "emoji": "",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 70.25,
+      "lightHours": 6.5,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      ""
+    ]
   }
 ]

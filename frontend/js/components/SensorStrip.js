@@ -48,7 +48,7 @@ export const SensorStrip = {
                 AppState.notify(); 
             }
         } catch (err) {
-            console.error("Dashboard 拿不到真数据:", err);
+            console.error("error， cannot fetch latest data:", err);
         }
     },
 
