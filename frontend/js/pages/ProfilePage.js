@@ -1,6 +1,6 @@
 /* ============================================================
    MODULE: PROFILE PAGE
-   ProfilePage.js — User profile + farm/device settings
+   ProfilePage.js — User profile + interval + automation settings
    ============================================================ */
 
 import { showScreen } from '../utils/navigation.js';
@@ -58,7 +58,7 @@ function getDefaultProfile() {
 
 export function render() {
     const container = document.getElementById('screenContainer');
-    let savedFarms = loadSavedFarms();
+    const savedFarms = loadSavedFarms();
 
     if (!AppState.currentFarmId && savedFarms.length > 0) {
         AppState.currentFarmId = savedFarms[0].id;
@@ -73,7 +73,7 @@ export function render() {
         <div class="screen active" id="profileScreen">
             <div class="topbar">
                 <button id="profileBackBtn" style="background:transparent;border:none;font-size:20px;cursor:pointer;">←</button>
-                <div style="font-weight:700;">${isCommercial ? 'Commercial Controls' : 'Profile'}</div>
+                <div style="font-weight:700;">Profile</div>
                 <div style="flex:1;"></div>
                 <button id="profileSaveBtn" style="background:var(--accent);color:white;border:none;padding:6px 14px;border-radius:10px;font-size:0.75rem;font-weight:700;cursor:pointer;">Save</button>
             </div>
@@ -86,12 +86,12 @@ export function render() {
             <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;">
                 ${farmSelectorSection(savedFarms)}
                 ${profileCard(profile, isCommercial)}
-                ${isCommercial ? farmIdentitySection(profile) : ''}
-                ${sensorSettingsSection(profile, isCommercial)}
-                ${isCommercial ? automationSection(profile) : ''}
+                ${isCommercial ? farmIdentitySection(profile) : hiddenIdentityFields(profile)}
+                ${intervalSection(profile)}
+                ${automationSection(profile)}
 
                 <button id="profileSyncBtn" style="width:100%;padding:14px;border:none;border-radius:var(--radius);background:var(--accent-l);color:var(--accent);flex-shrink:0;font-weight:700;font-size:0.9rem;cursor:pointer;transition:var(--transition);display:flex;align-items:center;justify-content:center;gap:8px;">
-                    <span id="syncBtnIcon">☁️</span> ${isCommercial ? 'Sync Controls to Device' : 'Sync Interval to Device'}
+                    <span id="syncBtnIcon">☁️</span> Sync Profile Settings to Device
                 </button>
 
                 <div style="background:rgba(220,38,38,0.04);border:1px solid rgba(220,38,38,0.15);border-radius:var(--radius);padding:18px;flex-shrink:0;">
@@ -104,15 +104,10 @@ export function render() {
         </div>
     `;
 
-    _bindEvents(savedFarms, isCommercial);
-
-    if (AppState.profileFocus === 'controls') {
-        AppState.profileFocus = null;
-        setTimeout(() => document.getElementById('sensorSettingsCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120);
-    }
+    bindEvents(savedFarms);
 }
 
-function _bindEvents(savedFarms, isCommercial) {
+function bindEvents(savedFarms) {
     const selector = document.getElementById('farmSelector');
     if (selector) {
         selector.addEventListener('change', (e) => {
@@ -134,15 +129,6 @@ function _bindEvents(savedFarms, isCommercial) {
             setInputValue('profileDeviceId', farmProfile.deviceId);
             setInputValue('profileInterval', farmProfile.sensorIntervalMinutes);
             setText('intervalVal', `${farmProfile.sensorIntervalMinutes} min`);
-            setInputValue('profileSoil', farmProfile.soilDryThreshold);
-            setText('soilVal', farmProfile.soilDryThreshold);
-            setInputValue('profilePhMin', farmProfile.phMin);
-            setInputValue('profilePhMax', farmProfile.phMax);
-            setInputValue('profileLight', farmProfile.lightThreshold);
-            setText('lightVal', farmProfile.lightThreshold);
-            setInputValue('profileWaterDur', farmProfile.wateringDuration);
-            setText('waterDurVal', `${farmProfile.wateringDuration}s`);
-
             _setToggle('toggleAutoWater', farmProfile.autoWater);
             _setToggle('toggleNotifications', farmProfile.notifications);
             _setToggle('toggleEcoMode', farmProfile.ecoMode);
@@ -167,24 +153,21 @@ function _bindEvents(savedFarms, isCommercial) {
     });
 
     _slider('profileInterval', 'intervalVal', v => `${v} min`);
-    _slider('profileSoil', 'soilVal', v => v);
-    _slider('profileLight', 'lightVal', v => v);
-    _slider('profileWaterDur', 'waterDurVal', v => `${v}s`);
 
     document.querySelectorAll('.auto-toggle').forEach(cb => {
         cb.addEventListener('change', () => _setToggle(cb.id, cb.checked));
     });
 
-    _on('profileSaveBtn', 'click', () => _doSave(isCommercial));
-    _on('profileSyncBtn', 'click', () => _doSync(isCommercial));
+    _on('profileSaveBtn', 'click', _doSave);
+    _on('profileSyncBtn', 'click', _doSync);
     _on('profileLogoutBtn', 'click', () => {
         showToast('info', '👋 Logged out. See you next harvest!');
         setTimeout(() => showScreen('login'), 800);
     });
 }
 
-function _doSave(isCommercial) {
-    const profile = _collectForm(isCommercial);
+function _doSave() {
+    const profile = collectProfileForm();
     const currentId = AppState.currentFarmId;
     const uid = AppState.uid;
 
@@ -207,12 +190,12 @@ function _doSave(isCommercial) {
         console.error('Error updating farm list names:', e);
     }
 
-    showToast('success', isCommercial ? '✅ Commercial controls saved!' : '✅ Interval saved!');
+    showToast('success', '✅ Profile settings saved!');
     setTimeout(() => showScreen(AppState.profileFrom || 'home'), 400);
 }
 
-async function _doSync(isCommercial) {
-    const profile = _collectForm(isCommercial);
+async function _doSync() {
+    const profile = collectProfileForm();
     saveProfile(profile, AppState.currentFarmId);
 
     const icon = document.getElementById('syncBtnIcon');
@@ -220,23 +203,13 @@ async function _doSync(isCommercial) {
     btn.disabled = true;
     icon.textContent = '⏳';
 
-    const payload = isCommercial
-        ? {
-            deviceId: profile.deviceId || 'farm_001',
-            sensorIntervalSeconds: profile.sensorIntervalMinutes * 60,
-            soilDryThreshold: profile.soilDryThreshold,
-            phMin: profile.phMin,
-            phMax: profile.phMax,
-            darkThreshold: profile.lightThreshold,
-            wateringDurationSeconds: profile.wateringDuration,
-            autoWater: profile.autoWater,
-            notifications: profile.notifications,
-            ecoMode: profile.ecoMode,
-        }
-        : {
-            deviceId: profile.deviceId || 'farm_001',
-            sensorIntervalSeconds: profile.sensorIntervalMinutes * 60,
-        };
+    const payload = {
+        deviceId: profile.deviceId || 'farm_001',
+        sensorIntervalSeconds: profile.sensorIntervalMinutes * 60,
+        autoWater: profile.autoWater,
+        notifications: profile.notifications,
+        ecoMode: profile.ecoMode,
+    };
 
     try {
         const res = await fetch(`${API_BASE}/api/sensors/preferences`, {
@@ -247,7 +220,7 @@ async function _doSync(isCommercial) {
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         icon.textContent = '✅';
-        showToast('success', isCommercial ? '☁️ Controls synced to device!' : '☁️ Interval synced to device!');
+        showToast('success', '☁️ Profile settings synced to device!');
     } catch (err) {
         icon.textContent = '⚠️';
         showToast('error', `Sync failed: ${err.message}. Saved locally.`);
@@ -260,26 +233,15 @@ async function _doSync(isCommercial) {
     }
 }
 
-function _collectForm(isCommercial) {
+function collectProfileForm() {
     const existing = { ...getDefaultProfile(), ...(loadProfile(AppState.currentFarmId) || {}) };
-    const base = {
+    return {
         ...existing,
         name: _val('profileName') || existing.name,
         email: _val('profileEmail') || existing.email,
         farmName: _val('profileFarmName') || AppState.farmName || existing.farmName,
         deviceId: _val('profileDeviceId') || existing.deviceId || 'farm_001',
         sensorIntervalMinutes: parseInt(_val('profileInterval'), 10) || existing.sensorIntervalMinutes || 60,
-    };
-
-    if (!isCommercial) return base;
-
-    return {
-        ...base,
-        soilDryThreshold: parseInt(_val('profileSoil'), 10) || existing.soilDryThreshold || 1800,
-        phMin: parseFloat(_val('profilePhMin')) || existing.phMin || 5.5,
-        phMax: parseFloat(_val('profilePhMax')) || existing.phMax || 6.5,
-        lightThreshold: parseInt(_val('profileLight'), 10) || existing.lightThreshold || 1500,
-        wateringDuration: parseInt(_val('profileWaterDur'), 10) || existing.wateringDuration || 10,
         autoWater: document.getElementById('toggleAutoWater')?.checked ?? existing.autoWater ?? true,
         notifications: document.getElementById('toggleNotifications')?.checked ?? existing.notifications ?? true,
         ecoMode: document.getElementById('toggleEcoMode')?.checked ?? existing.ecoMode ?? false,
@@ -314,64 +276,30 @@ function farmIdentitySection(profile) {
     return `
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
             <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">🌿 FARM IDENTITY</div>
-            ${_settingInput('Farm Name', 'profileFarmName', profile.farmName, 'text', 'e.g. Rack Alpha - Level 3')}
-            ${_settingInput('Device ID', 'profileDeviceId', profile.deviceId, 'text', 'e.g. farm_001')}
+            ${settingInput('Farm Name', 'profileFarmName', profile.farmName, 'text', 'e.g. Rack Alpha - Level 3')}
+            ${settingInput('Device ID', 'profileDeviceId', profile.deviceId, 'text', 'e.g. farm_001')}
         </div>`;
 }
 
-function sensorSettingsSection(profile, isCommercial) {
+function hiddenIdentityFields(profile) {
     return `
-        <div id="sensorSettingsCard" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
-            <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">${isCommercial ? '🎛️ SENSOR THRESHOLDS' : '📡 SENSOR INTERVAL'}</div>
-            ${intervalControl(profile)}
-            ${isCommercial ? thresholdControls(profile) : ''}
-        </div>`;
+        <input type="hidden" id="profileFarmName" value="${_escAttr(profile.farmName)}">
+        <input type="hidden" id="profileDeviceId" value="${_escAttr(profile.deviceId)}">
+    `;
 }
 
-function intervalControl(profile) {
+function intervalSection(profile) {
     return `
-        <div style="margin-bottom:16px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <label style="font-size:0.8rem;font-weight:600;color:var(--text);">📡 Sensor Interval</label>
-                <span id="intervalVal" style="font-size:0.8rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${profile.sensorIntervalMinutes} min</span>
+        <div id="profileIntervalCard" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
+            <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">📡 SENSOR INTERVAL</div>
+            <div style="margin-bottom:4px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <label style="font-size:0.8rem;font-weight:600;color:var(--text);">ESP32 report interval</label>
+                    <span id="intervalVal" style="font-size:0.8rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${profile.sensorIntervalMinutes} min</span>
+                </div>
+                <input type="range" id="profileInterval" min="5" max="120" step="5" value="${profile.sensorIntervalMinutes}" style="width:100%;accent-color:var(--accent);">
+                <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--muted);margin-top:2px;"><span>5 min</span><span>120 min</span></div>
             </div>
-            <input type="range" id="profileInterval" min="5" max="120" step="5" value="${profile.sensorIntervalMinutes}" style="width:100%;accent-color:var(--accent);">
-            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--muted);margin-top:2px;"><span>5 min</span><span>120 min</span></div>
-        </div>`;
-}
-
-function thresholdControls(profile) {
-    return `
-        <div style="margin-bottom:16px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <label style="font-size:0.8rem;font-weight:600;color:var(--text);">💧 Soil Dry Threshold (raw)</label>
-                <span id="soilVal" style="font-size:0.8rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${profile.soilDryThreshold}</span>
-            </div>
-            <input type="range" id="profileSoil" min="500" max="3000" step="100" value="${profile.soilDryThreshold}" style="width:100%;accent-color:var(--accent);">
-            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--muted);margin-top:2px;"><span>Dry (500)</span><span>Wet (3000)</span></div>
-        </div>
-        <div style="margin-bottom:16px;">
-            <label style="font-size:0.8rem;font-weight:600;color:var(--text);">🧪 pH Range</label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">
-                <div><div style="font-size:0.65rem;color:var(--muted);margin-bottom:4px;">Min pH</div><input type="number" id="profilePhMin" value="${profile.phMin}" min="4.0" max="7.0" step="0.1" style="${numberInputStyle()}"></div>
-                <div><div style="font-size:0.65rem;color:var(--muted);margin-bottom:4px;">Max pH</div><input type="number" id="profilePhMax" value="${profile.phMax}" min="4.0" max="8.0" step="0.1" style="${numberInputStyle()}"></div>
-            </div>
-        </div>
-        <div style="margin-bottom:16px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <label style="font-size:0.8rem;font-weight:600;color:var(--text);">☀️ Light Threshold (raw)</label>
-                <span id="lightVal" style="font-size:0.8rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${profile.lightThreshold}</span>
-            </div>
-            <input type="range" id="profileLight" min="200" max="3000" step="100" value="${profile.lightThreshold}" style="width:100%;accent-color:var(--accent);">
-            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--muted);margin-top:2px;"><span>Dark (200)</span><span>Bright (3000)</span></div>
-        </div>
-        <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                <label style="font-size:0.8rem;font-weight:600;color:var(--text);">🚿 Watering Duration</label>
-                <span id="waterDurVal" style="font-size:0.8rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${profile.wateringDuration}s</span>
-            </div>
-            <input type="range" id="profileWaterDur" min="3" max="60" step="1" value="${profile.wateringDuration}" style="width:100%;accent-color:var(--accent);">
-            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--muted);margin-top:2px;"><span>3 sec</span><span>60 sec</span></div>
         </div>`;
 }
 
@@ -379,13 +307,13 @@ function automationSection(profile) {
     return `
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
             <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">🤖 AUTOMATION</div>
-            ${_toggle('Auto Watering', 'toggleAutoWater', '💧 Automatically trigger pump when soil is dry', profile.autoWater)}
-            ${_toggle('AI Notifications', 'toggleNotifications', '🔔 Get alerts for anomalies and harvest reminders', profile.notifications)}
-            ${_toggle('Eco Mode', 'toggleEcoMode', '🌿 Prioritise energy saving over performance', profile.ecoMode)}
+            ${toggle('Auto Watering', 'toggleAutoWater', 'Automatically allow pump decisions from IoT thresholds', profile.autoWater)}
+            ${toggle('AI Notifications', 'toggleNotifications', 'Get alerts for anomalies and harvest reminders', profile.notifications)}
+            ${toggle('Eco Mode', 'toggleEcoMode', 'Prioritise energy saving over performance', profile.ecoMode)}
         </div>`;
 }
 
-function _settingInput(label, id, value, type = 'text', placeholder = '') {
+function settingInput(label, id, value, type = 'text', placeholder = '') {
     return `
         <div style="margin-bottom:14px;">
             <label style="font-size:0.75rem;font-weight:600;color:var(--sub);display:block;margin-bottom:6px;">${label}</label>
@@ -393,7 +321,7 @@ function _settingInput(label, id, value, type = 'text', placeholder = '') {
         </div>`;
 }
 
-function _toggle(label, id, desc, checked) {
+function toggle(label, id, desc, checked) {
     return `
         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
             <div><div style="font-size:0.85rem;font-weight:600;color:var(--text);">${label}</div><div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">${desc}</div></div>
@@ -403,10 +331,6 @@ function _toggle(label, id, desc, checked) {
                 <span style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:transform 0.2s;transform:${checked ? 'translateX(20px)' : 'none'};" id="${id}_thumb"></span>
             </label>
         </div>`;
-}
-
-function numberInputStyle() {
-    return 'width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);font-family:\'DM Mono\',monospace;font-size:0.85rem;color:var(--text);outline:none;';
 }
 
 function loadSavedFarms() {
@@ -455,5 +379,3 @@ function _setToggle(id, checked) {
     track.style.background = checked ? 'var(--accent)' : 'var(--border)';
     thumb.style.transform = checked ? 'translateX(20px)' : 'none';
 }
-
-

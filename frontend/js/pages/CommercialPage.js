@@ -128,9 +128,7 @@ function bindEvents() {
             if (feature === 'whatif') {
                 showScreen('whatif-pro');
             } else if (feature === 'control') {
-                AppState.profileFrom = 'dash-c';
-                AppState.profileFocus = 'controls';
-                showScreen('profile');
+                showScreen('control');
             } else {
                 showScreen('feature', { feature, from: 'dash-c' });
             }
@@ -289,4 +287,5 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
 
