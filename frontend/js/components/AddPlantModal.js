@@ -31,6 +31,8 @@ const BASE_CROPS = [
 
 let selectedCrop = null;
 let selectedSlotIndex = null;
+let activeRack = null;
+let activeSlotPlants = [];
 let isLoadingSpecies = false;
 
 export function openAddPlantModal() {
@@ -40,14 +42,16 @@ export function openAddPlantModal() {
   const farm = getCurrentFarm();
   const rack = resolveRack(farm);
   const slotPlants = resolveSlotPlants(farm, rack);
+  activeRack = rack;
+  activeSlotPlants = slotPlants;
 
   modalContainer.innerHTML = `
     <div class="modal-overlay" id="addPlantModalOverlay">
       <div class="modal-sheet">
         <div style="padding:16px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <span style="font-weight:700;">🌱 Add New Plant</span>
-            <button id="closeAddPlantModal" style="background:none;border:none;font-size:20px;cursor:pointer;">✕</button>
+            <span style="font-weight:700;">🌱 Manage Plants</span>
+            <button id="closeAddPlantModal" style="background:none;border:none;font-size:20px;cursor:pointer;" aria-label="Close plant manager">✕</button>
           </div>
 
           <div style="margin-bottom:12px;">
@@ -68,13 +72,17 @@ export function openAddPlantModal() {
           <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:6px;gap:8px;">
             <div>
               <div style="font-size:0.7rem;color:var(--text-secondary,#666);font-weight:700;">SELECT POSITION</div>
-              <div style="font-size:11px;color:var(--text-secondary,#666);">${rack.label} · tap any slot to plant or replace</div>
+              <div style="font-size:11px;color:var(--text-secondary,#666);">${rack.label} · select a slot to add, change, or remove</div>
             </div>
             <div id="positionStatus" style="font-size:11px;color:var(--accent,#639922);font-weight:700;"></div>
           </div>
-          <div id="slotGrid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
+          <div id="slotGrid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+          <div id="slotActionPanel" style="border:1px solid var(--border-color,#e7e7e7);border-radius:12px;padding:10px;margin-bottom:12px;background:var(--bg-secondary,#f7f7f7);font-size:12px;color:var(--text-secondary,#666);"></div>
 
-          <button id="confirmPlantBtn" class="btn-primary" style="width:100%;">Plant Now →</button>
+          <div style="display:grid;grid-template-columns:0.9fr 1.1fr;gap:8px;">
+            <button id="removePlantBtn" style="width:100%;border:1px solid #efb2b2;background:#fff5f5;color:#c83a3a;border-radius:10px;padding:11px 8px;font-weight:800;cursor:pointer;">Remove</button>
+            <button id="confirmPlantBtn" class="btn-primary" style="width:100%;">Plant Now →</button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -84,6 +92,8 @@ export function openAddPlantModal() {
 
   renderCropGrid(BASE_CROPS);
   renderSlotGrid(rack, slotPlants);
+  renderSlotActionPanel(rack, slotPlants);
+  updateActionButtons(rack, slotPlants);
 
   document.getElementById('closeAddPlantModal').addEventListener('click', closeModal);
   overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
@@ -93,16 +103,28 @@ export function openAddPlantModal() {
     if (e.key === 'Enter') handleSpeciesSearch();
   });
 
+  document.getElementById('removePlantBtn').addEventListener('click', () => {
+    if (selectedSlotIndex === null) { showToast('warning', 'Select a planted slot first'); return; }
+    const existingPlant = slotPlants[selectedSlotIndex];
+    if (!existingPlant) { showToast('warning', 'That slot is already empty'); return; }
+
+    removePlantFromCurrentFarm(selectedSlotIndex, rack);
+    showToast('success', `${existingPlant.emoji} ${existingPlant.name} removed from ${positionLabel(selectedSlotIndex, rack)}`);
+    closeModal();
+    refreshHomeFarmCanvas();
+  });
+
   document.getElementById('confirmPlantBtn').addEventListener('click', () => {
     if (!selectedCrop) { showToast('warning', 'Select a crop first'); return; }
     if (selectedSlotIndex === null) { showToast('warning', 'Select a rack position'); return; }
 
+    const existingPlant = slotPlants[selectedSlotIndex];
     syncLegacyTile(selectedCrop);
     persistPlantToCurrentFarm(selectedCrop, selectedSlotIndex, rack);
-    showToast('success', `${selectedCrop.emoji} ${selectedCrop.name} planted at ${positionLabel(selectedSlotIndex, rack)}`);
+    const action = existingPlant ? 'changed to' : 'planted at';
+    showToast('success', `${selectedCrop.emoji} ${selectedCrop.name} ${action} ${positionLabel(selectedSlotIndex, rack)}`);
     closeModal();
-    AppState.notify();
-    if (document.getElementById('farmCanvas')) FarmCanvas.init('farmCanvas');
+    refreshHomeFarmCanvas();
   });
 }
 
@@ -191,11 +213,29 @@ function persistPlantToCurrentFarm(crop, slotIndex, rack) {
   plants.push(plant);
   plants.sort((a, b) => Number(a.slotIndex ?? 9999) - Number(b.slotIndex ?? 9999));
 
+  saveUpdatedFarm(current, plants, index, saved, crop.name);
+}
+
+function removePlantFromCurrentFarm(slotIndex, rack) {
+  const saved = loadSavedFarms();
+  const farmId = AppState.currentFarmId || AppState.currentFarm?.id;
+  const index = saved.findIndex(farm => farm.id === farmId);
+  const current = index >= 0 ? saved[index] : AppState.currentFarm;
+  if (!current) return;
+
+  const plants = expandPlantsToPositions(current, rack)
+    .filter(item => Number(item.slotIndex) !== slotIndex)
+    .sort((a, b) => Number(a.slotIndex ?? 9999) - Number(b.slotIndex ?? 9999));
+
+  saveUpdatedFarm(current, plants, index, saved, plants[0]?.name || current.targetPlant || 'Plant');
+}
+
+function saveUpdatedFarm(current, plants, index, saved, fallbackTargetPlant) {
   const updated = {
     ...current,
     plants,
     plantSlots: plants.length,
-    targetPlant: current.targetPlant || crop.name,
+    targetPlant: plants[0]?.name || fallbackTargetPlant,
   };
 
   if (index >= 0) {
@@ -237,6 +277,7 @@ function renderSlotGrid(rack, slotPlants) {
       const selected = selectedSlotIndex === slotIndex;
       return `
         <button class="slot-option" data-slot-index="${slotIndex}"
+          aria-label="${plant ? `Change or remove ${escapeHTML(plant.name)}` : `Plant slot ${posIndex + 1}`}"
           style="min-height:54px;border-radius:12px;border:2px solid ${selected ? 'var(--accent,#639922)' : 'var(--border-color,#ddd)'};background:${selected ? 'var(--accent-l,#eef8e7)' : 'var(--surface,#fff)'};cursor:pointer;padding:6px;text-align:center;">
           <div style="font-size:20px;line-height:1;">${plant?.emoji || '◻️'}</div>
           <div style="font-size:10px;font-weight:800;margin-top:4px;color:${plant ? 'var(--text,#111)' : 'var(--text-secondary,#666)'};">${plant ? escapeHTML(plant.name) : `Slot ${posIndex + 1}`}</div>
@@ -253,10 +294,55 @@ function renderSlotGrid(rack, slotPlants) {
   grid.querySelectorAll('.slot-option').forEach(button => {
     button.addEventListener('click', () => {
       selectedSlotIndex = Number(button.dataset.slotIndex);
-      document.getElementById('positionStatus').textContent = positionLabel(selectedSlotIndex, rack);
+      const selectedPlant = slotPlants[selectedSlotIndex];
+      document.getElementById('positionStatus').textContent = selectedPlant
+        ? `${positionLabel(selectedSlotIndex, rack)} · ${selectedPlant.name}`
+        : positionLabel(selectedSlotIndex, rack);
       renderSlotGrid(rack, slotPlants);
+      renderSlotActionPanel(rack, slotPlants);
+      updateActionButtons(rack, slotPlants);
     });
   });
+}
+
+function renderSlotActionPanel(rack, slotPlants) {
+  const panel = document.getElementById('slotActionPanel');
+  if (!panel) return;
+
+  if (selectedSlotIndex === null) {
+    panel.innerHTML = 'Choose a slot first. Empty slots can be planted; occupied slots can be changed or removed.';
+    return;
+  }
+
+  const existingPlant = slotPlants[selectedSlotIndex];
+  const cropText = selectedCrop ? `${selectedCrop.emoji} ${selectedCrop.name}` : 'a crop';
+  if (existingPlant) {
+    panel.innerHTML = `
+      <div style="font-weight:800;color:var(--text,#111);margin-bottom:4px;">${positionLabel(selectedSlotIndex, rack)}</div>
+      <div>Current: <strong>${existingPlant.emoji} ${escapeHTML(existingPlant.name)}</strong></div>
+      <div style="margin-top:3px;">Select ${escapeHTML(cropText)} and press Change, or remove this plant.</div>`;
+    return;
+  }
+
+  panel.innerHTML = `
+    <div style="font-weight:800;color:var(--text,#111);margin-bottom:4px;">${positionLabel(selectedSlotIndex, rack)}</div>
+    <div>Empty slot. Select ${escapeHTML(cropText)} and press Plant Now.</div>`;
+}
+
+function updateActionButtons(rack, slotPlants) {
+  const confirmBtn = document.getElementById('confirmPlantBtn');
+  const removeBtn = document.getElementById('removePlantBtn');
+  if (!confirmBtn || !removeBtn) return;
+
+  const existingPlant = selectedSlotIndex === null ? null : slotPlants[selectedSlotIndex];
+  confirmBtn.textContent = existingPlant ? 'Change Plant →' : 'Plant Now →';
+  confirmBtn.disabled = selectedSlotIndex === null || !selectedCrop;
+  confirmBtn.style.opacity = confirmBtn.disabled ? '0.55' : '1';
+  confirmBtn.style.cursor = confirmBtn.disabled ? 'not-allowed' : 'pointer';
+
+  removeBtn.disabled = !existingPlant;
+  removeBtn.style.opacity = existingPlant ? '1' : '0.45';
+  removeBtn.style.cursor = existingPlant ? 'pointer' : 'not-allowed';
 }
 
 function highlightCrop(crop) {
@@ -266,6 +352,10 @@ function highlightCrop(crop) {
       ? '2px solid var(--accent,#639922)'
       : '2px solid transparent';
   });
+  if (activeRack) {
+    renderSlotActionPanel(activeRack, activeSlotPlants);
+    updateActionButtons(activeRack, activeSlotPlants);
+  }
 }
 
 function syncLegacyTile(crop) {
@@ -277,6 +367,11 @@ function syncLegacyTile(crop) {
   emptyTile.growth = 0;
   emptyTile.days = crop.days;
   emptyTile.species = crop.species;
+}
+
+function refreshHomeFarmCanvas() {
+  AppState.notify();
+  if (document.getElementById('farmCanvas')) FarmCanvas.init('farmCanvas');
 }
 
 function getCurrentFarm() {
@@ -426,6 +521,8 @@ function escapeHTML(value) {
 function closeModal() {
   selectedCrop = null;
   selectedSlotIndex = null;
+  activeRack = null;
+  activeSlotPlants = [];
   const overlay = document.getElementById('addPlantModalOverlay');
   if (overlay) overlay.remove();
 }

@@ -1,4 +1,4 @@
-import{s as i}from"./index-DEjNUr0y.js";import"https://esm.sh/three@0.160.0";function n(e={}){return`
+import{s as i}from"./index-CdCCAZ2S.js";import"https://esm.sh/three@0.160.0";function n(e={}){return`
         <div style="background:#f8f9f5; min-height:100vh; font-family: sans-serif; color:#1a3c34;">
             <div style="display:flex; align-items:center; padding:16px 20px; background:white; border-bottom:1px solid #edf2f0;">
                 <button id="backBtn" style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#064E3B;">←</button>
