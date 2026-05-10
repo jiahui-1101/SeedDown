@@ -160,10 +160,10 @@ async function _loadData() {
     // Attempt to fetch real backend data
     const deviceId = AppState.currentFarmId || 'farm_001';
     const [historyRes, latestRes] = await Promise.all([
-      fetch(`${BASE_URL}/api/sensors/history?deviceId=${deviceId}&limit=24`), 
-      fetch(`${BASE_URL}/api/sensors/latest?deviceId=${deviceId}`)  ,          
-     // fetch(`${BASE_URL}/api/sensors/history?deviceId=farm_001&limit=24`),
-      //fetch(`${BASE_URL}/api/sensors/latest?deviceId=farm_001`)
+      //fetch(`${BASE_URL}/api/sensors/history?deviceId=${deviceId}&limit=24`), 
+      //fetch(`${BASE_URL}/api/sensors/latest?deviceId=${deviceId}`)  ,          
+     fetch(`${BASE_URL}/api/sensors/history?deviceId=farm_001&limit=24`),
+     fetch(`${BASE_URL}/api/sensors/latest?deviceId=farm_001`)
     ]);
 
     if (!historyRes.ok || !latestRes.ok) throw new Error('API error');
