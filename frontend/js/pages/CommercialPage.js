@@ -1,110 +1,134 @@
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
+import { FarmCanvas } from '../components/FarmCanvas.js';
+import { openAddPlantModal } from '../components/AddPlantModal.js';
+
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
+
+const RACK_OPTIONS = {
+    '2-tier': { label: '2-Tier Starter Rack', tiers: 2, slotsPerTier: 3, total: 6 },
+    '3-tier': { label: '3-Tier Vertical Rack', tiers: 3, slotsPerTier: 3, total: 9 },
+    '4-tier': { label: '4-Tier Grow Shelf', tiers: 4, slotsPerTier: 4, total: 16 },
+    '5-tier': { label: '5-Tier Tower Rack', tiers: 5, slotsPerTier: 4, total: 20 },
+    wall: { label: 'Wall Panel Grid', tiers: 4, slotsPerTier: 5, total: 20 },
+    'a-frame': { label: 'A-Frame Pyramid', tiers: 4, slotsPerTier: 4, total: 16 },
+    'nft-channel': { label: 'NFT Channel Rows', tiers: 3, slotsPerTier: 6, total: 18 },
+    hanging: { label: 'Hanging Column Farm', tiers: 5, slotsPerTier: 3, total: 15 },
+};
 
 export function render() {
     const container = document.getElementById('screenContainer');
-    
+    const farm = getCurrentFarm();
+    const rack = resolveRack(farm);
+    const plantTotal = plantCount(farm);
+    const occupancy = rack.total ? Math.round((plantTotal / rack.total) * 100) : 0;
+
     container.innerHTML = `
-        <div class="screen active" id="commercialScreen" style="background:#050810; display:flex; flex-direction:column; height:100vh; color:#E8F0FF; position:relative;">
-            
-            <div class="topbar" style="background:#0D1221; color:#E8F0FF; padding:16px; border-bottom:1px solid #1E293B; display:flex; align-items:center;">
-                <button id="comBackBtn" style="background:transparent; border:none; color:#60A5FA; cursor:pointer;">← Back</button>
-                <div class="topbar-brand" style="margin-left:12px; flex:1;">
-                    <span style="background:#1E3A5F; padding:4px 8px; border-radius:8px;">⚙</span>
-                    <span style="margin-left:8px; font-weight:bold;">NexusGrow PRO</span>
+        <div class="screen active" id="commercialScreen" style="background:var(--bg); display:flex; flex-direction:column; height:100vh; color:var(--text); position:relative;">
+            <div class="topbar">
+                <button id="comBackBtn" class="back-btn" style="background:transparent;border:none;font-size:20px;color:var(--text);cursor:pointer;">←</button>
+                <div class="topbar-brand" style="flex:1;min-width:0;">
+                    <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(farm?.name || AppState.farmName || 'Commercial Farm')}</div>
+                    <div style="font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Commercial control</div>
                 </div>
-                <div class="live-pill" style="background:rgba(239,68,68,0.2); color:#EF4444; padding:4px 10px; border-radius:12px; font-size:0.7rem;">🔴 Live</div>
+                <button id="addPlantTopBtn" class="topbar-btn" style="border:1px solid var(--accent);background:var(--accent);color:white;border-radius:10px;padding:8px 10px;cursor:pointer;">+ Plant</button>
             </div>
 
-            <div style="flex:1; overflow-y:auto; padding:16px;">
-                
-                <div id="pro-3d-rack" style="background: linear-gradient(180deg, #161B2D 0%, #0D1221 100%); border-radius:16px; height:200px; margin-bottom:16px; border:1px solid #1E293B; display:flex; justify-content:center; align-items:center; position:relative; overflow:hidden;">
-                    <div style="color:#4A6A9A; font-size:0.8rem;">[ 3D Rack Visualizer (Three.js) ]</div>
-                    <button style="position:absolute; bottom:12px; right:12px; background:#4F46E5; color:white; border:none; width:36px; height:36px; border-radius:50%; font-size:1.2rem; cursor:pointer; box-shadow:0 4px 10px rgba(79,70,229,0.4);">+</button>
-                </div>
-
-                <div style="background:rgba(56,189,248,0.05); border:1px solid rgba(56,189,248,0.2); border-radius:16px; padding:12px; margin-bottom:16px; display:flex; align-items:center; gap:12px;">
-                    <div style="font-size:1.5rem;">✨</div>
-                    <div style="flex:1;">
-                        <div style="color:#38BDF8; font-size:0.6rem; font-weight:bold; letter-spacing:1px;">AI FARM ADVISOR</div>
-                        <div id="ai-overview-text" style="font-size:0.75rem; color:#E8F0FF; opacity:0.8;">Syncing with farm Brain...</div>
+            <div style="flex:1; overflow-y:auto; padding-bottom:12px;">
+                <div style="margin:12px 16px 10px 16px; position:relative;">
+                    <canvas id="commercialFarmCanvas" style="width:100%; height:300px; border-radius:24px; background:#EAF4FF; display:block;"></canvas>
+                    <button id="fabPlant" title="Add plant" aria-label="Add plant" style="position:absolute; bottom:12px; right:12px; background:var(--accent); border:none; width:48px; height:48px; border-radius:16px; color:white; font-size:26px;cursor:pointer;box-shadow:var(--shadow-sm);">+</button>
+                    <div style="position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.88);border:1px solid var(--border);border-radius:12px;padding:8px 10px;box-shadow:var(--shadow-sm);">
+                        <div style="font-size:10px;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.06em;">${escapeHTML(rack.label)}</div>
+                        <div style="font-size:13px;font-weight:900;color:var(--text);">${plantTotal}/${rack.total} plants · ${occupancy}% filled</div>
                     </div>
                 </div>
 
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-                    <div id="profit-card" style="background:#161B2D; border-radius:16px; padding:16px; border:1px solid #60A5FA; cursor:pointer; box-shadow: 0 0 15px rgba(96,165,250,0.1);">
-                        <div style="color:#60A5FA; font-size:0.7rem; font-weight:bold; display:flex; justify-content:space-between;">
-                            EST. PROFIT <span>🔍 Trend</span>
-                        </div>
-                        <div id="pro-profit" style="font-size:1.8rem; color:#00FF88; font-weight:bold; margin-top:4px;">RM --</div>
-                    </div>
-                    <div id="energy-card" style="background:#161B2D; border-radius:16px; padding:16px; border:1px solid #1E293B; cursor:pointer;">
-                        <div style="color:#4A6A9A; font-size:0.7rem; font-weight:bold; display:flex; justify-content:space-between;">
-                            ENERGY COST <span>🔍 Detail</span>
-                        </div>
-                        <div id="pro-energy" style="font-size:1.8rem; color:#FFD966; font-weight:bold; margin-top:4px;">-- kWh</div>
+                <div style="margin:0 16px 12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:14px;box-shadow:var(--shadow-sm);display:flex;gap:12px;align-items:center;">
+                    <div style="width:42px;height:42px;border-radius:14px;background:var(--accent-l);display:flex;align-items:center;justify-content:center;font-size:24px;">🧑‍🌾</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:11px;color:var(--accent);font-weight:900;text-transform:uppercase;letter-spacing:.06em;">AI Farm Advisor</div>
+                        <div id="ai-overview-text" style="font-size:13px;color:var(--sub);line-height:1.35;">Syncing commercial farm data...</div>
                     </div>
                 </div>
 
-                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:16px;">
-                    <div style="background:#161B2D; border-radius:12px; padding:12px; text-align:center; border:1px solid #1E293B;"><div style="font-size:0.6rem; color:#4A6A9A;">TEMP</div><div id="pro-temp" style="color:#EF4444; font-weight:bold; font-size:1.2rem; margin-top:4px;">--</div></div>
-                    <div style="background:#161B2D; border-radius:12px; padding:12px; text-align:center; border:1px solid #1E293B;"><div style="font-size:0.6rem; color:#4A6A9A;">HUMID</div><div id="pro-humid" style="color:#60A5FA; font-weight:bold; font-size:1.2rem; margin-top:4px;">--</div></div>
-                    <div style="background:#161B2D; border-radius:12px; padding:12px; text-align:center; border:1px solid #1E293B;"><div style="font-size:0.6rem; color:#4A6A9A;">LIGHT</div><div id="pro-light" style="color:#FBBF24; font-weight:bold; font-size:1.2rem; margin-top:4px;">--</div></div>
-                    <div style="background:#161B2D; border-radius:12px; padding:12px; text-align:center; border:1px solid #1E293B;"><div style="font-size:0.6rem; color:#4A6A9A;">PH</div><div id="pro-ph" style="color:#34D399; font-weight:bold; font-size:1.2rem; margin-top:4px;">--</div></div>
-                    <div style="background:#161B2D; border-radius:12px; padding:12px; text-align:center; border:1px solid #1E293B;"><div style="font-size:0.6rem; color:#4A6A9A;">WATER</div><div id="pro-water" style="color:#818CF8; font-weight:bold; font-size:1.2rem; margin-top:4px;">--</div></div>
-                    <div style="background:#161B2D; border-radius:12px; padding:12px; text-align:center; border:1px solid #1E293B;"><div style="font-size:0.6rem; color:#4A6A9A;">GAS</div><div id="pro-gas" style="color:#A78BFA; font-weight:bold; font-size:1.2rem; margin-top:4px;">--</div></div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0 16px 12px 16px;">
+                    <button id="profit-card" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;text-align:left;cursor:pointer;box-shadow:var(--shadow-sm);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;">Est. Profit <span>↗</span></div>
+                        <div id="pro-profit" style="font-size:1.55rem;color:var(--ok);font-weight:900;margin-top:4px;">RM --</div>
+                    </button>
+                    <button id="energy-card" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;text-align:left;cursor:pointer;box-shadow:var(--shadow-sm);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;">Energy Cost <span>⚡</span></div>
+                        <div id="pro-energy" style="font-size:1.55rem;color:var(--warn);font-weight:900;margin-top:4px;">-- kWh</div>
+                    </button>
                 </div>
 
-                <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px;">
-                    <div class="com-feat" data-feature="whatif" style="background:#1E293B; border-radius:12px; padding:12px; text-align:center; cursor:pointer;">🔮<div style="font-size:0.6rem; color:#94A3B8; margin-top:4px;">What-If</div></div>
-                    <div class="com-feat" data-feature="consumption" style="background:#1E293B; border-radius:12px; padding:12px; text-align:center; cursor:pointer;">⚡<div style="font-size:0.6rem; color:#94A3B8; margin-top:4px;">ESG</div></div>
-                    <div class="com-feat" data-feature="alerts" style="background:#1E293B; border-radius:12px; padding:12px; text-align:center; cursor:pointer;">🚨<div style="font-size:0.6rem; color:#94A3B8; margin-top:4px;">Alerts</div></div>
-                    <div class="com-feat" data-feature="control" style="background:#1E293B; border-radius:12px; padding:12px; text-align:center; cursor:pointer;">🎛️<div style="font-size:0.6rem; color:#94A3B8; margin-top:4px;">Control</div></div>
+                <div style="margin:0 16px 12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:16px;box-shadow:var(--shadow-sm);">
+                    <div style="display:flex;align-items:center;margin-bottom:12px;">
+                        <div style="width:4px;height:16px;background:var(--ok);border-radius:4px;margin-right:8px;"></div>
+                        <div style="font-size:1.02rem;font-weight:800;color:var(--text);">Live Data</div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
+                        ${sensorCard('🌡️', 'TEMP', 'pro-temp', '--', 'var(--danger)', '#FEE2E2')}
+                        ${sensorCard('💧', 'HUMID', 'pro-humid', '--', 'var(--accent)', 'var(--accent-l)')}
+                        ${sensorCard('☀️', 'LIGHT', 'pro-light', '--', 'var(--ok)', 'var(--ok-bg)')}
+                        ${sensorCard('🧪', 'PH', 'pro-ph', '--', 'var(--warn)', '#FFFBEB')}
+                        ${sensorCard('💦', 'WATER', 'pro-water', '--', 'var(--accent)', 'var(--accent-l)')}
+                        ${sensorCard('🧬', 'GAS', 'pro-gas', '--', 'var(--ok)', 'var(--ok-bg)')}
+                    </div>
+                </div>
+
+                <div style="margin:0 16px 12px 16px;">
+                    <div style="font-size:0.6rem;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Commercial Tools</div>
+                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px;">
+                        ${featureButton('whatif', '🔮', 'What-If')}
+                        ${featureButton('consumption', '⚡', 'ESG')}
+                        ${featureButton('alerts', '🚨', 'Alerts')}
+                        ${featureButton('control', '🎛️', 'Control')}
+                    </div>
                 </div>
             </div>
 
-            <div class="bottom-nav" style="background:#0D1221; padding:12px; border-top:1px solid #1E293B; display:flex; justify-content:space-around;">
-                <div class="nav-item active" data-screen="home" style="text-align:center; color:#60A5FA; cursor:pointer;"><div style="font-size:1.2rem;">🏠</div><div style="font-size:0.6rem; font-weight:bold; margin-top:2px;">HOME</div></div>
-                <div class="nav-item" data-screen="profile" style="text-align:center; color:#4A6A9A; cursor:pointer;"><div style="font-size:1.2rem;">👤</div><div style="font-size:0.6rem; font-weight:bold; margin-top:2px;">PROFILE</div></div>
+            <div class="bottom-nav">
+                <div class="nav-item active" data-screen="home"><span class="nav-icon">🏠</span><span class="nav-lbl">Home</span></div>
+                <div class="nav-item" data-screen="profile"><span class="nav-icon">👤</span><span class="nav-lbl">Profile</span></div>
             </div>
-
         </div>
     `;
 
     bindEvents();
+    initCommercialFarm();
     initProDashboard();
 }
 
 function bindEvents() {
-    const profitCard = document.getElementById('profit-card');
-    if (profitCard) {
-        profitCard.addEventListener('click', () => {
-            clearInterval(AppState.proInterval);
-            showScreen('profit-detail');
-        });
-    }
+    document.getElementById('profit-card')?.addEventListener('click', () => {
+        clearInterval(AppState.proInterval);
+        showScreen('profit-detail');
+    });
 
-    const energyCard = document.getElementById('energy-card');
-    if (energyCard) {
-        energyCard.addEventListener('click', () => {
-            clearInterval(AppState.proInterval);
-            showScreen('energy-detail');
-        });
-    }
+    document.getElementById('energy-card')?.addEventListener('click', () => {
+        clearInterval(AppState.proInterval);
+        showScreen('energy-detail');
+    });
 
-    document.getElementById('comBackBtn').addEventListener('click', () => {
-        clearInterval(AppState.proInterval); 
+    document.getElementById('comBackBtn')?.addEventListener('click', () => {
+        clearInterval(AppState.proInterval);
         showScreen('farmlist');
     });
 
-    // 💡 修正了 Feature 按钮的识别，现在包括 Control 按钮在内的四个都能按了
+    document.getElementById('addPlantTopBtn')?.addEventListener('click', openAddPlantModal);
+    document.getElementById('fabPlant')?.addEventListener('click', openAddPlantModal);
+
     document.querySelectorAll('.com-feat').forEach(el => {
         el.addEventListener('click', () => {
             const feature = el.getAttribute('data-feature');
             if (feature === 'whatif') {
                 showScreen('whatif-pro');
             } else if (feature === 'control') {
-                alert("Control panel coming soon!"); // Control 的逻辑
+                window.showToast?.('info', 'Control panel coming soon');
             } else {
                 showScreen('feature', { feature, from: 'dash-c' });
             }
@@ -117,69 +141,139 @@ function bindEvents() {
             if (screen === 'profile') {
                 AppState.profileFrom = 'dash-c';
                 showScreen('profile');
-            } else if (screen === 'home') showScreen('dash-c');
+            } else if (screen === 'home') {
+                showScreen('dash-c');
+            }
         });
     });
 }
 
+function initCommercialFarm() {
+    setTimeout(() => FarmCanvas.init('commercialFarmCanvas'), 80);
+}
+
 function initProDashboard() {
-    // 💡 增加一个变量防止 AI 重复呼叫
+    clearInterval(AppState.proInterval);
     AppState.aiConsulted = false;
 
     const syncData = async () => {
         try {
-            const res = await fetch('http://localhost:3000/api/sensors/latest?deviceId=farm_001');
+            const res = await fetch(`${API_BASE}/api/sensors/latest?deviceId=farm_001`);
             const data = await res.json();
             if (!data || !data.reading) return;
             const r = data.reading;
 
-            const temp = r.temperature || 0;
-            const humid = r.humidity || 0;
-            const light = r.lightRaw || 0; 
-            const ph = r.ph || 0;
-            const water = r.waterDistanceCm || 0;
-            const gas = r.gasRaw || 0;
+            const temp = Number(r.temperature || 0);
+            const humid = Number(r.humidity || 0);
+            const light = Number(r.lightRaw || 0);
+            const ph = Number(r.ph || 0);
+            const water = Number(r.waterDistanceCm || 0);
+            const gas = Number(r.gasRaw || 0);
+            const plantTotal = plantCount(getCurrentFarm());
+            const estProfit = Math.max(0, plantTotal * 1.35 + light * 0.012).toFixed(2);
+            const energyCost = Math.max(0, temp * 0.65 + plantTotal * 0.18).toFixed(1);
 
-            const estProfit = (light * 0.05).toFixed(2); 
-            const energyCost = (temp * 0.9).toFixed(1);
+            setText('pro-profit', `RM ${estProfit}`);
+            setText('pro-energy', `${energyCost} kWh`);
+            setText('pro-temp', `${temp.toFixed(1)}°C`);
+            setText('pro-humid', `${humid}%`);
+            setText('pro-light', light);
+            setText('pro-ph', ph);
+            setText('pro-water', `${water}cm`);
+            setText('pro-gas', gas);
 
-            document.getElementById('pro-profit').innerText = `RM ${estProfit}`;
-            document.getElementById('pro-energy').innerText = `${energyCost} kWh`;
-            document.getElementById('pro-temp').innerText = `${temp}°C`;
-            document.getElementById('pro-humid').innerText = `${humid}%`;
-            document.getElementById('pro-light').innerText = `${light}`;
-            document.getElementById('pro-ph').innerText = ph;
-            document.getElementById('pro-water').innerText = `${water}cm`;
-            document.getElementById('pro-gas').innerText = gas;
-
-            // 💡 核心新增：调用 AI 全局评估（只在第一次进入页面时执行）
             if (!AppState.aiConsulted) {
                 fetchAIGlobalAdvice(r);
                 AppState.aiConsulted = true;
             }
-
         } catch (e) {
-            console.error("Dashboard Sync Failed:", e);
+            console.error('Dashboard Sync Failed:', e);
+            setText('ai-overview-text', 'Live backend offline. Showing saved farm layout.');
         }
     };
 
     syncData();
-    AppState.proInterval = setInterval(syncData, 3000);
+    AppState.proInterval = setInterval(syncData, 5000);
 }
 
-// 💡 补回刚才给你的 AI 评估函数（已改成英文回答）
 async function fetchAIGlobalAdvice(currentData) {
-    const prompt = `You are a farm owner's AI assistant. Current data: ${JSON.stringify(currentData)}. 
-                    Briefly evaluate the current Profit and Energy efficiency in 1 very easy and short sentence (English).`;
+    const prompt = `You are a farm owner's AI assistant. Current data: ${JSON.stringify(currentData)}. Briefly evaluate commercial farm profit and energy efficiency in one short English sentence.`;
     try {
-        const res = await fetch('http://localhost:3000/api/chat', { 
+        const res = await fetch(`${API_BASE}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: prompt }) 
+            body: JSON.stringify({ message: prompt })
         });
         const result = await res.json();
-        document.getElementById('ai-overview-text').innerText = result.reply || result.response;
+        setText('ai-overview-text', result.reply || result.response || 'Farm is operating normally.');
     } catch (e) {
-        document.getElementById('ai-overview-text').innerText = "AI Advisor offline.";
+        setText('ai-overview-text', 'AI Advisor offline. Sensor dashboard still available.');
     }
+}
+
+function sensorCard(icon, label, id, value, color, bg) {
+    return `
+        <div style="background:${bg};border-radius:12px;padding:12px;min-height:90px;position:relative;overflow:hidden;">
+            <div style="position:absolute;top:-5px;right:-5px;font-size:36px;opacity:.12;">${icon}</div>
+            <div style="font-size:14px;opacity:.7;">${icon}</div>
+            <div style="margin-top:14px;">
+                <div id="${id}" style="font-size:1rem;font-weight:900;color:${color};word-break:break-word;">${value}</div>
+                <div style="font-size:10px;font-weight:800;color:var(--muted);margin-top:2px;">${label}</div>
+            </div>
+        </div>`;
+}
+
+function featureButton(feature, icon, label) {
+    return `
+        <button class="com-feat" data-feature="${feature}" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 6px;text-align:center;cursor:pointer;box-shadow:var(--shadow-sm);color:var(--text);">
+            <div style="font-size:24px;line-height:1;">${icon}</div>
+            <div style="font-size:10px;color:var(--muted);font-weight:800;margin-top:6px;text-transform:uppercase;">${label}</div>
+        </button>`;
+}
+
+function getCurrentFarm() {
+    const saved = loadSavedFarms();
+    return AppState.currentFarm
+        || saved.find(farm => farm.id === AppState.currentFarmId)
+        || saved[saved.length - 1]
+        || null;
+}
+
+function resolveRack(farm) {
+    const raw = String(farm?.rackTypeId || farm?.rackType || farm?.rackLabel || '').toLowerCase();
+    if (raw.includes('2')) return RACK_OPTIONS['2-tier'];
+    if (raw.includes('4')) return RACK_OPTIONS['4-tier'];
+    if (raw.includes('5')) return RACK_OPTIONS['5-tier'];
+    if (raw.includes('wall') || raw.includes('grid')) return RACK_OPTIONS.wall;
+    if (raw.includes('frame')) return RACK_OPTIONS['a-frame'];
+    if (raw.includes('nft') || raw.includes('channel')) return RACK_OPTIONS['nft-channel'];
+    if (raw.includes('hanging') || raw.includes('column')) return RACK_OPTIONS.hanging;
+    return RACK_OPTIONS['3-tier'];
+}
+
+function plantCount(farm) {
+    if (Array.isArray(farm?.plants)) return farm.plants.length;
+    return Number.parseInt(farm?.plants, 10) || Number.parseInt(farm?.plantSlots, 10) || 0;
+}
+
+function loadSavedFarms() {
+    try {
+        return JSON.parse(localStorage.getItem('user_farms')) || [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.innerText = value;
+}
+
+function escapeHTML(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }

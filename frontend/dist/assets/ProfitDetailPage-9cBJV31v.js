@@ -1,4 +1,4 @@
-import{A as d,s as y}from"./index-CdCCAZ2S.js";import"https://esm.sh/three@0.160.0";function A(){const t=document.getElementById("screenContainer");d.profitFormula||(d.profitFormula="temp * 2.5"),t.innerHTML=`
+import{A as d,s as y}from"./index-Cn7ZkA1z.js";import"https://esm.sh/three@0.160.0";function A(){const t=document.getElementById("screenContainer");d.profitFormula||(d.profitFormula="temp * 2.5"),t.innerHTML=`
         <style>
             /* 1. 折线图动画 */
             .trend-path {
