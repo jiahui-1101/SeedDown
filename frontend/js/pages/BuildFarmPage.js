@@ -4,7 +4,6 @@
  */
 
 import { AppState } from '../store.js';
-import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { scanPlantsWithFirebaseAI } from '../services/firebaseAiLogic.js';
 import * as THREE from 'https://esm.sh/three@0.160.0';
@@ -987,10 +986,21 @@ function handleBack() {
     drawStep();
 }
 
-function handleCancel() {
+async function goToFarmList(message) {
     dispose3D();
-    showToast('info', 'New field creation cancelled');
-    showScreen('farmlist');
+    if (message) showToast('info', message);
+
+    try {
+        const module = await import('./FarmListPage.js');
+        module.render();
+    } catch (error) {
+        console.error('[BuildFarm] Direct FarmList fallback failed:', error);
+        window.location.reload();
+    }
+}
+
+function handleCancel() {
+    goToFarmList('New field creation cancelled');
 }
 async function createField() {
     const button = document.getElementById('bfNext');
@@ -1047,7 +1057,7 @@ async function createField() {
     AppState.farmName = farm.name;
     showToast('success', `"${farm.name}" field created`);
     dispose3D();
-    setTimeout(() => showScreen('farmlist'), 500);
+    setTimeout(() => goToFarmList(), 500);
 }
 
 function handleManualAdd() {
