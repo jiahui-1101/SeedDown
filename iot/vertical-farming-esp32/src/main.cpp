@@ -34,6 +34,8 @@ const int SOIL_DRY_THRESHOLD = 1800;
 const int GAS_DANGER_THRESHOLD = 2500;
 const int DARK_THRESHOLD = 1500;
 
+const float TEMP_LOW = 18.0;
+const float TEMP_HIGH = 35.0;
 const float PH_LOW = 5.5;
 const float PH_HIGH = 6.5;
 
@@ -166,23 +168,37 @@ void uploadSensorData(String jsonPayload) {
 }
 
 String mockAiCommand(SensorData data) {
+  String command = "";
+
   if (data.gasRaw > GAS_DANGER_THRESHOLD) {
-    return "BUZZER_ON";
+    command += "BUZZER_ON";
+  }
+
+  if (data.temperature < TEMP_LOW || data.temperature > TEMP_HIGH) {
+    if (command.length() > 0) command += ",";
+    command += "BUZZER_ON";
   }
 
   if (data.soilRaw < SOIL_DRY_THRESHOLD) {
-    return "WATER_ON";
+    if (command.length() > 0) command += ",";
+    command += "WATER_ON";
   }
 
   if (data.lightRaw < DARK_THRESHOLD) {
-    return "LIGHT_ON";
+    if (command.length() > 0) command += ",";
+    command += "LIGHT_ON";
   }
 
   if (data.phValue < PH_LOW || data.phValue > PH_HIGH) {
-    return "PH_WARNING";
+    if (command.length() > 0) command += ",";
+    command += "PH_WARNING";
   }
 
-  return "NO_ACTION";
+  if (command.length() == 0) {
+    return "NO_ACTION";
+  }
+
+  return command;
 }
 
 String getCommandFromBackend(SensorData data) {
@@ -234,11 +250,8 @@ String getCommandFromBackend(SensorData data) {
   return response;
 }
 
-void executeCommand(String command) {
-  Serial.print("[ESP32 Action] Executing command: ");
-  Serial.println(command);
-
-  allOutputsOff();
+void executeSingleCommand(String command) {
+  command.trim();
 
   if (command == "WATER_ON") {
     digitalWrite(WATER_LED_PIN, HIGH);
@@ -252,11 +265,38 @@ void executeCommand(String command) {
   } else if (command == "PH_WARNING") {
     buzzerOn();
     Serial.println("pH warning alert ON");
-  } else {
+  } else if (command == "NO_ACTION") {
     Serial.println("No action required");
+  } else if (command.length() > 0) {
+    Serial.print("Unknown command ignored: ");
+    Serial.println(command);
   }
 }
 
+void executeCommand(String command) {
+  Serial.print("[ESP32 Action] Executing command: ");
+  Serial.println(command);
+
+  allOutputsOff();
+
+  int start = 0;
+  bool executedAny = false;
+  while (start <= command.length()) {
+    int commaIndex = command.indexOf(',', start);
+    String part = commaIndex == -1 ? command.substring(start) : command.substring(start, commaIndex);
+    part.trim();
+    if (part.length() > 0) {
+      executeSingleCommand(part);
+      executedAny = true;
+    }
+    if (commaIndex == -1) break;
+    start = commaIndex + 1;
+  }
+
+  if (!executedAny) {
+    Serial.println("No action required");
+  }
+}
 void printRealtimeMonitor(SensorData data) {
   Serial.println();
   Serial.println("===== Real-Time Farm Monitor =====");
