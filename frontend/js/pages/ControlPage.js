@@ -64,6 +64,27 @@ export function render() {
                     </div>
                 </div>
 
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
+                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px;">
+                        <div>
+                            <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;">LATEST COMMAND</div>
+                            <div id="latestCommandText" style="font-size:1rem;font-weight:900;color:var(--text);margin-top:3px;">Loading...</div>
+                            <div id="latestCommandReason" style="font-size:0.72rem;color:var(--sub);line-height:1.35;margin-top:2px;">Checking pending ESP32 command.</div>
+                        </div>
+                        <button id="refreshCommandBtn" title="Refresh command" aria-label="Refresh command" style="width:36px;height:36px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--accent);font-weight:900;cursor:pointer;">↻</button>
+                    </div>
+                </div>
+
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
+                    <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:12px;">PRESETS</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        ${presetButton('leafy', '🥬', 'Leafy Greens')}
+                        ${presetButton('fruiting', '🍅', 'Fruiting Crops')}
+                        ${presetButton('energy', '⚡', 'Energy Saver')}
+                        ${presetButton('safety', '🛡️', 'High Safety')}
+                    </div>
+                </div>
+
                 <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);">
                     <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">WATER + ROOT ZONE</div>
                     ${rangeControl('Soil Dry Threshold', 'controlSoil', 'soilVal', profile.soilDryThreshold, 500, 3000, 100, 'raw', 'Lower means easier to trigger WATER_ON')}
@@ -76,6 +97,16 @@ export function render() {
                     ${numberPair('Temperature Range', 'controlTempMin', 'controlTempMax', profile.tempMin, profile.tempMax, 0, 60, 0.5, 'Temperature outside this range creates BUZZER_ON')}
                     ${rangeControl('Light Dark Threshold', 'controlLight', 'lightVal', profile.lightThreshold, 200, 4000, 100, 'raw', 'Light below this value creates LIGHT_ON')}
                     ${rangeControl('Gas Danger Threshold', 'controlGas', 'gasVal', profile.gasDangerThreshold, 500, 4095, 100, 'raw', 'Gas above this value creates BUZZER_ON')}
+                </div>
+
+                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
+                    <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:12px;">MANUAL OVERRIDE</div>
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
+                        ${manualButton('WATER_ON', '💦', 'Pump')}
+                        ${manualButton('LIGHT_ON', '💡', 'Light')}
+                        ${manualButton('BUZZER_ON', '🔔', 'Buzzer')}
+                    </div>
+                    <button id="emergencyStopBtn" style="width:100%;padding:13px;border:none;border-radius:var(--radius);background:var(--danger);color:white;font-weight:900;cursor:pointer;">Emergency Stop</button>
                 </div>
 
                 <button id="controlSyncBtn" style="width:100%;padding:14px;border:none;border-radius:var(--radius);background:var(--accent);color:white;flex-shrink:0;font-weight:800;font-size:0.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
@@ -91,6 +122,7 @@ export function render() {
 
     bindEvents();
     fetchCurrentPreferences(false);
+    fetchLatestCommand(false);
 }
 
 function bindEvents() {
@@ -98,6 +130,16 @@ function bindEvents() {
     document.getElementById('controlSaveBtn')?.addEventListener('click', saveControls);
     document.getElementById('controlSyncBtn')?.addEventListener('click', syncControls);
     document.getElementById('controlLoadBtn')?.addEventListener('click', () => fetchCurrentPreferences(true));
+    document.getElementById('refreshCommandBtn')?.addEventListener('click', () => fetchLatestCommand(true));
+    document.getElementById('emergencyStopBtn')?.addEventListener('click', () => sendManualCommand('NO_ACTION', 'Emergency stop from dashboard'));
+
+    document.querySelectorAll('.preset-btn').forEach(button => {
+        button.addEventListener('click', () => applyPreset(button.dataset.preset));
+    });
+
+    document.querySelectorAll('.manual-command-btn').forEach(button => {
+        button.addEventListener('click', () => sendManualCommand(button.dataset.command, `${button.dataset.label} manual override from dashboard`));
+    });
 
     slider('controlSoil', 'soilVal', v => `${v} raw`);
     slider('controlWaterDur', 'waterDurVal', v => `${v}s`);
@@ -105,6 +147,110 @@ function bindEvents() {
     slider('controlGas', 'gasVal', v => `${v} raw`);
 }
 
+async function fetchLatestCommand(showResult) {
+    const deviceId = value('controlDeviceId') || 'farm_001';
+    try {
+        const res = await fetch(`${API_BASE}/api/sensors/command?deviceId=${encodeURIComponent(deviceId)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const command = await res.json();
+        setCommandStatus(command);
+        if (showResult) showToast('success', 'Command status refreshed');
+    } catch (err) {
+        setText('latestCommandText', 'Unavailable');
+        setText('latestCommandReason', 'Could not load pending command.');
+        if (showResult) showToast('warning', `Command status unavailable: ${err.message}`);
+    }
+}
+
+function setCommandStatus(command) {
+    if (!command) {
+        setText('latestCommandText', 'NO_ACTION');
+        setText('latestCommandReason', 'No pending command.');
+        return;
+    }
+    const status = command.executed ? 'Executed' : 'Pending';
+    setText('latestCommandText', `${command.command || 'NO_ACTION'} · ${status}`);
+    setText('latestCommandReason', command.reason || 'No reason provided.');
+}
+
+async function sendManualCommand(command, reason) {
+    const deviceId = value('controlDeviceId') || 'farm_001';
+    const isStop = command === 'NO_ACTION';
+    try {
+        const res = await fetch(`${API_BASE}/api/sensors/command`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId, command, reason, durationSeconds: 0 }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+        setCommandStatus(data.command);
+        showToast('success', isStop ? 'Emergency stop queued for ESP32' : `${command} queued for ESP32`);
+    } catch (err) {
+        showToast('error', `Manual command failed: ${err.message}`);
+    }
+}
+
+function applyPreset(name) {
+    const presets = {
+        leafy: {
+            soilDryThreshold: 1900,
+            gasDangerThreshold: 2500,
+            tempMin: 18,
+            tempMax: 28,
+            phMin: 5.8,
+            phMax: 6.5,
+            lightThreshold: 1400,
+            wateringDuration: 8,
+        },
+        fruiting: {
+            soilDryThreshold: 1700,
+            gasDangerThreshold: 2500,
+            tempMin: 20,
+            tempMax: 32,
+            phMin: 6.0,
+            phMax: 6.8,
+            lightThreshold: 2200,
+            wateringDuration: 12,
+        },
+        energy: {
+            soilDryThreshold: 1600,
+            gasDangerThreshold: 2800,
+            tempMin: 18,
+            tempMax: 35,
+            phMin: 5.5,
+            phMax: 6.8,
+            lightThreshold: 1000,
+            wateringDuration: 6,
+        },
+        safety: {
+            soilDryThreshold: 2000,
+            gasDangerThreshold: 1800,
+            tempMin: 18,
+            tempMax: 30,
+            phMin: 5.8,
+            phMax: 6.5,
+            lightThreshold: 1600,
+            wateringDuration: 8,
+        },
+    };
+
+    const preset = presets[name];
+    if (!preset) return;
+    setInput('controlSoil', preset.soilDryThreshold);
+    setText('soilVal', `${preset.soilDryThreshold} raw`);
+    setInput('controlGas', preset.gasDangerThreshold);
+    setText('gasVal', `${preset.gasDangerThreshold} raw`);
+    setInput('controlTempMin', preset.tempMin);
+    setInput('controlTempMax', preset.tempMax);
+    setInput('controlPhMin', preset.phMin);
+    setInput('controlPhMax', preset.phMax);
+    setInput('controlLight', preset.lightThreshold);
+    setText('lightVal', `${preset.lightThreshold} raw`);
+    setInput('controlWaterDur', preset.wateringDuration);
+    setText('waterDurVal', `${preset.wateringDuration}s`);
+    showToast('info', 'Preset applied. Press Sync to send it to IoT.');
+}
 async function fetchCurrentPreferences(showResult) {
     const deviceId = value('controlDeviceId') || 'farm_001';
     try {
@@ -197,6 +343,21 @@ function collectControls() {
     };
 }
 
+function presetButton(preset, icon, label) {
+    return `
+        <button class="preset-btn" data-preset="${preset}" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:12px 8px;text-align:left;cursor:pointer;color:var(--text);">
+            <div style="font-size:22px;line-height:1;">${icon}</div>
+            <div style="font-size:12px;font-weight:900;margin-top:7px;">${label}</div>
+        </button>`;
+}
+
+function manualButton(command, icon, label) {
+    return `
+        <button class="manual-command-btn" data-command="${command}" data-label="${label}" style="background:var(--accent-l);border:1px solid var(--accent);border-radius:14px;padding:12px 6px;text-align:center;cursor:pointer;color:var(--accent);font-weight:900;">
+            <div style="font-size:24px;line-height:1;">${icon}</div>
+            <div style="font-size:11px;margin-top:6px;">${label}</div>
+        </button>`;
+}
 function rangeControl(label, inputId, labelId, value, min, max, step, unit, hint) {
     return `
         <div style="margin-bottom:16px;">
@@ -308,3 +469,7 @@ function escapeHTML(value) {
 function escapeAttr(value) {
     return escapeHTML(value).replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
+
+
+
+

@@ -68,6 +68,15 @@ exports.markCommandExecuted = async (req, res) => {
   }
 };
 
+exports.createManualCommand = async (req, res) => {
+  try {
+    const command = await sensorService.createManualCommand(req.body);
+    res.status(201).json({ ok: true, command });
+  } catch (err) {
+    console.error('Create manual command error:', err);
+    res.status(400).json({ ok: false, error: err.message });
+  }
+};
 exports.getPreferences = async (req, res) => {
   try {
     const deviceId = req.query.deviceId || 'farm_001';
@@ -103,4 +112,5 @@ exports.analyzeFarmData = async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 };
+
 

@@ -244,6 +244,41 @@ async function markCommandExecuted(commandId, deviceId = "farm_001") {
   ).lean();
 }
 
+async function createManualCommand({
+  deviceId = "farm_001",
+  command = "NO_ACTION",
+  reason = "Manual control override",
+  durationSeconds = 0,
+} = {}) {
+  const allowed = new Set(["WATER_ON", "LIGHT_ON", "BUZZER_ON", "NO_ACTION"]);
+  const normalized = String(command || "NO_ACTION").trim().toUpperCase();
+  if (!allowed.has(normalized)) {
+    throw new Error(`Unsupported manual command: ${command}`);
+  }
+
+  const payload = {
+    deviceId,
+    command: normalized,
+    reason,
+    durationSeconds: numberOrUndefined(durationSeconds) ?? 0,
+    manual: true,
+  };
+
+  if (!isMongoReady()) {
+    const id = `memory_command_${Date.now()}`;
+    const manualCommand = {
+      ...payload,
+      _id: id,
+      id,
+      executed: false,
+      createdAt: new Date(),
+    };
+    memory.commands.push(manualCommand);
+    return manualCommand;
+  }
+
+  return DeviceCommand.create(payload);
+}
 async function updatePreferences(deviceId = "farm_001", body = {}) {
   const existing = await getPreferences(deviceId);
   const update = { ...existing };
@@ -290,8 +325,11 @@ module.exports = {
   getReadings,
   getPendingCommand,
   markCommandExecuted,
+  createManualCommand,
   getPreferences,
   updatePreferences,
 };
+
+
 
 
