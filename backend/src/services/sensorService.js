@@ -245,32 +245,36 @@ async function markCommandExecuted(commandId, deviceId = "farm_001") {
 }
 
 async function updatePreferences(deviceId = "farm_001", body = {}) {
-  const update = {
-    sensorIntervalSeconds:
-      numberOrUndefined(body.sensorIntervalSeconds) ??
-      defaultPreferences.sensorIntervalSeconds,
-    soilDryThreshold:
-      numberOrUndefined(body.soilDryThreshold) ??
-      defaultPreferences.soilDryThreshold,
-    gasDangerThreshold:
-      numberOrUndefined(body.gasDangerThreshold) ??
-      defaultPreferences.gasDangerThreshold,
-    darkThreshold:
-      numberOrUndefined(body.darkThreshold) ?? defaultPreferences.darkThreshold,
-    tempMin: numberOrUndefined(body.tempMin) ?? defaultPreferences.tempMin,
-    tempMax: numberOrUndefined(body.tempMax) ?? defaultPreferences.tempMax,
-    phMin: numberOrUndefined(body.phMin) ?? defaultPreferences.phMin,
-    phMax: numberOrUndefined(body.phMax) ?? defaultPreferences.phMax,
-    wateringDurationSeconds:
-      numberOrUndefined(body.wateringDurationSeconds) ??
-      defaultPreferences.wateringDurationSeconds,
-    updatedAt: new Date(),
+  const existing = await getPreferences(deviceId);
+  const update = { ...existing };
+
+  const applyNumber = (key) => {
+    const value = numberOrUndefined(body[key]);
+    if (value !== undefined) update[key] = value;
   };
 
+  applyNumber("sensorIntervalSeconds");
+  applyNumber("soilDryThreshold");
+  applyNumber("gasDangerThreshold");
+  applyNumber("darkThreshold");
+  applyNumber("tempMin");
+  applyNumber("tempMax");
+  applyNumber("phMin");
+  applyNumber("phMax");
+  applyNumber("wateringDurationSeconds");
+
+  if (body.autoWater !== undefined) update.autoWater = Boolean(body.autoWater);
+  if (body.notifications !== undefined) update.notifications = Boolean(body.notifications);
+  if (body.ecoMode !== undefined) update.ecoMode = Boolean(body.ecoMode);
+
+  delete update._id;
+  delete update.__v;
+  update.deviceId = deviceId;
+  update.updatedAt = new Date();
+
   if (!isMongoReady()) {
-    const preferences = { ...update, deviceId };
-    memory.preferences.set(deviceId, preferences);
-    return preferences;
+    memory.preferences.set(deviceId, update);
+    return update;
   }
 
   return UserPreference.findOneAndUpdate(
@@ -289,3 +293,5 @@ module.exports = {
   getPreferences,
   updatePreferences,
 };
+
+

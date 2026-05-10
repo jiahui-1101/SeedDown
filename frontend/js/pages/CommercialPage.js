@@ -128,7 +128,9 @@ function bindEvents() {
             if (feature === 'whatif') {
                 showScreen('whatif-pro');
             } else if (feature === 'control') {
-                window.showToast?.('info', 'Control panel coming soon');
+                AppState.profileFrom = 'dash-c';
+                AppState.profileFocus = 'controls';
+                showScreen('profile');
             } else {
                 showScreen('feature', { feature, from: 'dash-c' });
             }
@@ -277,3 +279,4 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
