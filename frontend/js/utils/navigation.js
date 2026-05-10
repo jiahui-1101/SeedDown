@@ -25,7 +25,15 @@ export function initNavigation(pages) {
 
 export async function showScreen(screenName, params = {}) {
     console.log(`[Navigation] Showing screen: ${screenName}, current: ${currentScreen}`);
-    if (currentScreen === screenName && Object.keys(params).length === 0){
+    const expectedScreenId = screenName === 'buildfarm'
+        ? 'buildFarmScreen'
+        : `${screenName}Screen`;
+    const expectedScreen = document.getElementById(expectedScreenId);
+    if (
+        currentScreen === screenName &&
+        Object.keys(params).length === 0 &&
+        expectedScreen?.classList.contains('active')
+    ) {
         console.log(`[Navigation] Screen ${screenName} already active, skipping`);
         return;
     }
