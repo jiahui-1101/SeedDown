@@ -371,7 +371,8 @@ function syncLegacyTile(crop) {
 
 function refreshHomeFarmCanvas() {
   AppState.notify();
-  if (document.getElementById('farmCanvas')) FarmCanvas.init('farmCanvas');
+  const canvasId = ['farmCanvas', 'commercialFarmCanvas'].find(id => document.getElementById(id));
+  if (canvasId) FarmCanvas.init(canvasId);
 }
 
 function getCurrentFarm() {
@@ -526,3 +527,4 @@ function closeModal() {
   const overlay = document.getElementById('addPlantModalOverlay');
   if (overlay) overlay.remove();
 }
+
