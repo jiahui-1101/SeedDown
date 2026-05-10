@@ -1,4 +1,4 @@
-import{A as i,s as d}from"./index-CyZBRtAv.js";import"https://esm.sh/three@0.160.0";function b(){const r=document.getElementById("screenContainer");r.innerHTML=`
+import{A as i,s as d}from"./index-DEjNUr0y.js";import"https://esm.sh/three@0.160.0";function b(){const r=document.getElementById("screenContainer");r.innerHTML=`
         <div class="screen active" id="commercialScreen" style="background:#050810; display:flex; flex-direction:column; height:100vh; color:#E8F0FF; position:relative;">
             
             <div class="topbar" style="background:#0D1221; color:#E8F0FF; padding:16px; border-bottom:1px solid #1E293B; display:flex; align-items:center;">

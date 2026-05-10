@@ -181,89 +181,50 @@ export const FarmCanvas = {
         pot.castShadow = true;
         this.group.add(pot);
 
-        const stem = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.012, 0.012, 0.15, 8),
-            new THREE.MeshStandardMaterial({ color: 0x365314, roughness: 0.75 })
+        const base = new THREE.Mesh(
+            new THREE.SphereGeometry(0.095, 14, 8),
+            new THREE.MeshStandardMaterial({
+                color: statusColor,
+                roughness: 0.62,
+                emissive: statusColor,
+                emissiveIntensity: 0.08,
+            })
         );
-        stem.position.set(x, y + 0.16, z);
-        this.group.add(stem);
+        base.scale.set(1.15, 0.58, 1.05);
+        base.position.set(x, y + 0.135, z);
+        base.castShadow = true;
+        this.group.add(base);
 
-        const leafMat = new THREE.MeshStandardMaterial({
-            color: statusColor,
-            roughness: 0.5,
-            emissive: statusColor,
-            emissiveIntensity: plant.status === 'healthy' || !plant.status ? 0.08 : 0.16,
-        });
-
-        const leafCount = plant.emoji === '🍅' || plant.emoji === '🍓' ? 4 : plant.emoji === '🥬' ? 7 : 5;
-        for (let i = 0; i < leafCount; i++) {
-            const angle = (Math.PI * 2 / leafCount) * i;
-            const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 8), leafMat);
-            leaf.scale.set(1.3, 0.38, 0.72);
-            leaf.position.set(x + Math.cos(angle) * 0.058, y + 0.23 + (i % 2) * 0.018, z + Math.sin(angle) * 0.052);
-            leaf.rotation.set(0.22, angle, -0.25);
-            leaf.castShadow = true;
-            this.group.add(leaf);
-        }
-
-        this.addSpeciesDetails(x, y, z, plant, statusColor);
+        const emojiSprite = this.createEmojiSprite(plant.emoji || emojiForPlant(plant.name || plant.species));
+        emojiSprite.position.set(x, y + 0.335, z + 0.03);
+        emojiSprite.scale.set(0.36, 0.36, 1);
+        this.group.add(emojiSprite);
     },
 
-    addSpeciesDetails(x, y, z, plant, statusColor) {
-        const species = String(plant.species || plant.name || '').toLowerCase();
+    createEmojiSprite(emoji) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, 128, 128);
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.beginPath();
+        ctx.arc(64, 64, 50, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(15,23,42,0.12)';
+        ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.font = '72px "Segoe UI Emoji", "Apple Color Emoji", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji || '🌱', 64, 67);
 
-        if (species.includes('tomato') || plant.emoji === '🍅') {
-            const fruitMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.42, emissive: 0x7f1d1d, emissiveIntensity: 0.08 });
-            [-0.055, 0.055, 0].forEach((offset, i) => {
-                const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), fruitMat);
-                fruit.position.set(x + offset, y + 0.245 + i * 0.018, z + (i === 2 ? 0.055 : -0.02));
-                fruit.castShadow = true;
-                this.group.add(fruit);
-            });
-            return;
-        }
-
-        if (species.includes('cucumber') || plant.emoji === '🥒') {
-            const cucumberMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.55, emissive: 0x052e16, emissiveIntensity: 0.06 });
-            [-0.04, 0.055].forEach((offset, i) => {
-                const cucumber = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 8), cucumberMat);
-                cucumber.scale.set(0.72, 1.8, 0.62);
-                cucumber.rotation.z = i === 0 ? 0.7 : -0.55;
-                cucumber.position.set(x + offset, y + 0.25 + i * 0.025, z + 0.025);
-                cucumber.castShadow = true;
-                this.group.add(cucumber);
-            });
-            return;
-        }
-
-        if (species.includes('carrot') || plant.emoji === '🥕') {
-            const carrot = new THREE.Mesh(
-                new THREE.ConeGeometry(0.038, 0.12, 12),
-                new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.5 })
-            );
-            carrot.rotation.x = Math.PI;
-            carrot.position.set(x, y + 0.105, z + 0.035);
-            carrot.castShadow = true;
-            this.group.add(carrot);
-            return;
-        }
-
-        if (species.includes('lettuce') || species.includes('cabbage') || species.includes('kale') || plant.emoji === '🥬') {
-            const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 10), new THREE.MeshStandardMaterial({ color: statusColor, roughness: 0.72 }));
-            head.scale.set(1.35, 0.78, 1.2);
-            head.position.set(x, y + 0.2, z);
-            head.castShadow = true;
-            this.group.add(head);
-            return;
-        }
-
-        if (species.includes('eggplant') || species.includes('aubergine') || plant.emoji === '🍆') {
-            const eggplant = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 9), new THREE.MeshStandardMaterial({ color: 0x7c3aed, roughness: 0.45 }));
-            eggplant.scale.set(0.82, 1.35, 0.82);
-            eggplant.position.set(x + 0.045, y + 0.24, z + 0.035);
-            eggplant.castShadow = true;
-            this.group.add(eggplant);
-        }
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+        const sprite = new THREE.Sprite(material);
+        sprite.userData.texture = texture;
+        return sprite;
     },
 
     addEmptySlot(x, y, z) {
@@ -360,6 +321,7 @@ export const FarmCanvas = {
         if (this.scene) {
             this.scene.traverse(obj => {
                 if (obj.geometry) obj.geometry.dispose();
+                if (obj.userData?.texture) obj.userData.texture.dispose();
                 if (obj.material) {
                     if (Array.isArray(obj.material)) obj.material.forEach(mat => mat.dispose());
                     else obj.material.dispose();
