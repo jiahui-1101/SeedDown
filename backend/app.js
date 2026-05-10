@@ -15,6 +15,10 @@ const {
   getDeviceCommand
 } = require('./src/controllers/sensorController');
 
+const { router: communityRouter, seedBarterDatabase } = require('./src/routes/communityRoutes');
+
+seedBarterDatabase().catch(err => console.error("Seed Error:", err));
+
 function getLegacyDeviceCommand(req, res) {
   if (!req.query.format) req.query.format = 'text';
   return getDeviceCommand(req, res);
@@ -28,8 +32,7 @@ app.use('/api/farms', require('./src/routes/farmRoutes'));
 app.use('/api/whatif', require('./src/routes/whatIfRoutes'));
 app.use('/api/chat', require('./src/routes/chatRoutes'));
 app.use('/api/crops', require('./src/routes/cropRoutes'));
-app.use('/api/community', require('./src/routes/communityRoutes'));
-app.use('/api/mall', require('./src/routes/mallRoutes'));
+app.use('/api/community', communityRouter);
 
 app.get('/', (req, res) =>
   res.json({ status: 'NextLevelFarm API running' })

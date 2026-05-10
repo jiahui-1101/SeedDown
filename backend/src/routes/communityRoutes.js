@@ -222,8 +222,135 @@ router.post('/posts/:postId/reward', async (req, res) => {
 // ==========================================
 // Pasar & Barter Board (以物换物/市集) 引擎
 // ==========================================
+// ══ Seed 7 件商品到 Firebase（仅 dev 用，调用一次即可）══
+// ... 前面所有的 getOrCreateUser, router.get, router.post 等代码 ...
 
-// 1. 获取所有物品 / 搜索
+// 1. 定义 seedBarterDatabase 函数 (从路由逻辑中抽离)
+async function seedBarterDatabase() {
+    try {
+        const db = getDb();
+        if (!db) return; // 数据库还没准备好就跳过
+
+        const col = db.collection('barterItems');
+        const existing = await col.limit(1).get();
+
+        if (!existing.empty) {
+            console.log("ℹ️ Barter market already seeded.");
+            return;
+        }
+
+        const seeds = [
+            {
+                title: 'Ugly Veggie Box',
+                description: '5kg mixed veg, slightly crooked but tasty!',
+                tradeType: 'both',
+                priceCoins: 30,
+                lookingFor: 'Mint',
+                location: 'College Hall A',
+                author: 'Aisha.Farm',
+                image: null,
+                status: 'available',
+                buyer: null,
+                createdAt: new Date().toISOString(),
+            },
+            {
+                title: 'Fresh Mint Bundle',
+                description: 'Freshly harvested spearmint, smells amazing.',
+                tradeType: 'barter',
+                priceCoins: 0,
+                lookingFor: 'Basil',
+                location: 'Library Lobby',
+                author: 'Botani_Master',
+                image: null,
+                status: 'available',
+                buyer: null,
+                createdAt: new Date().toISOString(),
+            },
+            {
+                title: 'Chili Seedlings x10',
+                description: 'Pedas gila. Ready to transplant.',
+                tradeType: 'coins',
+                priceCoins: 20,
+                lookingFor: '',
+                location: 'Block N Courtyard',
+                author: 'UTM_Agri',
+                image: null,
+                status: 'available',
+                buyer: null,
+                createdAt: new Date().toISOString(),
+            },
+            {
+                title: 'Homemade Compost (2kg)',
+                description: 'Rich dark compost, great for herbs.',
+                tradeType: 'both',
+                priceCoins: 15,
+                lookingFor: 'Chili Seedlings x10',
+                location: 'Dorm Block C',
+                author: 'GreenThumb99',
+                image: null,
+                status: 'available',
+                buyer: null,
+                createdAt: new Date().toISOString(),
+            },
+            {
+                title: 'Cherry Tomatoes (500g)',
+                description: 'Sweet and ripe, harvested this morning.',
+                tradeType: 'coins',
+                priceCoins: 25,
+                lookingFor: '',
+                location: 'Cafeteria Side Door',
+                author: 'Aisha.Farm',
+                image: null,
+                status: 'available',
+                buyer: null,
+                createdAt: new Date().toISOString(),
+            },
+            {
+                title: 'Basil Pesto (homemade)',
+                description: 'Made from my own basil patch. No preservatives.',
+                tradeType: 'barter',
+                priceCoins: 0,
+                lookingFor: 'Fresh Mint Bundle',
+                location: 'Student Union',
+                author: 'GreenThumb99',
+                image: null,
+                status: 'available',
+                buyer: null,
+                createdAt: new Date().toISOString(),
+            },
+            {
+                title: 'Watering Can (2L)',
+                description: 'Spare one. Good condition, rose head nozzle.',
+                tradeType: 'both',
+                priceCoins: 40,
+                lookingFor: 'Compost',
+                location: 'Engineering Faculty Carpark',
+                author: 'Botani_Master',
+                image: null,
+                status: 'available',
+                buyer: null,
+                createdAt: new Date().toISOString(),
+            }
+        ];
+
+        const batch = db.batch();
+        seeds.forEach(item => {
+            const ref = col.doc();
+            batch.set(ref, item);
+        });
+        await batch.commit();
+        console.log(`✅ Seeded ${seeds.length} items to Barter Market.`);
+    } catch (err) {
+        console.error("❌ Seed error:", err.message);
+    }
+}
+
+// 2. 你的路由现在可以简洁地调用这个函数
+router.post('/barter/seed', async (req, res) => {
+    await seedBarterDatabase();
+    res.json({ success: true, message: "Seed process executed." });
+});
+
 router.get('/barter', async (req, res) => {
     try {
         const db = getDb();
@@ -336,10 +463,68 @@ router.post('/barter/:id/complete', async (req, res) => {
 
 // 在内存中模拟几个邻居的农场状态
 let mockNeighbors = [
-    { id: 'farm_01', name: 'Aisha.Farm', avatar: '👩‍🌾', plant: 'Tomato', moisture: 18, hasBug: true },
-    { id: 'farm_02', name: 'Botani_Master', avatar: '👨‍🌾', plant: 'Mint', moisture: 65, hasBug: false },
-    { id: 'farm_03', name: 'GreenThumb99', avatar: '🧑‍🌾', plant: 'Basil', moisture: 22, hasBug: false },
-    { id: 'farm_04', name: 'UTM_Agri', avatar: '🏫', plant: 'Chili', moisture: 80, hasBug: true }
+    {
+        id: 'farm_01', name: 'Aisha.Farm', avatar: '👩‍🌾', plant: 'Tomato',
+        moisture: 18, hasBug: true,
+        rack: '3-tier',
+        tiles: [
+            { emoji: '🍅', status: 'danger' },
+            { emoji: '🍅', status: 'warning' },
+            { emoji: '🌿', status: 'danger' },
+            { emoji: '🍅', status: 'healthy' },
+            { emoji: '🥬', status: 'warning' },
+            { emoji: null },
+            { emoji: '🌱', status: 'healthy' },
+            { emoji: null },
+            { emoji: '🌶️', status: 'danger' },
+        ]
+    },
+    {
+        id: 'farm_02', name: 'Botani_Master', avatar: '👨‍🌾', plant: 'Mint',
+        moisture: 65, hasBug: false,
+        rack: '5-tier',
+        tiles: [
+            { emoji: '🌿', status: 'healthy' }, { emoji: '🌿', status: 'healthy' },
+            { emoji: '🥬', status: 'healthy' }, { emoji: '🌱', status: 'healthy' },
+            { emoji: '🌿', status: 'healthy' }, { emoji: '🥬', status: 'healthy' },
+            { emoji: '🌱', status: 'healthy' }, { emoji: '🌿', status: 'healthy' },
+            { emoji: '🥬', status: 'healthy' }, { emoji: '🌱', status: 'healthy' },
+            { emoji: '🌿', status: 'healthy' }, { emoji: null },
+            { emoji: '🥬', status: 'healthy' }, { emoji: null },
+            { emoji: '🌱', status: 'healthy' }, { emoji: null },
+            { emoji: '🌿', status: 'healthy' }, { emoji: null },
+            { emoji: '🥬', status: 'healthy' }, { emoji: null },
+        ]
+    },
+    {
+        id: 'farm_03', name: 'GreenThumb99', avatar: '🧑‍🌾', plant: 'Basil',
+        moisture: 22, hasBug: false,
+        rack: 'wall',
+        tiles: [
+            { emoji: '🥬', status: 'warning' }, { emoji: '🥬', status: 'healthy' },
+            { emoji: '🌿', status: 'warning' }, { emoji: '🥬', status: 'healthy' },
+            { emoji: '🌱', status: 'healthy' }, { emoji: '🌿', status: 'warning' },
+            { emoji: '🥬', status: 'healthy' }, { emoji: '🌱', status: 'healthy' },
+            { emoji: '🌿', status: 'healthy' }, { emoji: null },
+            { emoji: '🥬', status: 'healthy' }, { emoji: null },
+            { emoji: null },                     { emoji: null },
+            { emoji: '🌱', status: 'healthy' }, { emoji: null },
+            { emoji: '🌿', status: 'healthy' }, { emoji: null },
+            { emoji: null },                     { emoji: null },
+        ]
+    },
+    {
+        id: 'farm_04', name: 'UTM_Agri', avatar: '🏫', plant: 'Chili',
+        moisture: 80, hasBug: true,
+        rack: '3-tier',
+        tiles: [
+            { emoji: '🌶️', status: 'healthy' }, { emoji: '🌶️', status: 'healthy' },
+            { emoji: '🌶️', status: 'healthy' }, { emoji: '🌶️', status: 'healthy' },
+            { emoji: '🌶️', status: 'healthy' }, { emoji: '🌱', status: 'healthy' },
+            { emoji: '🥕', status: 'healthy' },  { emoji: '🥕', status: 'healthy' },
+            { emoji: '🥕', status: 'healthy' },
+        ]
+    },
 ];
 
 // 1. 获取邻居列表 (带着他们植物的当前状态)
@@ -397,4 +582,8 @@ router.post('/visits/catch-bug/:id', async (req, res) => {
     }
 });
 
-module.exports = router;
+// 3. 最后的导出 (现在 seedBarterDatabase 有定义了，不会报错了)
+module.exports = {
+    router,              
+    seedBarterDatabase   
+};

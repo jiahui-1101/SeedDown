@@ -1,6 +1,7 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
+import { saveFarmsToFirestore } from '../utils/firebase.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
 
@@ -19,6 +20,8 @@ export function render() {
             { id: 'farm_' + Date.now(), name: 'Farm 1 — Rack Alpha', plants: 6, plantSlots: 6, zone: 'A', targetPlant: 'Lettuce' }
         ];
         localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(savedFarms));
+        // ── Sync default farm to Firestore ──
+        if (AppState.uid) saveFarmsToFirestore(AppState.uid, savedFarms);
     }
 
     const isCommercial = AppState.mode === 'commercial';
