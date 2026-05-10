@@ -6,6 +6,7 @@
 import { AppState } from '../store.js';
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
+import { scanPlantsWithFirebaseAI } from '../services/firebaseAiLogic.js';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
@@ -399,12 +400,28 @@ async function scanPlantsFromPhoto() {
     if (status) status.textContent = 'AI is checking the field photo...';
 
     try {
-        const res = await fetch(`${API_BASE}/api/farms/scan-plants`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image: photoData.base64, mediaType: photoData.mediaType, targetPlant: fieldInfo.targetPlant }),
-        });
-        const data = await res.json();
+        let data = null;
+        try {
+            data = await scanPlantsWithFirebaseAI({
+                image: photoData.base64,
+                mediaType: photoData.mediaType,
+                targetPlant: fieldInfo.targetPlant,
+            });
+            if (data?.plants?.length) {
+                console.log('[BuildFarm] Firebase AI Logic recognized plants');
+            }
+        } catch (firebaseError) {
+            console.warn('[BuildFarm] Firebase AI Logic unavailable:', firebaseError.message);
+        }
+
+        if (!data) {
+            const res = await fetch(`${API_BASE}/api/farms/scan-plants`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: photoData.base64, mediaType: photoData.mediaType, targetPlant: fieldInfo.targetPlant }),
+            });
+            data = await res.json();
+        }
         const plants = Array.isArray(data.plants) ? data.plants : [];
         if (plants.length) {
             mergePlants(plants);
@@ -1086,6 +1103,7 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
 
 
 
