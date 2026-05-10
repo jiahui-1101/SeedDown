@@ -9,6 +9,8 @@ const defaultPreferences = {
   soilDryThreshold: 1800,
   gasDangerThreshold: 2500,
   darkThreshold: 1500,
+  tempMin: 18,
+  tempMax: 35,
   phMin: 5.5,
   phMax: 6.5,
   wateringDurationSeconds: 10,
@@ -57,54 +59,71 @@ async function getPreferences(deviceId = "farm_001") {
 }
 
 function analyzeSensorData(reading, preferences) {
+  const commands = [];
+  const reasons = [];
+  let durationSeconds = 0;
+
+  const addCommand = (command, reason, duration = 0) => {
+    if (!commands.includes(command)) commands.push(command);
+    reasons.push(reason);
+    durationSeconds = Math.max(durationSeconds, duration);
+  };
+
   if (
     reading.gasRaw !== undefined &&
     reading.gasRaw > preferences.gasDangerThreshold
   ) {
-    return {
-      command: "BUZZER_ON",
-      reason: "Gas level is above the danger threshold",
-      durationSeconds: 0,
-    };
+    addCommand("BUZZER_ON", "Gas level is above the danger threshold");
+  }
+
+  if (
+    reading.temperature !== undefined &&
+    (reading.temperature < preferences.tempMin ||
+      reading.temperature > preferences.tempMax)
+  ) {
+    addCommand(
+      "BUZZER_ON",
+      `Temperature is outside the preferred range (${preferences.tempMin}-${preferences.tempMax}C)`,
+    );
   }
 
   if (
     reading.soilRaw !== undefined &&
     reading.soilRaw < preferences.soilDryThreshold
   ) {
-    return {
-      command: "WATER_ON",
-      reason: "Soil moisture is below the dry threshold",
-      durationSeconds: preferences.wateringDurationSeconds,
-    };
+    addCommand(
+      "WATER_ON",
+      "Soil moisture is below the dry threshold",
+      preferences.wateringDurationSeconds,
+    );
   }
 
   if (
     reading.lightRaw !== undefined &&
     reading.lightRaw < preferences.darkThreshold
   ) {
-    return {
-      command: "LIGHT_ON",
-      reason: "Ambient light is below the dark threshold",
-      durationSeconds: 0,
-    };
+    addCommand("LIGHT_ON", "Ambient light is below the dark threshold");
   }
 
   if (
     reading.ph !== undefined &&
     (reading.ph < preferences.phMin || reading.ph > preferences.phMax)
   ) {
+    addCommand("PH_WARNING", "Water pH is outside the preferred range");
+  }
+
+  if (commands.length === 0) {
     return {
-      command: "PH_WARNING",
-      reason: "Water pH is outside the preferred range",
+      command: "NO_ACTION",
+      reason: "Sensor values are within preferred range",
       durationSeconds: 0,
     };
   }
 
   return {
-    command: "NO_ACTION",
-    reason: "Sensor values are within preferred range",
-    durationSeconds: 0,
+    command: commands.join(","),
+    reason: reasons.join("; "),
+    durationSeconds,
   };
 }
 
@@ -238,6 +257,8 @@ async function updatePreferences(deviceId = "farm_001", body = {}) {
       defaultPreferences.gasDangerThreshold,
     darkThreshold:
       numberOrUndefined(body.darkThreshold) ?? defaultPreferences.darkThreshold,
+    tempMin: numberOrUndefined(body.tempMin) ?? defaultPreferences.tempMin,
+    tempMax: numberOrUndefined(body.tempMax) ?? defaultPreferences.tempMax,
     phMin: numberOrUndefined(body.phMin) ?? defaultPreferences.phMin,
     phMax: numberOrUndefined(body.phMax) ?? defaultPreferences.phMax,
     wateringDurationSeconds:

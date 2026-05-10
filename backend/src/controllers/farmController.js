@@ -57,11 +57,19 @@ async function scanPlants(req, res) {
             warning: 'Set GEMINI_API_KEY to enable AI photo recognition; using target plant fallback.',
         });
     } catch (err) {
-        console.error('[farmController] scanPlants error:', err.message);
+        const message = err.message || 'Unknown AI error';
+        const quotaIssue = /credit|quota|billing|prepayment/i.test(message);
+        console.warn(
+            quotaIssue
+                ? '[farmController] Gemini quota unavailable; using target plant fallback'
+                : `[farmController] scanPlants error: ${message}`
+        );
 
         return res.json({
             plants: fallbackPlants(targetPlant),
-            warning: `AI photo recognition unavailable: ${err.message}`,
+            warning: quotaIssue
+                ? 'Gemini reached, but credits or billing are unavailable; using target plant fallback.'
+                : `AI photo recognition unavailable: ${message}`,
         });
     }
 }
@@ -205,9 +213,25 @@ function sanitizePlants(plants) {
 }
 
 function fallbackPlants(targetPlant) {
-    if (!targetPlant || !String(targetPlant).trim()) return [];
-    const name = String(targetPlant).trim();
-    return sanitizePlants([{ name, emoji: emojiForPlant(name), species: name, confidence: 0.45, slots: 3 }]);
+    const seen = new Set();
+    const names = String(targetPlant || '')
+        .split(/[,;\n]+/)
+        .map((name) => name.trim())
+        .filter(Boolean)
+        .filter((name) => {
+            const key = name.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+    return sanitizePlants(names.map((name) => ({
+        name,
+        emoji: emojiForPlant(name),
+        species: name,
+        confidence: 0.45,
+        slots: 3,
+    })));
 }
 
 function emojiForPlant(name = '') {

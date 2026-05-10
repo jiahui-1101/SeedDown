@@ -23,6 +23,8 @@ const UserPreference = new FirestoreModel('userPreferences', {
     soilDryThreshold: 1800,
     gasDangerThreshold: 2500,
     darkThreshold: 1500,
+    tempMin: 18,
+    tempMax: 35,
     phMin: 5.5,
     phMax: 6.5,
     wateringDurationSeconds: 10,
