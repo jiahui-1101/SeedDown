@@ -279,13 +279,19 @@ void executeCommand(String command) {
 
   allOutputsOff();
 
+  command.trim();
+  if (command.length() == 0 || command == "NO_ACTION") {
+    Serial.println("No action required");
+    return;
+  }
+
   int start = 0;
   bool executedAny = false;
-  while (start <= command.length()) {
+  while (start < command.length()) {
     int commaIndex = command.indexOf(',', start);
     String part = commaIndex == -1 ? command.substring(start) : command.substring(start, commaIndex);
     part.trim();
-    if (part.length() > 0) {
+    if (part.length() > 0 && part != "NO_ACTION") {
       executeSingleCommand(part);
       executedAny = true;
     }
