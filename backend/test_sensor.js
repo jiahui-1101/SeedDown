@@ -1,5 +1,5 @@
 /**
- * NextLevelFarm - Sensor Test Script
+ * SeedDown - Sensor Test Script
  * 模拟 ESP32 发送 sensor 数据，然后验证 database 有没有存进去
  *
  * 用法: node test_sensor.js
@@ -191,7 +191,7 @@ async function checkPreferences() {
 // ─── Main ────────────────────────────────────────────────────────────
 async function main() {
   console.log(bold('═══════════════════════════════════════'));
-  console.log(bold('  NextLevelFarm Sensor Test Script'));
+  console.log(bold('  SeedDown Sensor Test Script'));
   console.log(bold('═══════════════════════════════════════'));
 
   const backendOk = await checkBackend();

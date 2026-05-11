@@ -13,7 +13,7 @@ const {
 
 router.get('/', (req, res) => {
   res.json({
-    message: 'NextLevelFarm IoT sensor route working',
+    message: 'SeedDown IoT sensor route working',
     endpoints: [
       'POST /api/sensors',
       'GET /api/sensors/latest?deviceId=farm_001',

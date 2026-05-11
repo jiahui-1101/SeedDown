@@ -1,8 +1,9 @@
 // GROQ
 const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.ANTHROPIC_API_KEY;
 const headers = {
   'Content-Type': 'application/json',
-  'Authorization': `Bearer ${process.env.ANTHROPIC_API_KEY}`
+  'Authorization': `Bearer ${GROQ_API_KEY}`
 };
 
 async function askClaude(system, userMsg, maxTokens = 1024) {
@@ -27,7 +28,7 @@ async function askClaude(system, userMsg, maxTokens = 1024) {
 }
 
 async function chatWithAdvisor(messages, gardenState) {
-  const system = `You are Sprout 🌱, the AI garden advisor for NextLevelFarm.
+  const system = `You are Sprout 🌱, the AI garden advisor for SeedDown.
 Help with crop care, harvest timing, recipes, sensor readings.
 Be friendly, concise (2-3 sentences). Use plant emojis.
 Current garden: ${JSON.stringify(gardenState)}`;
@@ -53,7 +54,7 @@ Current garden: ${JSON.stringify(gardenState)}`;
 }
 
 async function forecastYieldAndRecipes(plantedCrop, cropSpec, recipes, days) {
-  const prompt = `You are an agricultural AI for NextLevelFarm indoor garden.
+  const prompt = `You are an agricultural AI for SeedDown indoor garden.
 Respond ONLY with valid JSON, no markdown.
 
 Forecast harvest:
@@ -122,7 +123,7 @@ async function askClaude(system, userMsg, maxTokens = 2048) {
 }
 
 async function chatWithAdvisor(messages, gardenState) {
-  const system = `You are Sprout 🌱, the AI garden advisor for NextLevelFarm.
+  const system = `You are Sprout 🌱, the AI garden advisor for SeedDown.
 Help with crop care, harvest timing, recipes, sensor readings.
 Be friendly, concise (2-3 sentences). Use plant emojis.
 Current garden: ${JSON.stringify(gardenState)}`;
@@ -148,7 +149,7 @@ Current garden: ${JSON.stringify(gardenState)}`;
 }
 
 async function forecastYieldAndRecipes(plantedCrop, cropSpec, recipes, days) {
-  const prompt = `You are an agricultural AI for NextLevelFarm indoor garden.
+  const prompt = `You are an agricultural AI for SeedDown indoor garden.
 Respond ONLY with valid JSON, no markdown.
 
 Forecast harvest for this crop:

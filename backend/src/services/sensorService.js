@@ -217,6 +217,30 @@ async function markCommandExecuted(commandId, deviceId = 'farm_001') {
   ).lean();
 }
 
+async function createManualCommand(body = {}) {
+  const deviceId = body.deviceId || 'farm_001';
+  const command = String(body.command || '').trim().toUpperCase();
+  const allowedCommands = new Set([
+    'NO_ACTION',
+    'WATER_ON',
+    'LIGHT_ON',
+    'BUZZER_ON',
+    'PH_WARNING',
+  ]);
+
+  if (!allowedCommands.has(command)) {
+    throw new Error(`Unsupported command: ${body.command || 'empty'}`);
+  }
+
+  return DeviceCommandModel.create({
+    deviceId,
+    command,
+    reason: body.reason || 'Manual command from dashboard',
+    durationSeconds: numberOrUndefined(body.durationSeconds) || 0,
+    source: 'manual',
+  });
+}
+
 async function updatePreferences(deviceId = 'farm_001', body = {}) {
   const update = {
     sensorIntervalSeconds:   numberOrUndefined(body.sensorIntervalSeconds)   ?? defaultPreferences.sensorIntervalSeconds,
@@ -245,6 +269,7 @@ module.exports = {
   getReadingsByHours,
   getPendingCommand,
   markCommandExecuted,
+  createManualCommand,
   getPreferences,
   updatePreferences,
 };

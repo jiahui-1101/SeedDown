@@ -112,7 +112,7 @@ exports.getCostAnalysis = async (req, res) => {
     const totalSavedRM    = parseFloat((waterCostSaved + energyCostSaved).toFixed(2));
 
     // AI writes insight only
-    const prompt = `Agricultural AI for NextLevelFarm. Write exactly 2 complete sentences about ${plant} garden conditions.
+    const prompt = `Agricultural AI for SeedDown. Write exactly 2 complete sentences about ${plant} garden conditions.
 Temp ${temp}°C ${temp > 30 ? '(too hot)' : temp < 18 ? '(too cold)' : '(optimal)'}, Humidity ${humid}% ${humid < 50 ? '(too dry)' : humid > 80 ? '(too humid)' : '(good)'}, Moisture ${water}% ${water < 40 ? '(needs watering)' : '(good)'}, Nutrients ${nutrient}% ${nutrient < 60 ? '(low)' : '(ok)'}.
 Condition: ${conditionScore}/100 (${conditionLabel}). Automation saved ${waterSavedLiters}L water + ${energySavedkWh}kWh energy = RM ${totalSavedRM}.
 Sentence 1: describe current ${plant} conditions. Sentence 2: mention RM ${totalSavedRM} saved by automation.`;
@@ -157,7 +157,7 @@ exports.getNewPlantImpact = async (req, res) => {
     const isUnsuitable = unsuitablePlants.some(u => species.toLowerCase().includes(u));
 
     if (isUnsuitable) {
-      const prompt = `You are an indoor vertical farming expert for NextLevelFarm.
+      const prompt = `You are an indoor vertical farming expert for SeedDown.
 A user wants to add "${species}" to their indoor vertical farm.
 Explain in exactly 2 sentences why this is not suitable for indoor vertical farming.
 Be specific about why ${species} cannot grow in a rack/shelf system indoors.`;
@@ -199,7 +199,7 @@ Be specific about why ${species} cannot grow in a rack/shelf system indoors.`;
     // nutrientChange is in % points added, not absolute — only warn if change is very large
     if (impacts.nutrientChange > 20) warnings.push(`nutrient demand increases significantly (+${impacts.nutrientChange}%)`);
 
-    const prompt = `Agricultural AI for NextLevelFarm indoor garden.
+    const prompt = `Agricultural AI for SeedDown indoor garden.
 Current crops: ${currentCrops?.join(', ') || 'mixed vegetables'}
 Adding: ${quantity} ${species} plants
 Current: Temp ${temp}°C, Humidity ${humid}%, Moisture ${water}%, Nutrients ${nutrient}%
@@ -235,7 +235,7 @@ exports.newPlantAiAnalysis = async (req, res) => {
 
     const cropSpec = findCrop(species);
 
-    const prompt = `You are an agricultural AI expert for NextLevelFarm indoor vertical farm.
+    const prompt = `You are an agricultural AI expert for SeedDown indoor vertical farm.
 Species requested: ${species} (${quantity || 1} plants)
 Current crops in farm: ${currentCrops?.join(', ') || 'mixed vegetables'}
 Current sensors: Humidity ${humid}%, Light ${light}%, Moisture ${water}%, Nutrients ${nutrient}%

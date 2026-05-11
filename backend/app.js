@@ -35,7 +35,7 @@ app.use('/api/crops', require('./src/routes/cropRoutes'));
 app.use('/api/community', communityRouter);
 
 app.get('/', (req, res) =>
-  res.json({ status: 'NextLevelFarm API running' })
+  res.json({ status: 'SeedDown API running' })
 );
 
 module.exports = app;

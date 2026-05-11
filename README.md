@@ -53,7 +53,7 @@ For beginner growers, community gardens, and indoor campus greenhouses, the main
 3. **Limited access to affordable, data-driven automation tools** that can monitor crops around the clock and recommend practical improvements.
 4. **High entry barrier** for planning a vertical farm layout, understanding plant performance, and scaling from a hobby setup to a commercial dashboard.
 
-SeedDown answers Case Study 1 by combining a functional ESP32 IoT prototype, a centralized web dashboard, automated device commands, predictive alerts, AI-supported plant guidance, and interactive 3D vertical farm planning. It is designed to help users maximize crop yield while minimizing water and electricity usage.
+SeedDown answers Case Study 1 by combining a functional ESP32 IoT prototype, a centralized web dashboard, automated device commands, rule-based anomaly alerts, AI-supported plant guidance, and interactive 3D vertical farm planning. It is designed to help users maximize crop yield while minimizing water and electricity usage.
 
 ---
 
@@ -85,7 +85,7 @@ SeedDown is built around one continuous loop:
 flowchart LR
     A[ESP32 Sensors] --> B[Backend API]
     B --> C[Firestore]
-    B --> D[AI Rule Engine]
+    B --> D[Rule-Based Decision Engine]
     D --> E[Pending Device Command]
     E --> F[ESP32 Actuators]
     C --> G[Frontend Dashboard]
@@ -135,9 +135,9 @@ GET /api/sensors/command?deviceId=farm_001&format=text
 
 The command can also update the ESP32 sampling interval based on user profile settings.
 
-### 3. AI Alert & Predictive Warnings 🚨
+### 3. Rule-Based Alerts & AI Guidance 🚨
 
-SeedDown includes an AI-assisted alert layer that turns raw sensor values into understandable farm warnings:
+SeedDown includes a rule-based alert layer that turns raw sensor values into understandable farm warnings, with AI used for advisor-style explanations and planning insights:
 
 - Detects abnormal temperature, pH, gas, light, water, and soil moisture readings.
 - Classifies farm status into stable, warning, or danger conditions.
@@ -146,7 +146,7 @@ SeedDown includes an AI-assisted alert layer that turns raw sensor values into u
 - Helps users understand why a warning is happening and what action should be taken next.
 - Provides commercial users with threshold-based controls so alert sensitivity can match different crops and farm setups.
 
-This directly supports the Case Study 1 requirement for predictive alerts, such as detecting system anomalies before they damage crops or waste resources.
+This supports the Case Study 1 requirement for predictive alerts in the prototype scope: abnormal readings are detected early through configurable thresholds, then surfaced as warnings before they damage crops or waste resources.
 
 ### 4. Eco Save & Resource Optimization ♻️
 
@@ -313,7 +313,8 @@ Community features make the platform more engaging:
 
 - Firebase AI Logic / Gemini-compatible plant recognition on frontend
 - Gemini API compatible backend route for plant recognition fallback
-- Optional Claude-compatible advisor service in backend
+- Groq/OpenAI-compatible advisor service for chat and What-If insights
+- Optional Claude-compatible fallback for backend plant photo recognition
 - Firestore collections for readings, commands, preferences, farms, community posts, and barter items
 
 ---
@@ -464,8 +465,8 @@ This project can be run in three parts:
 ### Clone Repository
 
 ```bash
-git clone https://github.com/jiahui-1101/SeedDown.git
-cd SeedDown
+git clone <your-repository-url>
+cd <your-project-folder>
 ```
 
 ### Backend Setup
@@ -536,6 +537,7 @@ GOOGLE_APPLICATION_CREDENTIALS=./firebase-service-account.json
 # Optional AI keys:
 GEMINI_API_KEY=your_gemini_key_here
 GOOGLE_AI_API_KEY=your_google_ai_key_here
+GROQ_API_KEY=your_groq_key_here
 CLAUDE_API_KEY=your_claude_key_here
 DA3_SERVICE_URL=your_depth_or_3d_service_url_here
 ```
@@ -584,6 +586,7 @@ FIREBASE_SERVICE_ACCOUNT_JSON={full service account JSON}
 ```text
 GEMINI_API_KEY=your_gemini_key
 GOOGLE_AI_API_KEY=your_google_ai_key
+GROQ_API_KEY=your_groq_key
 CLAUDE_API_KEY=your_claude_key
 DA3_SERVICE_URL=your_3d_service_url
 ```
@@ -650,10 +653,17 @@ Invoke-RestMethod -Method POST -Uri "$BASE/api/sensors" -ContentType "applicatio
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/whatif/recipes` | Recipe/crop recommendation data |
+| GET | `/api/whatif/recipes?species=tomato` | Recipe/crop recommendation data for a selected species |
 | POST | `/api/whatif/forecast` | Forecast crop yield |
 | POST | `/api/whatif/costsaving` | Cost and savings analysis |
 | POST | `/api/whatif/newplant` | New plant impact analysis |
+
+### Crop Database
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/crops/all` | List crop records from the local crop database |
+| GET | `/api/crops/species/:name` | Get a crop record, with AI-assisted estimate fallback when an LLM key is configured |
 
 ### Community
 
@@ -816,8 +826,8 @@ SeedDown already demonstrates the end-to-end loop from IoT sensing to dashboard 
 
 ## Documentation :page_facing_up:
 
-- **Pitch Deck:** `slide.link`
-- **Demo Video:** `video.link`
+- **Pitch Deck:** add final slide link before submission
+- **Demo Video:** add final demo video link before submission
 - **Backend URL:** `https://your-seeddown-backend.onrender.com`
 - **IoT Firmware:** `iot/vertical-farming-esp32/src/main.cpp`
 - **Frontend Entry:** `frontend/index.html`
