@@ -23,7 +23,7 @@ export function render(params = {}) {
     container.innerHTML = `
         <div class="screen active" id="featureScreen">
             <div class="feat-topbar" style="display:flex; align-items:center; padding:12px 16px; background:var(--surface); gap:12px;">
-                <button id="featureBackBtn" class="back-btn">← Back</button>
+                <button id="featureBackBtn" class="back-btn" aria-label="Back">←</button>
                 <div style="font-weight:700;">${
                     feature === 'whatif'      ? '🔮 What-If'    :
                     feature === 'consumption' ? '⚡ Eco Savings' :

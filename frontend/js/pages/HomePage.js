@@ -16,7 +16,7 @@ export function render() {
                 <div class="topbar-brand"><span style="font-weight:700;">${AppState.farmName}</span></div>
                 <div style="flex:1"></div>
                 <div id="topbarPill"></div>
-                <button id="addPlantTopBtn" class="topbar-btn" style="margin-left:8px;">+ Plant</button>
+
             </div>
             <div class="bottom-nav">
                 <div class="nav-item active" data-screen="home"><span class="nav-icon">🏠</span><span class="nav-lbl">Home</span></div>
@@ -64,7 +64,7 @@ export function render() {
     
     // 绑定事件
     document.getElementById('backToFarms')?.addEventListener('click', () => showScreen('farmlist'));
-    document.getElementById('addPlantTopBtn')?.addEventListener('click', openAddPlantModal);
+
     document.getElementById('fabPlant')?.addEventListener('click', openAddPlantModal);
     
     document.querySelectorAll('.feat-card').forEach(card => {

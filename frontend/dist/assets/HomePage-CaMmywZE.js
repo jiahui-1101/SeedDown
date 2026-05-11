@@ -1,11 +1,11 @@
-import{A as n,F as l,S as c,N as v,s as t}from"./index-BbseWLT4.js";import{o as r}from"./AddPlantModal-BGg2cKt2.js";import"https://esm.sh/three@0.160.0";function u(){var i,s,d;console.log("[HomePage] render called");const o=document.getElementById("screenContainer");o.innerHTML=`
+import{A as d,F as r,S as o,N as l,s as i}from"./index-AfE9j7Oh.js";import{o as c}from"./AddPlantModal-BdER9oTM.js";import"https://esm.sh/three@0.160.0";function f(){var t,s;console.log("[HomePage] render called");const n=document.getElementById("screenContainer");n.innerHTML=`
         <div class="screen active" id="homeScreen">
             <div class="topbar">
                 <button id="backToFarms" class="back-btn" style="background:transparent; border:none; font-size:20px;">←</button>
-                <div class="topbar-brand"><span style="font-weight:700;">${n.farmName}</span></div>
+                <div class="topbar-brand"><span style="font-weight:700;">${d.farmName}</span></div>
                 <div style="flex:1"></div>
                 <div id="topbarPill"></div>
-                <button id="addPlantTopBtn" class="topbar-btn" style="margin-left:8px;">+ Plant</button>
+
             </div>
             <div class="bottom-nav">
                 <div class="nav-item active" data-screen="home"><span class="nav-icon">🏠</span><span class="nav-lbl">Home</span></div>
@@ -41,4 +41,4 @@ import{A as n,F as l,S as c,N as v,s as t}from"./index-BbseWLT4.js";import{o as 
                 </div>
             </div>
         </div>
-    `,setTimeout(()=>{console.log("[HomePage] Initializing canvas and sensors"),l.init("farmCanvas"),c.init(),v.init()},100),(i=document.getElementById("backToFarms"))==null||i.addEventListener("click",()=>t("farmlist")),(s=document.getElementById("addPlantTopBtn"))==null||s.addEventListener("click",r),(d=document.getElementById("fabPlant"))==null||d.addEventListener("click",r),document.querySelectorAll(".feat-card").forEach(a=>{a.addEventListener("click",()=>{const e=a.getAttribute("data-feature");e==="community"?t("community"):t("feature",{feature:e})})}),document.querySelectorAll(".bottom-nav .nav-item").forEach(a=>{a.addEventListener("click",()=>{const e=a.getAttribute("data-screen");e==="profile"?(n.profileFrom="home",t("profile")):e==="home"&&t("home")})})}export{u as render};
+    `,setTimeout(()=>{console.log("[HomePage] Initializing canvas and sensors"),r.init("farmCanvas"),o.init(),l.init()},100),(t=document.getElementById("backToFarms"))==null||t.addEventListener("click",()=>i("farmlist")),(s=document.getElementById("fabPlant"))==null||s.addEventListener("click",c),document.querySelectorAll(".feat-card").forEach(a=>{a.addEventListener("click",()=>{const e=a.getAttribute("data-feature");e==="community"?i("community"):i("feature",{feature:e})})}),document.querySelectorAll(".bottom-nav .nav-item").forEach(a=>{a.addEventListener("click",()=>{const e=a.getAttribute("data-screen");e==="profile"?(d.profileFrom="home",i("profile")):e==="home"&&i("home")})})}export{f as render};

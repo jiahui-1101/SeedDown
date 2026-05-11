@@ -33,7 +33,6 @@ export function render() {
                     <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(farm?.name || AppState.farmName || 'Commercial Farm')}</div>
                     <div style="font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Commercial control</div>
                 </div>
-                <button id="addPlantTopBtn" class="topbar-btn" style="border:1px solid var(--accent);background:var(--accent);color:white;border-radius:10px;padding:8px 10px;cursor:pointer;">+ Plant</button>
             </div>
 
             <div style="flex:1; overflow-y:auto; padding-bottom:12px;">
@@ -119,7 +118,6 @@ function bindEvents() {
         showScreen('farmlist');
     });
 
-    document.getElementById('addPlantTopBtn')?.addEventListener('click', openAddPlantModal);
     document.getElementById('fabPlant')?.addEventListener('click', openAddPlantModal);
 
     document.querySelectorAll('.com-feat').forEach(el => {
@@ -287,6 +285,8 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+
 
 
 

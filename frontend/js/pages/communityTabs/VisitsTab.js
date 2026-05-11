@@ -126,9 +126,7 @@ window.visitFarm = function(farmId) {
     const isThirsty = farm.moisture < 30;
 
     area.innerHTML = `
-        <button class="btn-outline"
-            style="margin:15px 0; border:none; padding:0; color:#2563EB; font-weight:bold; cursor:pointer;"
-            onclick="window.backToNeighbors()">← Back to Neighborhood</button>
+        <button class="back-btn" aria-label="Back" style="margin:15px 0; color:#2563EB;" onclick="window.backToNeighbors()">←</button>
 
         <div class="card" style="padding:0; overflow:hidden; border-radius:16px; box-shadow:0 4px 15px rgba(0,0,0,0.08);">
 
@@ -361,3 +359,4 @@ function updateTopNavCoins(newAmount) {
     const el = document.getElementById('myCoinsDisplay');
     if (el) el.innerText = `🍃 ${newAmount} Coins`;
 }
+
