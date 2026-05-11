@@ -1,7 +1,7 @@
 # SeedDown 🌱
 
 <p align="center">
-  <b>AI + IoT smart vertical farming platform for real-time crop monitoring, automated farm actions, 3D farm planning, and community-driven urban agriculture.</b>
+  <b>AI + IoT smart vertical farming platform for real-time crop monitoring, automated farm actions, 3D farm planning, eco-saving alerts, and community-driven urban agriculture.</b>
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@
 **Hackathon:** UTMxHackathon'26  
 **Chosen Case Study:** Case Study 1 - **Precision Urban Agriculture for Vertical Farming**  
 **Solution Type:** IoT System + Web Dashboard + Mobile-responsive Web Application  
-**Project:**  SeedDown
+**Project:** SeedDown
 
 **Problem Statement:**  
 Rapid urbanization, shrinking arable land, and climate change are increasing pressure on traditional food supply chains. Vertical farming offers a space-efficient and sustainable way to grow crops in controlled indoor environments, but managing these systems manually is still resource-intensive and error-prone.
@@ -51,7 +51,7 @@ For beginner growers, community gardens, and indoor campus greenhouses, the main
 3. **Limited access to affordable, data-driven automation tools** that can monitor crops around the clock and recommend practical improvements.
 4. **High entry barrier** for planning a vertical farm layout, understanding plant performance, and scaling from a hobby setup to a commercial dashboard.
 
-NextLevelFarm answers Case Study 1 by combining a functional ESP32 IoT prototype, a centralized web dashboard, automated device commands, predictive alerts, AI-supported plant guidance, and interactive 3D vertical farm planning. It is designed to help users maximize crop yield while minimizing water and electricity usage.
+SeedDown answers Case Study 1 by combining a functional ESP32 IoT prototype, a centralized web dashboard, automated device commands, predictive alerts, AI-supported plant guidance, and interactive 3D vertical farm planning. It is designed to help users maximize crop yield while minimizing water and electricity usage.
 
 ---
 
@@ -63,7 +63,7 @@ The platform turns live sensor readings into practical farm actions:
 
 - Detect unsafe gas, temperature, pH, light, water, and soil moisture readings.
 - Store real-time readings in Firestore.
-- Generate pending commands for the ESP32 such as `WATER_ON`, `LIGHT_ON`, and `BUZZER_ON`.
+- Generate pending commands for the ESP32 such as `WATER_ON`, `LIGHT_ON`, `BUZZER_ON`, and `PH_WARNING`.
 - Let users build a vertical farm field with different rack structures and plant placements.
 - Display the farm as a responsive 3D canvas.
 - Provide beginner-friendly guidance and commercial-level analytics.
@@ -77,7 +77,7 @@ The product is designed for two user groups:
 
 ## Solution Overview :seedling:
 
-NextLevelFarm is built around one continuous loop:
+SeedDown is built around one continuous loop:
 
 ```mermaid
 flowchart LR
@@ -118,10 +118,12 @@ POST /api/sensors
 
 The backend analyzes each sensor cycle and creates an action command when needed:
 
-- `BUZZER_ON` for dangerous gas or abnormal temperature/pH.
+- `BUZZER_ON` for dangerous gas or abnormal temperature.
 - `WATER_ON` when soil is below dry threshold.
-- `LIGHT_ON` when light level is too low.
+- `LIGHT_ON` when `lightRaw < 1500`.
+- `PH_WARNING` when pH is outside the safe range.
 - `NO_ACTION` when the environment is stable.
+- Multiple abnormal readings can return combined commands, for example `BUZZER_ON,LIGHT_ON`.
 
 ESP32 pulls the latest command through:
 
@@ -133,12 +135,12 @@ The command can also update the ESP32 sampling interval based on user profile se
 
 ### 3. AI Alert & Predictive Warnings 🚨
 
-NextLevelFarm includes an AI-assisted alert layer that turns raw sensor values into understandable farm warnings:
+SeedDown includes an AI-assisted alert layer that turns raw sensor values into understandable farm warnings:
 
 - Detects abnormal temperature, pH, gas, light, water, and soil moisture readings.
 - Classifies farm status into stable, warning, or danger conditions.
 - Shows beginner-friendly alert cards instead of only raw numbers.
-- Supports urgent actuator responses such as buzzer alerts for unsafe gas, extreme temperature, or dangerous pH.
+- Supports urgent actuator responses such as buzzer alerts for unsafe gas or extreme temperature, plus pH warning alerts for nutrient imbalance.
 - Helps users understand why a warning is happening and what action should be taken next.
 - Provides commercial users with threshold-based controls so alert sensitivity can match different crops and farm setups.
 
@@ -155,7 +157,7 @@ Eco Save focuses on reducing water and electricity waste while keeping plants he
 - ESG / consumption tracking helps users understand resource impact over time.
 - What-If analysis compares plant choices, rack capacity, and resource usage before users expand the farm.
 
-Instead of running pumps and lights continuously, NextLevelFarm reacts to real sensor conditions. This helps align the prototype with the case study goal of maximizing crop yield while minimizing water and electricity usage.
+Instead of running pumps, lights, fans, or warning systems continuously, SeedDown reacts to real sensor conditions. This helps align the prototype with the case study goal of maximizing crop yield while minimizing water and electricity usage.
 
 ### 5. Beginner Mode 🌱
 
@@ -250,7 +252,7 @@ The chat service also connects to backend advisor endpoints when available.
 
 ### 11. What-If and Commercial Planning 🔮
 
-NextLevelFarm includes planning tools for both beginner and commercial users:
+SeedDown includes planning tools for both beginner and commercial users:
 
 - Forecast crop yield.
 - Estimate profit based on plant count and sensor data.
@@ -303,7 +305,7 @@ Community features make the platform more engaging:
 - pH analog input
 - LDR light sensor
 - Ultrasonic water level sensor
-- LED / buzzer output simulation
+- LED / buzzer output simulation for hardware that is unavailable in Wokwi
 
 ### AI / Data
 
@@ -325,9 +327,9 @@ flowchart TB
         S4[pH Sensor]
         S5[LDR Light]
         S6[Ultrasonic Water Level]
-        A1[Grow Light LED]
-        A2[Water LED/Pump Indicator]
-        A3[Buzzer]
+        A1[Demo Light/Fan Indicator]
+        A2[Water Pump Indicator]
+        A3[Buzzer / Warning Indicator]
     end
 
     subgraph Backend[Node.js Express Backend]
@@ -378,14 +380,17 @@ flowchart TB
 
 The backend evaluates each incoming reading using stored preferences.
 
-| Condition | Command | Purpose |
-|---|---|---|
-| Gas raw value above danger threshold | `BUZZER_ON` | Safety warning |
-| Temperature outside preferred range | `BUZZER_ON` | Protect crops from heat/cold stress |
-| Soil moisture below dry threshold | `WATER_ON` | Trigger watering action |
-| Light raw value below dark threshold | `LIGHT_ON` | Activate grow light |
-| pH outside preferred range | `BUZZER_ON` | Alert user to nutrient/pH issue |
-| All values stable | `NO_ACTION` | Keep device idle |
+| Condition | Command | Wokwi Simulation | Real-Life Deployment Meaning |
+|---|---|---|---|
+| Gas level is abnormal | `BUZZER_ON` | Buzzer turns on | Ventilation fan / exhaust fan / safety alarm activates |
+| Temperature `< 18°C` or `> 35°C` | `BUZZER_ON` | Buzzer turns on | Cooling fan, ventilation, heater, or climate-control alert activates |
+| Soil moisture is dry | `WATER_ON` | Water LED / pump indicator turns on | Water pump or hydroponic pump relay activates |
+| `lightRaw < 1500` | `LIGHT_ON` | LED indicator turns on | Grow light relay or lighting zone activates |
+| pH is outside safe range | `PH_WARNING` | Warning message / indicator | Nutrient dosing alert, pH-up / pH-down maintenance reminder, or dosing pump trigger |
+| Multiple values are abnormal | Example: `BUZZER_ON,LIGHT_ON` | Multiple indicators activate together | Multiple actuators or alerts can run in the same cycle |
+| All values stable | `NO_ACTION` | Device stays idle | No actuator is triggered |
+
+In the Wokwi simulation, some outputs act as stand-ins because the simulator does not include the full real-life farm hardware stack. For example, an LED may represent a grow light relay, a fan relay, or a pump indicator depending on the command being demonstrated. In a physical prototype, those pins can be connected to relay modules controlling the actual pump, grow light, ventilation fan, buzzer, or pH dosing system.
 
 The ESP32 supports demo commands through serial input:
 
@@ -416,8 +421,8 @@ This project can be run in three parts:
 ### Clone Repository
 
 ```bash
-git clone https://github.com/jiahui-1101/NextLevelFarm.git
-cd NextLevelFarm
+git clone https://github.com/jiahui-1101/SeedDown.git
+cd SeedDown
 ```
 
 ### Backend Setup
@@ -432,7 +437,7 @@ Expected output:
 
 ```text
 Firebase Firestore connected
-NextLevelFarm backend → http://localhost:3000
+SeedDown backend → http://localhost:3000
 ```
 
 ### Frontend Setup
@@ -477,7 +482,7 @@ Create `backend/.env`:
 
 ```env
 PORT=3000
-FIREBASE_PROJECT_ID=nextlevelfarm
+FIREBASE_PROJECT_ID=your-firebase-project-id
 
 # Recommended for Render and deployment:
 FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
@@ -527,7 +532,7 @@ Start Command: npm start
 ### Required Render Environment Variables
 
 ```text
-FIREBASE_PROJECT_ID=nextlevelfarm
+FIREBASE_PROJECT_ID=your-firebase-project-id
 FIREBASE_SERVICE_ACCOUNT_JSON={full service account JSON}
 ```
 
@@ -543,7 +548,7 @@ DA3_SERVICE_URL=your_3d_service_url
 ### Test Render API
 
 ```powershell
-$BASE="https://nextlevelfarm.onrender.com"
+$BASE="https://your-seeddown-backend.onrender.com"
 Invoke-RestMethod "$BASE/"
 Invoke-RestMethod "$BASE/api/sensors"
 ```
@@ -637,7 +642,7 @@ Invoke-RestMethod -Method POST -Uri "$BASE/api/sensors" -ContentType "applicatio
 ## Project Structure :open_file_folder:
 
 ```bash
-NextLevelFarm/
+SeedDown/
 ├── backend/                         # Node.js + Express API server
 │   ├── src/
 │   │   ├── config/                  # Firebase / Firestore config
@@ -705,7 +710,7 @@ Use this flow for a hackathon presentation:
 ## Documentation :page_facing_up:
 
 - **Pitch Deck:** `slide.pdf`
-- **Backend URL:** `https://nextlevelfarm.onrender.com`
+- **Backend URL:** `https://your-seeddown-backend.onrender.com`
 - **IoT Firmware:** `iot/vertical-farming-esp32/src/main.cpp`
 - **Frontend Entry:** `frontend/index.html`
 - **Backend Entry:** `backend/server.js`
@@ -714,7 +719,7 @@ Use this flow for a hackathon presentation:
 
 ## Contributors :woman_technologist:
 
-Team **NextLevelFarm / SeedDown**
+Team **SeedDown**
 
 - Wong Jia Hui
 - Lee Mei Shuet
@@ -726,7 +731,7 @@ Team **NextLevelFarm / SeedDown**
 
 ## Notes for Judges
 
-NextLevelFarm is not only a dashboard. It is an end-to-end prototype connecting:
+SeedDown is not only a dashboard. It is an end-to-end prototype connecting:
 
 ```text
 Physical IoT simulation → Cloud API → Firestore → AI logic → Web dashboard → Farm action
