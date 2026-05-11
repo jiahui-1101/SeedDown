@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "postinstall": "npm --prefix backend install",
+    "start": "npm --prefix backend start"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1"
   }
