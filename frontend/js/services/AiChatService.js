@@ -11,17 +11,17 @@ export function initAiChat() {
     container.innerHTML = `
         <style>
             #aiFab {
-                width: 60px; height: 60px; background: var(--accent); 
+                width: clamp(52px, 12vw, 60px); height: clamp(52px, 12vw, 60px); background: var(--accent); 
                 border-radius: 50%; display: flex; align-items: center; 
                 justify-content: center; font-size: 30px; cursor: pointer; 
                 box-shadow: 0 8px 24px rgba(0,0,0,0.2); transition: all 0.3s ease;
-                z-index: 1000; position: fixed; bottom: 20px; right: 20px;
+                z-index: 1000; position: fixed; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); right: calc(20px + env(safe-area-inset-right, 0px));
             }
             #aiFab:hover { transform: scale(1.1) rotate(5deg); }
 
             #aiWindow {
-                display: none; position: fixed; bottom: 90px; right: 20px; 
-                width: 350px; height: 500px; background: var(--surface); 
+                display: none; position: fixed; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); right: calc(20px + env(safe-area-inset-right, 0px)); 
+                width: min(350px, calc(100vw - 32px)); height: min(500px, calc(100dvh - 120px)); background: var(--surface); 
                 border-radius: 24px; flex-direction: column; 
                 box-shadow: 0 12px 40px rgba(0,0,0,0.15); 
                 border: 1px solid var(--border); overflow: hidden;

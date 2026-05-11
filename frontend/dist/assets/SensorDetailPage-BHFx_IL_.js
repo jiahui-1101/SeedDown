@@ -1,7 +1,7 @@
-import{s as k,a as v}from"./index-CDbG3aFg.js";import"https://esm.sh/three@0.160.0";async function z(c={}){const a=c.key||"temp",g=c.name||"Sensor",f=document.getElementById("screenContainer"),m={temp:"temperature",humid:"humidity",ph:"ph",light:"lightRaw",water:"waterDistanceCm",nutrient:"gasRaw"}[a]||"value",s={temp:"°C",humid:"%rh",light:"%",ph:"pH",water:"%",nutrient:"%"}[a]||"";let i=[];try{const o=(await(await fetch("http://localhost:3000/api/sensors/history?deviceId=farm_001&limit=5")).json()).readings;if(Array.isArray(o)&&o.length>0)i=o.map(t=>({time:t.createdAt?new Date(t.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"--:--",val:t[m]!==void 0?t[m].toString():"0.0",status:"Normal"}));else throw new Error("No data")}catch(e){console.error("Firebase Fetch Error:",e),i=[{time:"N/A",val:"0.0",status:"Offline"}]}const d=[...i].reverse(),u=d.map(e=>parseFloat(e.val)),b=Math.max(...u),x=Math.min(...u),F=b-x||1,l=d.map((e,n)=>{const o=n/(d.length-1||1)*100,t=35-(parseFloat(e.val)-x)/F*30;return{x:o.toFixed(1),y:t.toFixed(1),val:e.val,time:e.time}}),y=`M ${l.map(e=>`${e.x},${e.y}`).join(" L ")}`,w=`${y} L 100,40 L 0,40 Z`,h=100/(l.length-1||1),$=l.map(e=>`
-        <circle cx="${e.x}" cy="${e.y}" r="1.5" fill="#FFFFFF" stroke="#10B981" stroke-width="1" pointer-events="none"></circle>
-        <rect class="chart-slice" data-val="${e.val}" data-time="${e.time}" data-cx="${e.x}" 
-              x="${e.x-h/2}" y="0" width="${h}" height="40" 
+import{s as k,a as v}from"./index-BbseWLT4.js";import"https://esm.sh/three@0.160.0";async function z(c={}){const a=c.key||"temp",g=c.name||"Sensor",f=document.getElementById("screenContainer"),m={temp:"temperature",humid:"humidity",ph:"ph",light:"lightRaw",water:"waterDistanceCm",nutrient:"gasRaw"}[a]||"value",s={temp:"°C",humid:"%rh",light:"%",ph:"pH",water:"%",nutrient:"%"}[a]||"";let i=[];try{const o=(await(await fetch("http://localhost:3000/api/sensors/history?deviceId=farm_001&limit=5")).json()).readings;if(Array.isArray(o)&&o.length>0)i=o.map(e=>({time:e.createdAt?new Date(e.createdAt).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"--:--",val:e[m]!==void 0?e[m].toString():"0.0",status:"Normal"}));else throw new Error("No data")}catch(t){console.error("Firebase Fetch Error:",t),i=[{time:"N/A",val:"0.0",status:"Offline"}]}const d=[...i].reverse(),u=d.map(t=>parseFloat(t.val)),b=Math.max(...u),x=Math.min(...u),F=b-x||1,l=d.map((t,n)=>{const o=n/(d.length-1||1)*100,e=35-(parseFloat(t.val)-x)/F*30;return{x:o.toFixed(1),y:e.toFixed(1),val:t.val,time:t.time}}),y=`M ${l.map(t=>`${t.x},${t.y}`).join(" L ")}`,w=`${y} L 100,40 L 0,40 Z`,h=100/(l.length-1||1),$=l.map(t=>`
+        <circle cx="${t.x}" cy="${t.y}" r="1.5" fill="#FFFFFF" stroke="#10B981" stroke-width="1" pointer-events="none"></circle>
+        <rect class="chart-slice" data-val="${t.val}" data-time="${t.time}" data-cx="${t.x}" 
+              x="${t.x-h/2}" y="0" width="${h}" height="40" 
               fill="transparent" style="cursor:crosshair; pointer-events:all; outline:none;"></rect>
     `).join("");f.innerHTML=`
         <div class="screen active" style="display:flex; flex-direction:column; background:#F0FDF4; height:100vh; position:relative;">
@@ -27,8 +27,8 @@ import{s as k,a as v}from"./index-CDbG3aFg.js";import"https://esm.sh/three@0.160
 
                 <div style="background:#FFFFFF; border-radius:24px; padding:24px; box-shadow:0 8px 24px rgba(5,150,105,0.06); margin-bottom:20px;">
                     <div style="font-size:0.85rem; font-weight:700; color:#065F46; margin-bottom:20px;">TREND HISTORY</div>
-                    <div style="height:140px; width:100%; position:relative;">
-                        <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%; height:100%; overflow:visible;">
+                    <div style="width:min(100%, 720px); aspect-ratio:5 / 2; min-height:140px; position:relative; margin:0 auto;">
+                        <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%; height:100%; overflow:visible; display:block;">
                             <defs>
                                 <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stop-color="rgba(16, 185, 129, 0.4)"/>
@@ -46,13 +46,13 @@ import{s as k,a as v}from"./index-CDbG3aFg.js";import"https://esm.sh/three@0.160
                 <div style="background:#FFFFFF; border-radius:24px; padding:24px; box-shadow:0 8px 24px rgba(5,150,105,0.06);">
                     <div style="font-size:0.85rem; font-weight:700; color:#065F46; margin-bottom:16px;">HISTORICAL RECORDS</div>
                     <div style="display:flex; flex-direction:column; gap:8px;">
-                        ${i.map(e=>`
+                        ${i.map(t=>`
                             <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; font-size:0.9rem; padding:14px 0; border-bottom:1px solid #F8FAFC; align-items:center;">
-                                <span style="color:#64748B; font-weight:500;">${e.time}</span>
-                                <span style="font-weight:800; color:#065F46;">${e.val} <span style="font-size:0.7rem; color:#94A3B8; font-weight:600;">${s}</span></span>
+                                <span style="color:#64748B; font-weight:500;">${t.time}</span>
+                                <span style="font-weight:800; color:#065F46;">${t.val} <span style="font-size:0.7rem; color:#94A3B8; font-weight:600;">${s}</span></span>
                                 <span style="text-align:right;">
-                                    <span style="background:${e.status==="Normal"?"#ECFDF5":"#FEE2E2"}; color:${e.status==="Normal"?"#059669":"#DC2626"}; padding:6px 12px; border-radius:12px; font-size:0.7rem; font-weight:700;">
-                                        ${e.status==="Normal"?"● ":""}${e.status}
+                                    <span style="background:${t.status==="Normal"?"#ECFDF5":"#FEE2E2"}; color:${t.status==="Normal"?"#059669":"#DC2626"}; padding:6px 12px; border-radius:12px; font-size:0.7rem; font-weight:700;">
+                                        ${t.status==="Normal"?"● ":""}${t.status}
                                     </span>
                                 </span>
                             </div>
@@ -76,4 +76,4 @@ import{s as k,a as v}from"./index-CDbG3aFg.js";import"https://esm.sh/three@0.160
                 </div>
             </div>
         </div>
-    `,document.getElementById("detailBackBtn").onclick=()=>k("home");const r=document.getElementById("chartTooltip");document.querySelectorAll(".chart-slice").forEach(e=>{e.addEventListener("pointerenter",()=>{const n=e.getAttribute("data-val"),o=e.getAttribute("data-time"),t=e.getAttribute("data-cx");r.innerHTML=`<div style="font-size:0.7rem;">${o}</div><b>${n} ${s}</b>`,r.style.left=`${t}%`,r.style.display="block"}),e.addEventListener("pointerleave",()=>r.style.display="none")});const p=document.getElementById("customModal");document.getElementById("openModalBtn").onclick=()=>p.style.display="flex",document.getElementById("cancelModalBtn").onclick=()=>p.style.display="none",document.getElementById("saveModalBtn").onclick=async()=>{const e=document.getElementById("prefInput").value;try{(await fetch("http://localhost:3000/api/sensors/preferences",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({deviceId:"farm_001",sensorIntervalSeconds:e*3600,sensorType:a})})).ok&&(p.style.display="none",v("success",`Interval updated to ${e}h`))}catch{v("error","Update failed")}}}export{z as render};
+    `,document.getElementById("detailBackBtn").onclick=()=>k("home");const r=document.getElementById("chartTooltip");document.querySelectorAll(".chart-slice").forEach(t=>{t.addEventListener("pointerenter",()=>{const n=t.getAttribute("data-val"),o=t.getAttribute("data-time"),e=t.getAttribute("data-cx");r.innerHTML=`<div style="font-size:0.7rem;">${o}</div><b>${n} ${s}</b>`,r.style.left=`${e}%`,r.style.display="block"}),t.addEventListener("pointerleave",()=>r.style.display="none")});const p=document.getElementById("customModal");document.getElementById("openModalBtn").onclick=()=>p.style.display="flex",document.getElementById("cancelModalBtn").onclick=()=>p.style.display="none",document.getElementById("saveModalBtn").onclick=async()=>{const t=document.getElementById("prefInput").value;try{(await fetch("http://localhost:3000/api/sensors/preferences",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({deviceId:"farm_001",sensorIntervalSeconds:t*3600,sensorType:a})})).ok&&(p.style.display="none",v("success",`Interval updated to ${t}h`))}catch{v("error","Update failed")}}}export{z as render};

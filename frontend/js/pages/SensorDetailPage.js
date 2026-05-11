@@ -89,8 +89,8 @@ export async function render(params = {}) {
 
                 <div style="background:#FFFFFF; border-radius:24px; padding:24px; box-shadow:0 8px 24px rgba(5,150,105,0.06); margin-bottom:20px;">
                     <div style="font-size:0.85rem; font-weight:700; color:#065F46; margin-bottom:20px;">TREND HISTORY</div>
-                    <div style="height:140px; width:100%; position:relative;">
-                        <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%; height:100%; overflow:visible;">
+                    <div style="width:min(100%, 720px); aspect-ratio:5 / 2; min-height:140px; position:relative; margin:0 auto;">
+                        <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%; height:100%; overflow:visible; display:block;">
                             <defs>
                                 <linearGradient id="greenGrad" x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stop-color="rgba(16, 185, 129, 0.4)"/>

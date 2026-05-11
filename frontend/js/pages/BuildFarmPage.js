@@ -504,7 +504,7 @@ function renderStep3(content) {
                     </div>
                 </div>
                 <div style="position:relative;background:#10141d;">
-                    <canvas id="farmCanvas3D" style="width:100%;height:330px;display:block;"></canvas>
+                    <canvas id="farmCanvas3D" style="width:100%;height:clamp(300px,44dvh,560px);display:block;"></canvas>
                     <div id="canvas3DOverlay"
                          style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
                                 background:rgba(16,20,29,.74);color:rgba(255,255,255,.78);font-size:13px;">
@@ -576,8 +576,11 @@ async function init3DField(rack) {
 
     if (overlay) overlay.style.display = 'none';
 
-    const height = 330;
-    const width = Math.max(320, canvas.offsetWidth || 360);
+    const getCanvasSize = () => ({
+        width: Math.max(240, canvas.clientWidth || canvas.offsetWidth || 360),
+        height: Math.max(260, canvas.clientHeight || canvas.offsetHeight || 330),
+    });
+    const { width, height } = getCanvasSize();
 
     if (!hasWebGLSupport()) {
         draw3DFallbackCanvas(canvas, rack, width, height);
@@ -721,10 +724,10 @@ async function init3DField(rack) {
     controls.addEventListener('start', () => { controls.autoRotate = false; });
 
     const resizeObserver = new ResizeObserver(() => {
-        const nextWidth = Math.max(320, canvas.offsetWidth || width);
-        camera.aspect = nextWidth / height;
+        const { width: nextWidth, height: nextHeight } = getCanvasSize();
+        camera.aspect = nextWidth / nextHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(nextWidth, height);
+        renderer.setSize(nextWidth, nextHeight, false);
     });
     resizeObserver.observe(canvas);
 
@@ -1185,6 +1188,9 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+
+
 
 
 

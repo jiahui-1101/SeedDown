@@ -269,7 +269,7 @@ export const FarmCanvas = {
 
         const rect = this.canvas.getBoundingClientRect();
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const width = Math.max(320, rect.width || this.canvas.parentElement?.clientWidth || 360);
+        const width = Math.max(240, rect.width || this.canvas.parentElement?.clientWidth || 360);
         const height = Math.max(220, rect.height || 220);
         this.canvas.width = Math.floor(width * dpr);
         this.canvas.height = Math.floor(height * dpr);
@@ -292,7 +292,7 @@ export const FarmCanvas = {
         }
         if (!this.canvas || !this.renderer || !this.camera) return;
         const rect = this.canvas.getBoundingClientRect();
-        const width = Math.max(320, rect.width || this.canvas.parentElement?.clientWidth || 360);
+        const width = Math.max(240, rect.width || this.canvas.parentElement?.clientWidth || 360);
         const height = Math.max(220, rect.height || 220);
         this.renderer.setSize(width, height, false);
         this.camera.aspect = width / height;
@@ -569,3 +569,5 @@ function emojiForPlant(name = '') {
     if (key.includes('basil') || key.includes('mint') || key.includes('spinach')) return '🌿';
     return '🌱';
 }
+
+

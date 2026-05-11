@@ -38,7 +38,7 @@ export function render() {
 
             <div style="flex:1; overflow-y:auto; padding-bottom:12px;">
                 <div style="margin:12px 16px 10px 16px; position:relative;">
-                    <canvas id="commercialFarmCanvas" style="width:100%; height:300px; border-radius:24px; background:#EAF4FF; display:block;"></canvas>
+                    <canvas id="commercialFarmCanvas" style="width:100%; height:clamp(280px, 40dvh, 520px); border-radius:24px; background:#EAF4FF; display:block;"></canvas>
                     <button id="fabPlant" title="Add plant" aria-label="Add plant" style="position:absolute; bottom:12px; right:12px; background:var(--accent); border:none; width:48px; height:48px; border-radius:16px; color:white; font-size:26px;cursor:pointer;box-shadow:var(--shadow-sm);">+</button>
                     <div style="position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.88);border:1px solid var(--border);border-radius:12px;padding:8px 10px;box-shadow:var(--shadow-sm);">
                         <div style="font-size:10px;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.06em;">${escapeHTML(rack.label)}</div>
@@ -287,5 +287,7 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+
 
 
