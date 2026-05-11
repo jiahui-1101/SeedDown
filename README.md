@@ -407,25 +407,26 @@ demo          # use demo interval
 
 ## Real-Life Deployment Budget :money_with_wings:
 
-The current prototype is demonstrated with Wokwi, but the same logic can be deployed with low-cost ESP32-compatible hardware. Prices below are approximate Malaysia budget estimates checked around May 2026; actual prices depend on seller, stock, shipping, and whether a cheaper clone or a more reliable branded module is chosen.
+The current prototype is demonstrated with Wokwi, but the same logic can be deployed with low-cost ESP32-compatible hardware. Prices below are team-checked Malaysia budget estimates from May 2026; actual prices may change depending on seller, stock, shipping, and module quality.
 
 | Farm Function | Budget Hardware | ESP32 Connection | Approx. Cost (RM) | Why It Fits SeedDown | Real-Life Deployment Role |
 |---|---|---|---:|---|---|
-| Main controller | NodeMCU ESP32 / ESP32 DevKit | WiFi + GPIO + ADC + PWM | 24 - 35 | Built-in WiFi, enough analog/digital pins, Arduino/PlatformIO support | Sends sensor data to backend and receives farm commands |
-| Air temperature + humidity | DHT11 module, or DHT22 if better accuracy is needed | Digital GPIO, 3.3V/5V | 5 - 16 | Cheapest option is enough for demo; DHT22 is more accurate for real farms | Detects heat stress and humidity imbalance |
-| Soil moisture | Capacitive soil moisture sensor | Analog ADC | 10 - 20 | Capacitive type lasts longer than cheap resistive probes | Triggers `WATER_ON` only when soil is dry |
-| Light level | LDR + resistor, or light sensor module | Analog ADC | 1 - 5 | Extremely cheap and easy to calibrate | Triggers `LIGHT_ON` when `lightRaw < 1500` |
-| Gas / air safety | MQ-2 gas sensor module | Analog ADC or digital GPIO; use voltage divider if output exceeds 3.3V | 7 - 8 | Cheap safety sensor for smoke / LPG / gas demo | Triggers `BUZZER_ON` and real ventilation / alarm |
-| Water reservoir level | HC-SR04 or SR04P ultrasonic sensor | Trigger GPIO + Echo GPIO; SR04P is easier for 3.3V | 3 - 5 | Low-cost non-contact water level sensing | Warns when tank is low or distance is abnormal |
-| Water pH | Analog pH probe kit | Analog ADC, calibration required | 33 - 155 | Budget clone is cheapest; branded kit is more stable | Triggers `PH_WARNING` and nutrient maintenance alert |
-| Pump control | 5V mini submersible pump + relay/MOSFET | GPIO to relay/MOSFET driver | 4 - 15 | Cheap enough for small hydroponic / irrigation demo | Real actuator for `WATER_ON` |
-| Grow light control | 12V LED strip / grow light + relay/MOSFET | GPIO to relay/MOSFET driver | 10 - 30 | Relay/MOSFET lets ESP32 switch higher-power lights safely | Real actuator for `LIGHT_ON` |
-| Ventilation / cooling | 5V/12V DC fan + relay/MOSFET | GPIO to relay/MOSFET driver | 15 - 18 | Represents the real response for abnormal gas or temperature | Real actuator for `BUZZER_ON` safety/climate events |
-| Warning output | Active buzzer | Digital GPIO | 1 - 3 | Very cheap, clear demo feedback | Local alarm for dangerous readings |
-| Safe switching | 3.3V-compatible relay module or logic-level MOSFET module | Digital GPIO | 5 - 50 | Needed because ESP32 pins cannot directly power pumps, lights, or fans | Protects ESP32 while switching real actuators |
-| Power supply | 5V USB supply + 12V adapter if using fan/light | VIN/5V and actuator supply | 10 - 25 | Keeps sensors and actuators stable | Separates ESP32 power from pump/fan/light load |
+| Main controller | NodeMCU ESP32 | WiFi + GPIO + ADC + PWM | 10.90 | Built-in WiFi, enough analog/digital pins, Arduino/PlatformIO support | Sends sensor data to backend and receives farm commands |
+| Air temperature + humidity | DHT11 module | Digital GPIO, 3.3V/5V | 2.52 | Cheapest sensor for temperature and humidity demo | Detects heat stress and humidity imbalance |
+| Soil moisture | Soil moisture sensor | Analog ADC | 2.60 | Lowest-cost way to detect dry soil | Triggers `WATER_ON` only when soil is dry |
+| Light level | LDR module | Analog ADC | 4.50 | Cheap and simple light detection | Triggers `LIGHT_ON` when `lightRaw < 1500` |
+| Gas / air safety | MQ-2 gas sensor module | Analog ADC or digital GPIO; use voltage divider if output exceeds 3.3V | 3.40 | Cheap safety sensor for smoke / LPG / gas demo | Triggers `BUZZER_ON` and real ventilation / alarm |
+| Water reservoir level | HC-SR04 ultrasonic sensor | Trigger GPIO + Echo GPIO; use voltage divider on Echo if needed | 7.50 | Low-cost non-contact water level sensing | Warns when tank is low or distance is abnormal |
+| Water pH | Analog pH sensor kit | Analog ADC, calibration required | 25.50 | Budget pH sensor for nutrient-water monitoring | Triggers `PH_WARNING` and nutrient maintenance alert |
+| Pump control | 5V mini submersible pump | GPIO to relay/MOSFET driver | 4.50 | Cheap enough for small hydroponic / irrigation demo | Real actuator for `WATER_ON` |
+| Grow light control | LED strip | GPIO to relay/MOSFET driver | 2.00 / 10cm | Low-cost grow-light stand-in for rack lighting zones | Real actuator for `LIGHT_ON` |
+| Ventilation / cooling | Small fan | GPIO to relay/MOSFET driver | 2.00 | Represents the real response for abnormal gas or temperature | Real actuator for `BUZZER_ON` safety/climate events |
+| Warning output | Active buzzer | Digital GPIO | 2.10 | Very cheap, clear demo feedback | Local alarm for dangerous readings |
+| Safe switching | 3.3V-compatible relay module or logic-level MOSFET module | Digital GPIO | 2.00 | Needed because ESP32 pins cannot directly power pumps, lights, or fans | Protects ESP32 while switching real actuators |
+| Power supply | 5V USB supply + 12V adapter if using fan/light | VIN/5V and actuator supply | 3.60 | Keeps sensors and actuators stable | Separates ESP32 power from pump/fan/light load |
+| Wiring/protection parts | Jumper wires, breadboard/terminal block, resistors for voltage divider | GPIO / ADC support parts | 3 - 8 | Small but important for safe real wiring | Helps connect sensors and protect ESP32 input pins |
 
-**Estimated minimum small prototype cost:** around **RM130 - RM220** including pH sensing. Without pH hardware, the demo can be reduced to around **RM90 - RM140**.
+**Estimated minimum small prototype cost:** around **RM76 - RM82** including pH sensing, depending on LED strip length and small wiring parts. Without pH hardware, the demo can be reduced to around **RM50 - RM56**.
 
 **Important ESP32 wiring notes:**
 
