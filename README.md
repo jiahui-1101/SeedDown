@@ -827,8 +827,8 @@ SeedDown already demonstrates the end-to-end loop from IoT sensing to dashboard 
 
 ## Documentation :page_facing_up:
 
-- **Pitch Deck:** add final slide link before submission
-- **Demo Video:** add final demo video link before submission
+- **Pitch Deck:** [slide](https://drive.google.com/file/d/1FGmU1d_EFPdXR9KZgmKsFtYNNL2bMWdb/view?usp=sharing) 
+- **Demo Video:** [video](https://youtu.be/TSjutkisYTE)
 - **Backend URL:** `https://your-seeddown-backend.onrender.com`
 - **IoT Firmware:** `iot/vertical-farming-esp32/src/main.cpp`
 - **Frontend Entry:** `frontend/index.html`
