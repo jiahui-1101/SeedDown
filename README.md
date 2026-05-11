@@ -709,7 +709,8 @@ Use this flow for a hackathon presentation:
 
 ## Documentation :page_facing_up:
 
-- **Pitch Deck:** `slide.pdf`
+- **Pitch Deck:** `slide.link`
+- **Demo Video:** `video.link`
 - **Backend URL:** `https://your-seeddown-backend.onrender.com`
 - **IoT Firmware:** `iot/vertical-farming-esp32/src/main.cpp`
 - **Frontend Entry:** `frontend/index.html`
@@ -719,7 +720,7 @@ Use this flow for a hackathon presentation:
 
 ## Contributors :woman_technologist:
 
-Team **SeedDown**
+Team **next level utm**
 
 - Wong Jia Hui
 - Lee Mei Shuet
