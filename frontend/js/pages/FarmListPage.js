@@ -4,6 +4,8 @@ import { AppState } from '../store.js';
 import { saveFarmsToFirestore } from '../utils/firebase.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
+const COMMERCIAL_ACCOUNT_KEY = 'commercial_account';
+const COMMERCIAL_TERMS_KEY = 'commercial_terms_accepted';
 
 export function render() {
     console.log('[FarmListPage] render called');
@@ -95,11 +97,16 @@ function bindEvents(savedFarms) {
     document.getElementById('buildFarmBtn').onclick = () => showScreen('buildfarm');
 
     document.getElementById('switchModeBtn').onclick = () => {
-        AppState.mode = AppState.mode === 'beginner' ? 'commercial' : 'beginner';
-        showToast('info', `Switched to ${AppState.mode === 'commercial' ? '🏭 Commercial' : '🌱 Beginner'} mode`);
+        if (AppState.mode === 'beginner') {
+            openCommercialGate();
+            return;
+        }
+
+        AppState.mode = 'beginner';
+        AppState.isGuest = true;
+        showToast('info', 'Switched to 🌱 Beginner mode');
         render();
     };
-
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.onclick = () => {
             if (item.dataset.screen === 'profile') {
@@ -110,6 +117,100 @@ function bindEvents(savedFarms) {
     });
 }
 
+function openCommercialGate() {
+    const modalContainer = document.getElementById('modalContainer');
+    if (!modalContainer) return;
+
+    const account = getCommercialAccount();
+    const hasAccount = Boolean(account?.password);
+
+    modalContainer.innerHTML = `
+        <div class="modal-overlay open" id="commercialGateModal">
+            <div class="modal-sheet">
+                <div style="padding:18px;">
+                    <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">Commercial Access</div>
+                    <div style="font-size:18px;font-weight:900;margin-bottom:6px;">Switch to Commercial mode</div>
+                    <div style="font-size:13px;color:var(--sub);line-height:1.45;margin-bottom:14px;">
+                        ${hasAccount ? 'Enter the same password/key used during Commercial Register.' : 'Create a commercial password/key for this device before entering Commercial mode.'}
+                    </div>
+
+                    <label style="display:block;font-size:0.7rem;font-weight:800;margin-bottom:6px;">Password / Access Key</label>
+                    <input id="commercialGatePassword" type="password" placeholder="Minimum 6 characters" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid var(--border);margin-bottom:12px;">
+
+                    <label style="display:flex;gap:10px;align-items:flex-start;font-size:0.76rem;color:var(--muted);line-height:1.4;margin-bottom:12px;">
+                        <input id="commercialGateTerms" type="checkbox" style="margin-top:2px;">
+                        <span>I agree to the Commercial Terms & Conditions and understand this mode can affect automation controls.</span>
+                    </label>
+
+                    <div id="commercialGateError" style="display:none;color:var(--danger);font-size:0.76rem;margin-bottom:12px;"></div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <button id="cancelCommercialGate" style="padding:13px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);font-weight:800;cursor:pointer;color:var(--text);">Cancel</button>
+                        <button id="confirmCommercialGate" class="btn-primary" style="padding:13px;">Enter</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const showError = (message) => {
+        const error = document.getElementById('commercialGateError');
+        error.textContent = message;
+        error.style.display = message ? 'block' : 'none';
+    };
+
+    document.getElementById('cancelCommercialGate').onclick = closeFarmModal;
+    document.getElementById('commercialGateModal').addEventListener('click', event => {
+        if (event.target.id === 'commercialGateModal') closeFarmModal();
+    });
+
+    document.getElementById('confirmCommercialGate').onclick = () => {
+        const password = document.getElementById('commercialGatePassword').value;
+        const termsAccepted = document.getElementById('commercialGateTerms').checked;
+
+        if (password.length < 6) {
+            showError('Password/key must be at least 6 characters.');
+            return;
+        }
+        if (!termsAccepted) {
+            showError('Please tick the Commercial Terms & Conditions first.');
+            return;
+        }
+        if (hasAccount && password !== account.password) {
+            showError('Wrong commercial password/key. Use the same one from Commercial Register.');
+            return;
+        }
+
+        if (!hasAccount) {
+            saveCommercialAccount({
+                email: AppState.userEmail || 'commercial@seeddown.local',
+                password,
+                createdAt: new Date().toISOString(),
+            });
+        } else {
+            localStorage.setItem(COMMERCIAL_TERMS_KEY, 'true');
+        }
+
+        AppState.mode = 'commercial';
+        AppState.isGuest = false;
+        closeFarmModal();
+        showToast('success', 'Switched to 🏭 Commercial mode');
+        render();
+    };
+}
+
+function getCommercialAccount() {
+    try {
+        return JSON.parse(localStorage.getItem(COMMERCIAL_ACCOUNT_KEY)) || null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function saveCommercialAccount(account) {
+    localStorage.setItem(COMMERCIAL_ACCOUNT_KEY, JSON.stringify(account));
+    localStorage.setItem(COMMERCIAL_TERMS_KEY, 'true');
+}
 function farmCard(f) {
     return `
         <div class="farm-card" data-farm-id="${escapeAttr(f.id)}" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px; display:flex; align-items:center; gap:12px; cursor:pointer;">
@@ -296,3 +397,4 @@ function escapeHTML(value) {
 function escapeAttr(value) {
     return escapeHTML(value).replace(/`/g, '&#096;');
 }
+
