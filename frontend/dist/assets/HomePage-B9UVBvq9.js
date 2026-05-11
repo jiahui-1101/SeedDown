@@ -1,4 +1,4 @@
-import{A as n,F as l,S as c,N as v,s as t}from"./index-Cn7ZkA1z.js";import{o as r}from"./AddPlantModal-DrE_lQul.js";import"https://esm.sh/three@0.160.0";function u(){var i,s,d;console.log("[HomePage] render called");const o=document.getElementById("screenContainer");o.innerHTML=`
+import{A as n,F as l,S as c,N as v,s as t}from"./index-CDbG3aFg.js";import{o as r}from"./AddPlantModal-3m29NoET.js";import"https://esm.sh/three@0.160.0";function u(){var i,s,d;console.log("[HomePage] render called");const o=document.getElementById("screenContainer");o.innerHTML=`
         <div class="screen active" id="homeScreen">
             <div class="topbar">
                 <button id="backToFarms" class="back-btn" style="background:transparent; border:none; font-size:20px;">←</button>
@@ -13,7 +13,7 @@ import{A as n,F as l,S as c,N as v,s as t}from"./index-Cn7ZkA1z.js";import{o as 
             </div>
             <div style="flex:1; overflow-y:auto;">
                 <div class="farm-stage-wrap" style="margin:12px 16px; position:relative;">
-                    <canvas id="farmCanvas" style="width:100%; height:220px; border-radius:24px; background:#EAF4FF;"></canvas>
+                    <canvas id="farmCanvas" style="width:100%; height:300px; border-radius:24px; background:#EAF4FF;"></canvas>
                     <button id="fabPlant" style="position:absolute; bottom:12px; right:12px; background:var(--accent); border:none; width:44px; height:44px; border-radius:14px; color:white; font-size:24px;">+</button>
                 </div>
                 <div id="dashStrip" class="sensor-strip"></div>

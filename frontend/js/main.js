@@ -20,6 +20,7 @@ const pages = {
 
     home: () => import("./pages/HomePage.js").then((m) => m.render()),
     "dash-c": () => import("./pages/CommercialPage.js").then((m) => m.render()),
+    control: () => import("./pages/ControlPage.js").then((m) => m.render()),
     community: () => import("./pages/CommunityPage.js").then((m) => m.render()),
     feature: (params) => import("./pages/FeaturePage.js").then((m) => m.render(params)),
     "sensor-detail": (p) => import("./pages/SensorDetailPage.js").then((m) => m.render(p)),
@@ -51,3 +52,4 @@ document.addEventListener("DOMContentLoaded", () => {
     import("./pages/SplashPage.js").then((m) => m.render());
     window.showToast = showToast;
 });
+

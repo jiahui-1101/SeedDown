@@ -8,6 +8,7 @@ const fallbackPageModules = {
     buildfarm: () => import("../pages/BuildFarmPage.js").then((m) => m.render()),
     home: () => import("../pages/HomePage.js").then((m) => m.render()),
     "dash-c": () => import("../pages/CommercialPage.js").then((m) => m.render()),
+    control: () => import("../pages/ControlPage.js").then((m) => m.render()),
     community: () => import("../pages/CommunityPage.js").then((m) => m.render()),
     feature: (params) => import("../pages/FeaturePage.js").then((m) => m.render(params)),
     "sensor-detail": (params) => import("../pages/SensorDetailPage.js").then((m) => m.render(params)),
@@ -51,3 +52,4 @@ export async function showScreen(screenName, params = {}) {
         window.showToast?.('error', `Failed to load ${screenName}: ${err.message}`);
     }
 }
+

@@ -24,7 +24,7 @@ export function render() {
             </div>
             <div style="flex:1; overflow-y:auto;">
                 <div class="farm-stage-wrap" style="margin:12px 16px; position:relative;">
-                    <canvas id="farmCanvas" style="width:100%; height:220px; border-radius:24px; background:#EAF4FF;"></canvas>
+                    <canvas id="farmCanvas" style="width:100%; height:300px; border-radius:24px; background:#EAF4FF;"></canvas>
                     <button id="fabPlant" style="position:absolute; bottom:12px; right:12px; background:var(--accent); border:none; width:44px; height:44px; border-radius:14px; color:white; font-size:24px;">+</button>
                 </div>
                 <div id="dashStrip" class="sensor-strip"></div>
