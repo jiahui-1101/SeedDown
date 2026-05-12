@@ -1,4 +1,4 @@
-import{s as t}from"./index-AfE9j7Oh.js";import"https://esm.sh/three@0.160.0";function i(){var e;const r=document.getElementById("screenContainer");r.innerHTML=`
+import{s as t}from"./index-CIzUcNGo.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function d(){var e;const r=document.getElementById("screenContainer");r.innerHTML=`
         <div class="screen active" id="splashScreen">
             <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px;">
                 <div class="splash-badge" style="font-size:0.6rem; background:var(--accent-l); padding:6px 14px; border-radius:30px;">Smart Vertical Farm</div>
@@ -14,4 +14,4 @@ import{s as t}from"./index-AfE9j7Oh.js";import"https://esm.sh/three@0.160.0";fun
                 </div>
             </div>
         </div>
-    `,(e=document.getElementById("getStartedBtn"))==null||e.addEventListener("click",()=>t("login"))}export{i as render};
+    `,(e=document.getElementById("getStartedBtn"))==null||e.addEventListener("click",()=>t("login"))}export{d as render};

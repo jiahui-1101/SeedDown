@@ -1,6 +1,6 @@
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
-import { FarmCanvas } from '../components/FarmCanvas.js';
+import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js';
 import { openAddPlantModal } from '../components/AddPlantModal.js';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -37,12 +37,8 @@ export function render() {
 
             <div style="flex:1; overflow-y:auto; padding-bottom:12px;">
                 <div style="margin:12px 16px 10px 16px; position:relative;">
-                    <canvas id="commercialFarmCanvas" style="width:100%; height:clamp(280px, 40dvh, 520px); border-radius:24px; background:#EAF4FF; display:block;"></canvas>
-                    <button id="fabPlant" title="Add plant" aria-label="Add plant" style="position:absolute; bottom:12px; right:12px; background:var(--accent); border:none; width:48px; height:48px; border-radius:16px; color:white; font-size:26px;cursor:pointer;box-shadow:var(--shadow-sm);">+</button>
-                    <div style="position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.88);border:1px solid var(--border);border-radius:12px;padding:8px 10px;box-shadow:var(--shadow-sm);">
-                        <div style="font-size:10px;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.06em;">${escapeHTML(rack.label)}</div>
-                        <div style="font-size:13px;font-weight:900;color:var(--text);">${plantTotal}/${rack.total} plants · ${occupancy}% filled</div>
-                    </div>
+                    <canvas id="commercialFarmCanvas" style="width:100%; height:clamp(360px, 48dvh, 620px); border-radius:22px; background:#07110c; display:block;"></canvas>
+                    <button id="fabPlant" title="Add plant" aria-label="Add plant" style="position:absolute; bottom:14px; left:14px; z-index:10; background:rgba(163,230,53,.14); border:1px solid rgba(163,230,53,.28); height:38px; border-radius:999px; color:#a3e635; font-size:11px;font-weight:900;letter-spacing:.08em;padding:0 14px;cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,.22);">ADD PLANT</button>
                 </div>
 
                 <div style="margin:0 16px 12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:14px;box-shadow:var(--shadow-sm);display:flex;gap:12px;align-items:center;">
@@ -157,7 +153,7 @@ function bindEvents() {
 }
 
 function initCommercialFarm() {
-    setTimeout(() => FarmCanvas.init('commercialFarmCanvas'), 80);
+    setTimeout(() => CommercialFarmCanvas.init('commercialFarmCanvas'), 80);
 }
 
 function initProDashboard() {

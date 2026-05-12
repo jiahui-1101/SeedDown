@@ -42,46 +42,51 @@ export function openAddPlantModal() {
   const farm = getCurrentFarm();
   const rack = resolveRack(farm);
   const slotPlants = resolveSlotPlants(farm, rack);
+  const commercial = isCommercialContext();
+  ensurePlantModalStyles();
   activeRack = rack;
   activeSlotPlants = slotPlants;
 
   modalContainer.innerHTML = `
-    <div class="modal-overlay" id="addPlantModalOverlay">
-      <div class="modal-sheet">
+    <div class="modal-overlay ${commercial ? 'commercial-plant-overlay' : ''}" id="addPlantModalOverlay">
+      <div class="modal-sheet ${commercial ? 'commercial-plant-sheet' : ''}">
         <div style="padding:16px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-            <span style="font-weight:700;">🌱 Manage Plants</span>
-            <button id="closeAddPlantModal" style="background:none;border:none;font-size:20px;cursor:pointer;" aria-label="Close plant manager">✕</button>
+            <div>
+              <div style="font-size:${commercial ? '10px' : '13px'};font-weight:900;letter-spacing:${commercial ? '.16em' : '0'};text-transform:${commercial ? 'uppercase' : 'none'};color:${commercial ? '#a3e635' : 'var(--text,#111)'};">${commercial ? 'Production Slot Manager' : '🌱 Manage Plants'}</div>
+              ${commercial ? `<div style="font-size:11px;color:rgba(255,255,255,.42);font-weight:700;margin-top:3px;">Assign crop species to rack zones and production slots</div>` : ''}
+            </div>
+            <button id="closeAddPlantModal" class="${commercial ? 'commercial-plant-close' : ''}" style="background:none;border:none;font-size:20px;cursor:pointer;" aria-label="Close plant manager">✕</button>
           </div>
 
           <div style="margin-bottom:12px;">
-            <div style="font-size:0.7rem;color:var(--text-secondary,#666);margin-bottom:6px;">SEARCH OR ADD CUSTOM SPECIES</div>
+            <div style="font-size:0.7rem;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};margin-bottom:6px;font-weight:800;letter-spacing:.08em;">SEARCH OR ADD CUSTOM SPECIES</div>
             <div style="display:flex;gap:8px;">
               <input id="speciesSearchInput" type="text" placeholder="e.g. kale, mint, cucumber..."
-                style="flex:1;padding:8px 12px;border:1px solid var(--border-color,#ddd);border-radius:8px;font-size:13px;background:var(--bg-secondary,#f5f5f5);">
-              <button id="speciesSearchBtn" style="background:var(--accent,#639922);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;">
-                🔍 Add
+                style="flex:1;padding:10px 12px;border:1px solid ${commercial ? 'rgba(163,230,53,.18)' : 'var(--border-color,#ddd)'};border-radius:10px;font-size:13px;background:${commercial ? 'rgba(255,255,255,.045)' : 'var(--bg-secondary,#f5f5f5)'};color:${commercial ? '#fff' : 'inherit'};">
+              <button id="speciesSearchBtn" class="${commercial ? 'commercial-plant-action' : ''}" style="background:var(--accent,#639922);color:white;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:900;cursor:pointer;">
+                ${commercial ? 'ADD' : '🔍 Add'}
               </button>
             </div>
-            <div id="speciesSearchStatus" style="font-size:11px;color:var(--text-secondary,#666);margin-top:4px;min-height:16px;"></div>
+            <div id="speciesSearchStatus" style="font-size:11px;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};margin-top:4px;min-height:16px;"></div>
           </div>
 
-          <div style="font-size:0.7rem;color:var(--text-secondary,#666);margin-bottom:6px;">SELECT CROP</div>
-          <div id="cropGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;max-height:200px;overflow-y:auto;"></div>
+          <div style="font-size:0.7rem;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};margin-bottom:6px;font-weight:800;letter-spacing:.08em;">${commercial ? 'SPECIES CATALOG' : 'SELECT CROP'}</div>
+          <div id="cropGrid" class="${commercial ? 'commercial-crop-grid' : ''}" style="display:grid;grid-template-columns:repeat(${commercial ? 2 : 4},1fr);gap:8px;margin-bottom:16px;max-height:${commercial ? '220px' : '200px'};overflow-y:auto;"></div>
 
           <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:6px;gap:8px;">
             <div>
-              <div style="font-size:0.7rem;color:var(--text-secondary,#666);font-weight:700;">SELECT POSITION</div>
-              <div style="font-size:11px;color:var(--text-secondary,#666);">${rack.label} · select a slot to add, change, or remove</div>
+              <div style="font-size:0.7rem;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};font-weight:800;letter-spacing:.08em;">${commercial ? 'ZONE / SLOT ASSIGNMENT' : 'SELECT POSITION'}</div>
+              <div style="font-size:11px;color:${commercial ? 'rgba(255,255,255,.36)' : 'var(--text-secondary,#666)'};">${rack.label} · select a slot to add, change, or remove</div>
             </div>
-            <div id="positionStatus" style="font-size:11px;color:var(--accent,#639922);font-weight:700;"></div>
+            <div id="positionStatus" style="font-size:11px;color:${commercial ? '#a3e635' : 'var(--accent,#639922)'};font-weight:800;"></div>
           </div>
-          <div id="slotGrid" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
-          <div id="slotActionPanel" style="border:1px solid var(--border-color,#e7e7e7);border-radius:12px;padding:10px;margin-bottom:12px;background:var(--bg-secondary,#f7f7f7);font-size:12px;color:var(--text-secondary,#666);"></div>
+          <div id="slotGrid" class="${commercial ? 'commercial-slot-grid' : ''}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
+          <div id="slotActionPanel" class="${commercial ? 'commercial-slot-panel' : ''}" style="border:1px solid ${commercial ? 'rgba(163,230,53,.14)' : 'var(--border-color,#e7e7e7)'};border-radius:12px;padding:10px;margin-bottom:12px;background:${commercial ? 'rgba(255,255,255,.04)' : 'var(--bg-secondary,#f7f7f7)'};font-size:12px;color:${commercial ? 'rgba(255,255,255,.55)' : 'var(--text-secondary,#666)'};"></div>
 
           <div style="display:grid;grid-template-columns:0.9fr 1.1fr;gap:8px;">
-            <button id="removePlantBtn" style="width:100%;border:1px solid #efb2b2;background:#fff5f5;color:#c83a3a;border-radius:10px;padding:11px 8px;font-weight:800;cursor:pointer;">Remove</button>
-            <button id="confirmPlantBtn" class="btn-primary" style="width:100%;">Plant Now →</button>
+            <button id="removePlantBtn" class="${commercial ? 'commercial-remove-btn' : ''}" style="width:100%;border:1px solid #efb2b2;background:#fff5f5;color:#c83a3a;border-radius:10px;padding:11px 8px;font-weight:800;cursor:pointer;">${commercial ? 'CLEAR SLOT' : 'Remove'}</button>
+            <button id="confirmPlantBtn" class="btn-primary ${commercial ? 'commercial-confirm-btn' : ''}" style="width:100%;">${commercial ? 'ASSIGN CROP' : 'Plant Now →'}</button>
           </div>
         </div>
       </div>
@@ -250,7 +255,15 @@ function saveUpdatedFarm(current, plants, index, saved, fallbackTargetPlant) {
 function renderCropGrid(crops) {
   const grid = document.getElementById('cropGrid');
   if (!grid) return;
-  grid.innerHTML = crops.map(c => `
+  const commercial = isCommercialContext();
+  grid.innerHTML = crops.map(c => commercial ? `
+    <div class="crop-option commercial-crop-option" data-species="${c.species}">
+      <div class="commercial-crop-code">${speciesCode(c.name)}</div>
+      <div style="min-width:0;">
+        <div class="commercial-crop-name">${escapeHTML(c.name)}</div>
+        <div class="commercial-crop-meta">${escapeHTML(c.species)} · ${c.days}d cycle</div>
+      </div>
+    </div>` : `
     <div class="crop-option" data-species="${c.species}"
       style="background:var(--surface,#fff);border-radius:12px;padding:8px;text-align:center;cursor:pointer;border:2px solid transparent;transition:border .15s;">
       <div style="font-size:28px;">${c.emoji}</div>
@@ -269,12 +282,22 @@ function renderCropGrid(crops) {
 function renderSlotGrid(rack, slotPlants) {
   const grid = document.getElementById('slotGrid');
   if (!grid) return;
+  const commercial = isCommercialContext();
 
   grid.innerHTML = Array.from({ length: rack.tiers }, (_, tierIndex) => {
     const slots = Array.from({ length: rack.slotsPerTier }, (_, posIndex) => {
       const slotIndex = tierIndex * rack.slotsPerTier + posIndex;
       const plant = slotPlants[slotIndex];
       const selected = selectedSlotIndex === slotIndex;
+      if (commercial) {
+        return `
+          <button class="slot-option commercial-slot-option ${selected ? 'selected' : ''} ${plant ? 'filled' : 'empty'}" data-slot-index="${slotIndex}"
+            aria-label="${plant ? `Change or remove ${escapeHTML(plant.name)}` : `Plant slot ${posIndex + 1}`}">
+            <span class="commercial-slot-id">S${String(posIndex + 1).padStart(2, '0')}</span>
+            <span class="commercial-slot-name">${plant ? escapeHTML(plant.name) : 'Available'}</span>
+            <span class="commercial-slot-state">${plant ? escapeHTML(plant.status || 'healthy') : 'empty'}</span>
+          </button>`;
+      }
       return `
         <button class="slot-option" data-slot-index="${slotIndex}"
           aria-label="${plant ? `Change or remove ${escapeHTML(plant.name)}` : `Plant slot ${posIndex + 1}`}"
@@ -286,7 +309,7 @@ function renderSlotGrid(rack, slotPlants) {
 
     return `
       <div>
-        <div style="font-size:11px;font-weight:800;color:var(--text-secondary,#666);margin-bottom:5px;">Tier ${tierIndex + 1}</div>
+        <div style="font-size:11px;font-weight:800;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};margin-bottom:5px;">${commercial ? `Zone ${String.fromCharCode(65 + tierIndex)} · Tier ${tierIndex + 1}` : `Tier ${tierIndex + 1}`}</div>
         <div style="display:grid;grid-template-columns:repeat(${rack.slotsPerTier},minmax(44px,1fr));gap:6px;">${slots}</div>
       </div>`;
   }).join('');
@@ -335,7 +358,10 @@ function updateActionButtons(rack, slotPlants) {
   if (!confirmBtn || !removeBtn) return;
 
   const existingPlant = selectedSlotIndex === null ? null : slotPlants[selectedSlotIndex];
-  confirmBtn.textContent = existingPlant ? 'Change Plant →' : 'Plant Now →';
+  const commercial = isCommercialContext();
+  confirmBtn.textContent = existingPlant
+    ? (commercial ? 'UPDATE SLOT' : 'Change Plant →')
+    : (commercial ? 'ASSIGN CROP' : 'Plant Now →');
   confirmBtn.disabled = selectedSlotIndex === null || !selectedCrop;
   confirmBtn.style.opacity = confirmBtn.disabled ? '0.55' : '1';
   confirmBtn.style.cursor = confirmBtn.disabled ? 'not-allowed' : 'pointer';
@@ -347,10 +373,15 @@ function updateActionButtons(rack, slotPlants) {
 
 function highlightCrop(crop) {
   selectedCrop = crop;
+  const commercial = isCommercialContext();
   document.querySelectorAll('.crop-option').forEach(el => {
-    el.style.border = el.dataset.species === crop.species
-      ? '2px solid var(--accent,#639922)'
-      : '2px solid transparent';
+    if (commercial) {
+      el.classList.toggle('selected', el.dataset.species === crop.species);
+    } else {
+      el.style.border = el.dataset.species === crop.species
+        ? '2px solid var(--accent,#639922)'
+        : '2px solid transparent';
+    }
   });
   if (activeRack) {
     renderSlotActionPanel(activeRack, activeSlotPlants);
@@ -371,8 +402,13 @@ function syncLegacyTile(crop) {
 
 function refreshHomeFarmCanvas() {
   AppState.notify();
-  const canvasId = ['farmCanvas', 'commercialFarmCanvas'].find(id => document.getElementById(id));
-  if (canvasId) FarmCanvas.init(canvasId);
+  if (document.getElementById('commercialFarmCanvas')) {
+    import('./CommercialFarmCanvas.js')
+      .then(({ CommercialFarmCanvas }) => CommercialFarmCanvas.init('commercialFarmCanvas'))
+      .catch(() => FarmCanvas.init('commercialFarmCanvas'));
+    return;
+  }
+  if (document.getElementById('farmCanvas')) FarmCanvas.init('farmCanvas');
 }
 
 function getCurrentFarm() {
@@ -482,6 +518,156 @@ function cropFromName(name) {
     days: 30,
     price: 'Custom',
   };
+}
+
+function isCommercialContext() {
+  return AppState.mode === 'commercial' || !!document.getElementById('commercialFarmCanvas');
+}
+
+function speciesCode(name = '') {
+  const cleaned = String(name || 'Plant').trim().replace(/[^a-zA-Z0-9 ]/g, '');
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  const raw = parts.length > 1 ? parts.map(part => part[0]).join('') : cleaned.slice(0, 3);
+  return raw.toUpperCase() || 'PL';
+}
+
+function ensurePlantModalStyles() {
+  if (document.getElementById('commercial-plant-modal-style')) return;
+  const style = document.createElement('style');
+  style.id = 'commercial-plant-modal-style';
+  style.textContent = `
+    .commercial-plant-overlay {
+      background: rgba(2, 6, 23, .72) !important;
+      backdrop-filter: blur(12px);
+    }
+    .commercial-plant-sheet {
+      background: #08110c !important;
+      color: #fff !important;
+      border: 1px solid rgba(163,230,53,.16) !important;
+      box-shadow: 0 28px 80px rgba(0,0,0,.45) !important;
+    }
+    .commercial-plant-close {
+      color: rgba(255,255,255,.62) !important;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.08) !important;
+      background: rgba(255,255,255,.04) !important;
+    }
+    .commercial-plant-action,
+    .commercial-confirm-btn {
+      background: rgba(163,230,53,.14) !important;
+      border: 1px solid rgba(163,230,53,.26) !important;
+      color: #a3e635 !important;
+      letter-spacing: .08em;
+    }
+    .commercial-remove-btn {
+      background: rgba(239,68,68,.08) !important;
+      border-color: rgba(239,68,68,.24) !important;
+      color: #f87171 !important;
+      letter-spacing: .06em;
+    }
+    .commercial-crop-grid::-webkit-scrollbar,
+    .commercial-slot-grid::-webkit-scrollbar { width: 5px; }
+    .commercial-crop-grid::-webkit-scrollbar-thumb,
+    .commercial-slot-grid::-webkit-scrollbar-thumb { background: rgba(163,230,53,.18); border-radius: 999px; }
+    .commercial-crop-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 13px;
+      border: 1px solid rgba(255,255,255,.07);
+      background: rgba(255,255,255,.035);
+      cursor: pointer;
+      min-width: 0;
+      transition: border .18s, background .18s, transform .18s;
+    }
+    .commercial-crop-option:hover,
+    .commercial-crop-option.selected {
+      border-color: rgba(163,230,53,.34);
+      background: rgba(163,230,53,.08);
+      transform: translateY(-1px);
+    }
+    .commercial-crop-code {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      background: rgba(163,230,53,.12);
+      color: #a3e635;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .06em;
+      flex-shrink: 0;
+    }
+    .commercial-crop-name {
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .commercial-crop-meta {
+      margin-top: 3px;
+      color: rgba(255,255,255,.36);
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .commercial-slot-option {
+      min-height: 52px;
+      border-radius: 11px;
+      border: 1px solid rgba(255,255,255,.07);
+      background: rgba(255,255,255,.035);
+      color: rgba(255,255,255,.68);
+      cursor: pointer;
+      padding: 7px;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      transition: border .18s, background .18s;
+    }
+    .commercial-slot-option.filled {
+      border-color: rgba(163,230,53,.18);
+    }
+    .commercial-slot-option.selected {
+      border-color: rgba(56,189,248,.58);
+      background: rgba(56,189,248,.09);
+    }
+    .commercial-slot-id {
+      color: #a3e635;
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: .08em;
+    }
+    .commercial-slot-name {
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .commercial-slot-state {
+      color: rgba(255,255,255,.36);
+      font-size: 8px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .commercial-slot-panel strong,
+    .commercial-slot-panel b {
+      color: #fff;
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 function positionLabel(slotIndex, rack) {
