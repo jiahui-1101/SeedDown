@@ -18,83 +18,100 @@ const RACK_OPTIONS = {
     hanging: { label: 'Hanging Column Farm', tiers: 5, slotsPerTier: 3, total: 15 },
 };
 
+let chatMessages = [];
+
 export function render() {
     const container = document.getElementById('screenContainer');
     const farm = getCurrentFarm();
     const rack = resolveRack(farm);
     const plantTotal = plantCount(farm);
-    const occupancy = rack.total ? Math.round((plantTotal / rack.total) * 100) : 0;
+    const occupancy = rack.total ? Math.min(100, Math.round((plantTotal / rack.total) * 100)) : 0;
 
     container.innerHTML = `
-        <div class="screen active" id="commercialScreen" style="background:var(--bg); display:flex; flex-direction:column; height:100vh; color:var(--text); position:relative;">
-            <div class="topbar">
-                <button id="comBackBtn" class="back-btn" style="background:transparent;border:none;font-size:20px;color:var(--text);cursor:pointer;">←</button>
-                <div class="topbar-brand" style="flex:1;min-width:0;">
-                    <div style="font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(farm?.name || AppState.farmName || 'Commercial Farm')}</div>
-                    <div style="font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Commercial control</div>
+        <div class="screen active commercial-command-screen" id="commercialScreen">
+            <canvas id="commercialFarmCanvas" class="commercial-command-canvas"></canvas>
+
+            <div class="commercial-top-shell">
+                <button id="comBackBtn" class="commercial-icon-btn" aria-label="Back to farms">←</button>
+                <div class="commercial-title-card">
+                    <div class="commercial-kicker">Commercial Digital Twin</div>
+                    <div class="commercial-title-row">
+                        <strong>${escapeHTML(farm?.name || AppState.farmName || 'Commercial Farm')}</strong>
+                        <span>${occupancy}% occupied</span>
+                    </div>
+                    <small>${escapeHTML(rack.label)} · ${plantTotal}/${rack.total} planted</small>
                 </div>
             </div>
 
-            <div style="flex:1; overflow-y:auto; padding-bottom:12px;">
-                <div style="margin:12px 16px 10px 16px; position:relative;">
-                    <canvas id="commercialFarmCanvas" style="width:100%; height:clamp(360px, 48dvh, 620px); border-radius:22px; background:#07110c; display:block;"></canvas>
-                    <button id="fabPlant" title="Add plant" aria-label="Add plant" style="position:absolute; bottom:14px; left:14px; z-index:10; background:rgba(163,230,53,.14); border:1px solid rgba(163,230,53,.28); height:38px; border-radius:999px; color:#a3e635; font-size:11px;font-weight:900;letter-spacing:.08em;padding:0 14px;cursor:pointer;box-shadow:0 10px 28px rgba(0,0,0,.22);">ADD PLANT</button>
-                </div>
+            <button id="panelToggleBtn" class="commercial-panel-toggle" aria-label="Hide operations panel">Hide Panel</button>
 
-                <div style="margin:0 16px 12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:14px;box-shadow:var(--shadow-sm);display:flex;gap:12px;align-items:center;">
-                    <div style="width:42px;height:42px;border-radius:14px;background:var(--accent-l);display:flex;align-items:center;justify-content:center;font-size:24px;">🧑‍🌾</div>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:11px;color:var(--accent);font-weight:900;text-transform:uppercase;letter-spacing:.06em;">AI Farm Advisor</div>
-                        <div id="ai-overview-text" style="font-size:13px;color:var(--sub);line-height:1.35;">Syncing commercial farm data...</div>
+            <aside id="commercialOpsPanel" class="commercial-ops-panel">
+                <div class="ops-panel-header">
+                    <div>
+                        <div class="commercial-kicker">Operations</div>
+                        <strong>Farm Command Center</strong>
                     </div>
+                    <button id="panelCloseBtn" class="commercial-icon-btn small" aria-label="Hide panel">×</button>
                 </div>
 
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0 16px 12px 16px;">
-                    <button id="profit-card" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;text-align:left;cursor:pointer;box-shadow:var(--shadow-sm);">
-                        <div style="display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;">Est. Profit <span>↗</span></div>
-                        <div id="pro-profit" style="font-size:1.55rem;color:var(--ok);font-weight:900;margin-top:4px;">RM --</div>
-                    </button>
-                    <button id="energy-card" style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;text-align:left;cursor:pointer;box-shadow:var(--shadow-sm);">
-                        <div style="display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;">Energy Cost <span>⚡</span></div>
-                        <div id="pro-energy" style="font-size:1.55rem;color:var(--warn);font-weight:900;margin-top:4px;">-- kWh</div>
-                    </button>
-                </div>
+                <div class="ops-scroll">
+                    <section class="ops-section advisor-section">
+                        <div class="ops-section-title">AI Farm Advisor</div>
+                        <div id="ai-overview-text" class="advisor-text">Syncing commercial farm data...</div>
+                    </section>
 
-             <div style="margin:0 16px 12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:16px;box-shadow:var(--shadow-sm);">
-                    <div style="display:flex;align-items:center;margin-bottom:12px;">
-                        <div style="width:4px;height:16px;background:var(--ok);border-radius:4px;margin-right:8px;"></div>
-                        <div style="font-size:1.02rem;font-weight:800;color:var(--text);">Live Data</div>
-                    </div>
-                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;">
-                        ${sensorCard('🌡️', 'Temp', 'pro-temp', '--', 'var(--danger)', '#FEE2E2', 'temp')}
-                        ${sensorCard('💧', 'Humid', 'pro-humid', '--', 'var(--accent)', 'var(--accent-l)', 'humid')}
-                        ${sensorCard('☀️', 'Light', 'pro-light', '--', 'var(--ok)', 'var(--ok-bg)', 'light')}
-                        ${sensorCard('🧪', 'pH', 'pro-ph', '--', 'var(--warn)', '#FFFBEB', 'ph')}
-                        ${sensorCard('💦', 'Water', 'pro-water', '--', 'var(--accent)', 'var(--accent-l)', 'water')}
-                        ${sensorCard('🧬', 'Gas', 'pro-gas', '--', 'var(--ok)', 'var(--ok-bg)', 'nutrient')}
-                    </div>
-                </div>
+                    <section class="ops-section">
+                        <div class="ops-section-title">Live Sensors</div>
+                        <div class="ops-sensor-grid">
+                            ${sensorCard('Temp', 'pro-temp', '--', 'temp')}
+                            ${sensorCard('Humid', 'pro-humid', '--', 'humid')}
+                            ${sensorCard('Light', 'pro-light', '--', 'light')}
+                            ${sensorCard('pH', 'pro-ph', '--', 'ph')}
+                            ${sensorCard('Water', 'pro-water', '--', 'water')}
+                            ${sensorCard('Gas', 'pro-gas', '--', 'nutrient')}
+                        </div>
+                    </section>
 
-                <div style="margin:0 16px 12px 16px;">
-                    <div style="font-size:0.6rem;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Commercial Tools</div>
-                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(74px,1fr)); gap:10px;">
-                        ${featureButton('whatif', '🔮', 'What-If')}
-                        ${featureButton('consumption', '⚡', 'ESG')}
-                        ${featureButton('alerts', '🚨', 'Alerts')}
-                        ${featureButton('control', '🎛️', 'Control')}
-                        ${featureButton('disease', '🧫', 'Disease')}
-                    </div>
-                </div>
-            </div>
+                    <section class="ops-section ops-metrics">
+                        <button id="profit-card" class="metric-tile">
+                            <span>Est. Profit</span>
+                            <strong id="pro-profit">RM --</strong>
+                        </button>
+                        <button id="energy-card" class="metric-tile">
+                            <span>Energy Cost</span>
+                            <strong id="pro-energy">-- kWh</strong>
+                        </button>
+                    </section>
 
-            <div class="bottom-nav">
-                <div class="nav-item active" data-screen="home"><span class="nav-icon">🏠</span><span class="nav-lbl">Home</span></div>
-                <div class="nav-item" data-screen="profile"><span class="nav-icon">👤</span><span class="nav-lbl">Profile</span></div>
-            </div>
+                    <section class="ops-section">
+                        <div class="ops-section-title">Tools</div>
+                        <div class="ops-tool-grid">
+                            ${featureButton('whatif', '🔮', 'What-If')}
+                            ${featureButton('control', '🎛️', 'Control')}
+                            ${featureButton('disease', '🧫', 'Disease')}
+                            ${featureButton('consumption', '⚡', 'ESG')}
+                            ${featureButton('alerts', '🚨', 'Alerts')}
+                            <button id="fabPlant" class="ops-tool-btn" type="button"><span>🌱</span><strong>Add Plant</strong></button>
+                        </div>
+                    </section>
+
+                    <section class="ops-section chat-section">
+                        <div class="ops-section-title">AI Chat</div>
+                        <div id="commercialChatLog" class="commercial-chat-log">
+                            <div class="chat-bubble ai">Ask about yield, disease risk, energy, crop planning, or sensor readings.</div>
+                        </div>
+                        <div class="commercial-chat-input-row">
+                            <input id="commercialChatInput" placeholder="Ask SeedDown AI..." autocomplete="off">
+                            <button id="commercialChatSend" type="button">Send</button>
+                        </div>
+                    </section>
+                </div>
+            </aside>
         </div>
     `;
 
-    bindEvents()
+    ensureCommercialCommandStyles();
+    bindEvents();
     initCommercialFarm();
     initProDashboard();
 }
@@ -116,47 +133,101 @@ function bindEvents() {
     });
 
     document.getElementById('fabPlant')?.addEventListener('click', openAddPlantModal);
+    document.getElementById('panelToggleBtn')?.addEventListener('click', toggleOpsPanel);
+    document.getElementById('panelCloseBtn')?.addEventListener('click', toggleOpsPanel);
+    document.getElementById('commercialChatSend')?.addEventListener('click', sendCommercialChat);
+    document.getElementById('commercialChatInput')?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') sendCommercialChat();
+    });
 
     document.querySelectorAll('.com-feat').forEach(el => {
         el.addEventListener('click', () => {
             const feature = el.getAttribute('data-feature');
-            if (feature === 'whatif') {
-                showScreen('whatif-pro');
-            } else if (feature === 'control') {
-                showScreen('control');
-            } else if (feature === 'disease') {
-                showScreen('disease');
-            } else {
-                showScreen('feature', { feature, from: 'dash-c' });
-            }
-        });
-    });
-
-    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
-        item.addEventListener('click', () => {
-            const screen = item.getAttribute('data-screen');
-            if (screen === 'profile') {
-                AppState.profileFrom = 'dash-c';
-                showScreen('profile');
-            } else if (screen === 'home') {
-                showScreen('dash-c');
-            }
-        });
-    });
-
-   document.querySelectorAll('.pro-sensor-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const sk = card.getAttribute('data-key');
-            const sl = card.getAttribute('data-label');
             clearInterval(AppState.proInterval);
-            // 传入 key 和 name，对齐 sensor-detail 的参数
-            showScreen('sensor-detail', { key: sk, name: sl });
+            if (feature === 'whatif') showScreen('whatif-pro');
+            else if (feature === 'control') showScreen('control');
+            else if (feature === 'disease') showScreen('disease');
+            else showScreen('feature', { feature, from: 'dash-c' });
+        });
+    });
+
+    document.querySelectorAll('.pro-sensor-card').forEach(card => {
+        card.addEventListener('click', () => {
+            clearInterval(AppState.proInterval);
+            showScreen('sensor-detail', {
+                key: card.getAttribute('data-key'),
+                name: card.getAttribute('data-label'),
+            });
         });
     });
 }
 
+function toggleOpsPanel() {
+    const screen = document.getElementById('commercialScreen');
+    const button = document.getElementById('panelToggleBtn');
+    const hidden = screen?.classList.toggle('panel-hidden');
+    if (button) button.textContent = hidden ? 'Show Panel' : 'Hide Panel';
+    setTimeout(forceCommercialCanvasFullScreen, 120);
+}
+
 function initCommercialFarm() {
-    setTimeout(() => CommercialFarmCanvas.init('commercialFarmCanvas'), 80);
+    setTimeout(() => {
+        CommercialFarmCanvas.init('commercialFarmCanvas');
+        moveCommercialCommandStyleToTop();
+        forceCommercialCanvasFullScreen();
+        CommercialFarmCanvas.setCameraFrame?.(false);
+        forceCommercialCanvasFullScreen();
+        requestAnimationFrame(forceCommercialCanvasFullScreen);
+        setTimeout(forceCommercialCanvasFullScreen, 120);
+        setTimeout(forceCommercialCanvasFullScreen, 350);
+        window.addEventListener('resize', forceCommercialCanvasFullScreen);
+    }, 80);
+}
+
+function setImportant(node, styles) {
+    if (!node) return;
+    Object.entries(styles).forEach(([key, value]) => {
+        const cssKey = key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase());
+        node.style.setProperty(cssKey, value, 'important');
+    });
+}
+
+function forceCommercialCanvasFullScreen() {
+    const screen = document.getElementById('commercialScreen');
+    const canvas = document.getElementById('commercialFarmCanvas');
+    if (screen) {
+        setImportant(screen, {
+            position: 'fixed',
+            inset: '0',
+            width: '100vw',
+            height: '100vh',
+            minHeight: '100vh',
+            overflow: 'hidden',
+        });
+    }
+    if (canvas) {
+        setImportant(canvas, {
+            position: 'fixed',
+            inset: '0',
+            width: '100vw',
+            height: '100vh',
+            minHeight: '100vh',
+            borderRadius: '0',
+            display: 'block',
+        });
+    }
+    if (CommercialFarmCanvas.renderer && CommercialFarmCanvas.camera) {
+        const width = window.innerWidth || document.documentElement.clientWidth || 1280;
+        const height = window.innerHeight || document.documentElement.clientHeight || 720;
+        CommercialFarmCanvas.renderer.setSize(width, height, false);
+        CommercialFarmCanvas.camera.aspect = width / height;
+        CommercialFarmCanvas.camera.updateProjectionMatrix();
+    }
+}
+
+function moveCommercialCommandStyleToTop() {
+    const style = document.getElementById('commercial-command-style');
+    if (style) document.head.appendChild(style);
 }
 
 function initProDashboard() {
@@ -185,7 +256,7 @@ function initProDashboard() {
             setText('pro-temp', `${temp.toFixed(1)}°C`);
             setText('pro-humid', `${humid}%`);
             setText('pro-light', light);
-            setText('pro-ph', ph);
+            setText('pro-ph', ph || '--');
             setText('pro-water', `${water}cm`);
             setText('pro-gas', gas);
 
@@ -204,12 +275,12 @@ function initProDashboard() {
 }
 
 async function fetchAIGlobalAdvice(currentData) {
-    const prompt = `You are a farm owner's AI assistant. Current data: ${JSON.stringify(currentData)}. Briefly evaluate commercial farm profit and energy efficiency in one short English sentence.`;
+    const prompt = `You are SeedDown's commercial farm AI. Current sensor data: ${JSON.stringify(currentData)}. Give one concise operations insight about risk, yield, energy, or automation.`;
     try {
         const res = await fetch(`${API_BASE}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: prompt })
+            body: JSON.stringify({ message: prompt }),
         });
         const result = await res.json();
         setText('ai-overview-text', result.reply || result.response || 'Farm is operating normally.');
@@ -218,24 +289,60 @@ async function fetchAIGlobalAdvice(currentData) {
     }
 }
 
-function sensorCard(icon, label, id, value, color, bg, key) {
+async function sendCommercialChat() {
+    const input = document.getElementById('commercialChatInput');
+    const message = input?.value.trim();
+    if (!message) return;
+    input.value = '';
+    appendChat('user', message);
+    appendChat('ai', 'Thinking...');
+
+    try {
+        const farm = getCurrentFarm();
+        const prompt = `SeedDown commercial farm context: ${JSON.stringify({ farm, sensors: AppState.sensors })}\nUser question: ${message}`;
+        const res = await fetch(`${API_BASE}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: prompt }),
+        });
+        const result = await res.json();
+        replaceLastAi(result.reply || result.response || 'I could not generate a recommendation yet.');
+    } catch (error) {
+        replaceLastAi('AI chat is offline, but sensor monitoring and tools still work.');
+    }
+}
+
+function appendChat(role, text) {
+    chatMessages.push({ role, text });
+    renderChat();
+}
+
+function replaceLastAi(text) {
+    const last = chatMessages[chatMessages.length - 1];
+    if (last?.role === 'ai') last.text = text;
+    else chatMessages.push({ role: 'ai', text });
+    renderChat();
+}
+
+function renderChat() {
+    const log = document.getElementById('commercialChatLog');
+    if (!log) return;
+    log.innerHTML = chatMessages.length
+        ? chatMessages.map(item => `<div class="chat-bubble ${item.role}">${escapeHTML(item.text)}</div>`).join('')
+        : '<div class="chat-bubble ai">Ask about yield, disease risk, energy, crop planning, or sensor readings.</div>';
+    log.scrollTop = log.scrollHeight;
+}
+
+function sensorCard(label, id, value, key) {
     return `
-        <div class="pro-sensor-card" data-key="${key}" data-label="${label}" style="background:${bg};border-radius:12px;padding:12px;min-height:90px;position:relative;overflow:hidden;cursor:pointer;">
-            <div style="position:absolute;top:-5px;right:-5px;font-size:36px;opacity:.12;">${icon}</div>
-            <div style="font-size:14px;opacity:.7;">${icon}</div>
-            <div style="margin-top:14px;">
-                <div id="${id}" style="font-size:1rem;font-weight:900;color:${color};word-break:break-word;">${value}</div>
-                <div style="font-size:10px;font-weight:800;color:var(--muted);margin-top:2px;">${label}</div>
-            </div>
-        </div>`;
+        <button class="pro-sensor-card" data-key="${key}" data-label="${label}" type="button">
+            <span>${label}</span>
+            <strong id="${id}">${value}</strong>
+        </button>`;
 }
 
 function featureButton(feature, icon, label) {
-    return `
-        <button class="com-feat" data-feature="${feature}" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 6px;text-align:center;cursor:pointer;box-shadow:var(--shadow-sm);color:var(--text);">
-            <div style="font-size:24px;line-height:1;">${icon}</div>
-            <div style="font-size:10px;color:var(--muted);font-weight:800;margin-top:6px;text-transform:uppercase;">${label}</div>
-        </button>`;
+    return '<button class="com-feat ops-tool-btn" data-feature="' + feature + '" type="button"><span>' + icon + '</span><strong>' + label + '</strong></button>';
 }
 
 function getCurrentFarm() {
@@ -285,8 +392,283 @@ function escapeHTML(value) {
         .replace(/'/g, '&#039;');
 }
 
-
-
-
-
-
+function ensureCommercialCommandStyles() {
+    if (document.getElementById('commercial-command-style')) return;
+    const style = document.createElement('style');
+    style.id = 'commercial-command-style';
+    style.textContent = `
+        .commercial-command-screen,
+        .commercial-command-screen.commercial-farm-host {
+            position: relative !important;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden !important;
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #f8faf7 !important;
+            color: #17231b;
+        }
+        .commercial-command-canvas,
+        .commercial-command-screen .commercial-farm-canvas {
+            position: absolute !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            display: block !important;
+            border-radius: 0 !important;
+            background: #f8faf7 !important;
+        }
+        .commercial-top-shell {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 15;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .commercial-title-card,
+        .commercial-ops-panel,
+        .commercial-panel-toggle,
+        .commercial-icon-btn {
+            background: rgba(255, 255, 255, .9);
+            border: 1px solid rgba(22, 101, 52, .12);
+            box-shadow: 0 18px 48px rgba(15, 23, 42, .12);
+            backdrop-filter: blur(18px);
+        }
+        .commercial-title-card {
+            min-width: min(360px, calc(100vw - 112px));
+            border-radius: 22px;
+            padding: 14px 16px;
+        }
+        .commercial-kicker {
+            font-size: 10px;
+            color: #15803d;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+        }
+        .commercial-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 4px;
+        }
+        .commercial-title-row strong { font-size: 18px; }
+        .commercial-title-row span {
+            padding: 5px 9px;
+            border-radius: 999px;
+            background: #ecfdf5;
+            color: #047857;
+            font-size: 11px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+        .commercial-title-card small {
+            display: block;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 750;
+            margin-top: 3px;
+        }
+        .commercial-icon-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            color: #17231b;
+            font-size: 20px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .commercial-icon-btn.small {
+            width: 34px;
+            height: 34px;
+            font-size: 18px;
+            box-shadow: none;
+        }
+        .commercial-panel-toggle {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            z-index: 18;
+            border-radius: 999px;
+            padding: 10px 14px;
+            color: #166534;
+            font-size: 11px;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            cursor: pointer;
+        }
+        .commercial-ops-panel {
+            position: absolute;
+            top: 62px;
+            right: 16px;
+            bottom: 16px;
+            z-index: 16;
+            width: min(410px, calc(100vw - 32px));
+            border-radius: 26px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: transform .28s ease, opacity .28s ease;
+        }
+        .commercial-command-screen.panel-hidden .commercial-ops-panel {
+            transform: translateX(calc(100% + 26px));
+            opacity: 0;
+            pointer-events: none;
+        }
+        .ops-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 16px 16px 12px;
+            border-bottom: 1px solid rgba(15, 23, 42, .08);
+        }
+        .ops-panel-header strong { display:block; font-size: 17px; margin-top: 3px; }
+        .ops-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .ops-section {
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, .08);
+            border-radius: 20px;
+            padding: 14px;
+            box-shadow: 0 8px 26px rgba(15, 23, 42, .06);
+        }
+        .ops-section-title {
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            margin-bottom: 10px;
+        }
+        .advisor-section { border-left: 4px solid #22c55e; }
+        .advisor-text { color: #334155; font-size: 13px; line-height: 1.45; }
+        .ops-sensor-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .pro-sensor-card {
+            min-height: 74px;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            background: #f8fafc;
+            color: #17231b;
+            padding: 10px;
+            text-align: left;
+            cursor: pointer;
+        }
+        .pro-sensor-card span {
+            display:block;
+            color:#64748b;
+            font-size:10px;
+            font-weight:900;
+            text-transform:uppercase;
+            letter-spacing:.06em;
+        }
+        .pro-sensor-card strong {
+            display:block;
+            color:#059669;
+            font-size:16px;
+            font-weight:950;
+            margin-top:12px;
+            word-break:break-word;
+        }
+        .ops-metrics { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .metric-tile {
+            min-height:78px;
+            border:1px solid #e5e7eb;
+            border-radius:16px;
+            background:#f8fafc;
+            text-align:left;
+            padding:12px;
+            cursor:pointer;
+        }
+        .metric-tile span { display:block; color:#64748b; font-size:10px; font-weight:950; text-transform:uppercase; }
+        .metric-tile strong { display:block; margin-top:10px; color:#047857; font-size:18px; font-weight:950; }
+        .ops-tool-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+        .ops-tool-btn {
+            border:1px solid #dbe7dc;
+            border-radius:16px;
+            background:#f0fdf4;
+            color:#166534;
+            min-height:74px;
+            font-size:12px;
+            font-weight:950;
+            cursor:pointer;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            gap:7px;
+        }
+        .ops-tool-btn span { font-size:23px; line-height:1; }
+        .ops-tool-btn strong { font-size:11px; font-weight:950; }
+        .commercial-chat-log {
+            height: 180px;
+            overflow-y: auto;
+            display:flex;
+            flex-direction:column;
+            gap:8px;
+            padding:10px;
+            border-radius:16px;
+            background:#f8fafc;
+            border:1px solid #e5e7eb;
+        }
+        .chat-bubble {
+            max-width: 88%;
+            padding: 9px 11px;
+            border-radius: 14px;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+        .chat-bubble.ai { background:#ecfdf5; color:#14532d; align-self:flex-start; }
+        .chat-bubble.user { background:#166534; color:white; align-self:flex-end; }
+        .commercial-chat-input-row { display:flex; gap:8px; margin-top:10px; }
+        .commercial-chat-input-row input {
+            flex:1;
+            min-width:0;
+            border:1px solid #e5e7eb;
+            border-radius:14px;
+            padding:11px 12px;
+            background:#fff;
+            outline:none;
+        }
+        .commercial-chat-input-row button {
+            border:none;
+            border-radius:14px;
+            background:#166534;
+            color:white;
+            padding:0 14px;
+            font-weight:950;
+            cursor:pointer;
+        }
+        .commercial-command-screen .cf-info-panel,
+        .commercial-command-screen .cf-tooltip,
+        .commercial-command-screen .cf-legend,
+        .commercial-command-screen .cf-expand-btn,
+        .commercial-command-screen .cf-zoom-controls {
+            display: none !important;
+        }
+        @media (max-width: 760px) {
+            .commercial-top-shell { left: 12px; top: 12px; }
+            .commercial-title-card { min-width: 0; width: calc(100vw - 120px); }
+            .commercial-title-row { align-items:flex-start; flex-direction:column; }
+            .commercial-panel-toggle { top: auto; bottom: 16px; right: 16px; }
+            .commercial-ops-panel { top: 94px; left: 12px; right: 12px; bottom: 70px; width: auto; }
+            .commercial-command-screen.panel-hidden .commercial-ops-panel { transform: translateY(calc(100% + 90px)); }
+            .ops-sensor-grid { grid-template-columns: repeat(2, 1fr); }
+            .ops-tool-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    `;
+    document.head.appendChild(style);
+}

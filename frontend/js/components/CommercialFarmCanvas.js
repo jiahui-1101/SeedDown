@@ -94,8 +94,8 @@ export const CommercialFarmCanvas = {
 
     initScene() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x07110c);
-        this.scene.fog = new THREE.Fog(0x07110c, 14, 42);
+        this.scene.background = new THREE.Color(0xf8faf7);
+        this.scene.fog = new THREE.Fog(0xf8faf7, 22, 58);
 
         this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 120);
         this.camera.position.set(5.5, 4.6, 8.5);
@@ -175,7 +175,7 @@ export const CommercialFarmCanvas = {
     addFloor() {
         const floor = new THREE.Mesh(
             new THREE.PlaneGeometry(80, 60),
-            new THREE.MeshStandardMaterial({ color: 0x343a36, roughness: 0.86, metalness: 0.04 })
+            new THREE.MeshStandardMaterial({ color: 0xe8eee6, roughness: 0.86, metalness: 0.02 })
         );
         floor.rotation.x = -Math.PI / 2;
         floor.receiveShadow = true;
@@ -183,14 +183,14 @@ export const CommercialFarmCanvas = {
 
         const aisle = new THREE.Mesh(
             new THREE.PlaneGeometry(5.2, 56),
-            new THREE.MeshStandardMaterial({ color: 0x454b45, roughness: 0.78 })
+            new THREE.MeshStandardMaterial({ color: 0xdde7dc, roughness: 0.78 })
         );
         aisle.rotation.x = -Math.PI / 2;
         aisle.position.y = 0.006;
         aisle.receiveShadow = true;
         this.scene.add(aisle);
 
-        const lineMat = new THREE.LineBasicMaterial({ color: 0x607466, transparent: true, opacity: 0.32 });
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xa8b8aa, transparent: true, opacity: 0.48 });
         for (let x = -38; x <= 38; x += 2) {
             this.scene.add(makeLine([x, 0.014, -28], [x, 0.014, 28], lineMat));
         }
@@ -200,11 +200,11 @@ export const CommercialFarmCanvas = {
     },
 
     addGreenhouseFrame() {
-        const frameMat = new THREE.MeshStandardMaterial({ color: 0x5b6460, metalness: 0.72, roughness: 0.26 });
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x9aa7a0, metalness: 0.45, roughness: 0.32 });
         const glassMat = new THREE.MeshPhysicalMaterial({
-            color: 0xd5ffe2,
+            color: 0xcfe9d8,
             transparent: true,
-            opacity: 0.1,
+            opacity: 0.2,
             roughness: 0.04,
             side: THREE.DoubleSide,
         });
@@ -869,9 +869,33 @@ export const CommercialFarmCanvas = {
     resize() {
         if (!this.canvas || !this.renderer || !this.camera) return;
         const expanded = this.parent?.classList.contains('cf-expanded');
+        const commandMode = this.parent?.classList.contains('commercial-command-screen');
+        const fullViewport = expanded || commandMode;
+
+        if (commandMode) {
+            setImportant(this.parent, {
+                position: 'fixed',
+                inset: '0',
+                width: '100vw',
+                height: '100vh',
+                minHeight: '100vh',
+                overflow: 'hidden',
+                borderRadius: '0',
+            });
+            setImportant(this.canvas, {
+                position: 'fixed',
+                inset: '0',
+                width: '100vw',
+                height: '100vh',
+                minHeight: '100vh',
+                display: 'block',
+                borderRadius: '0',
+            });
+        }
+
         const rect = this.canvas.getBoundingClientRect();
-        const width = expanded ? window.innerWidth : Math.max(320, rect.width || this.parent.clientWidth || 640);
-        const height = expanded ? window.innerHeight : Math.max(300, rect.height || 420);
+        const width = fullViewport ? (window.innerWidth || document.documentElement.clientWidth || rect.width || 1280) : Math.max(320, rect.width || this.parent.clientWidth || 640);
+        const height = fullViewport ? (window.innerHeight || document.documentElement.clientHeight || rect.height || 720) : Math.max(300, rect.height || 420);
         this.renderer.setSize(width, height, false);
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
@@ -1233,6 +1257,14 @@ function escapeHTML(value) {
         .replace(/'/g, '&#039;');
 }
 
+function setImportant(node, styles) {
+    if (!node) return;
+    Object.entries(styles).forEach(([key, value]) => {
+        const cssKey = key.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase());
+        node.style.setProperty(cssKey, value, 'important');
+    });
+}
+
 function ensureCommercialStyles() {
     if (document.getElementById('commercial-farm-canvas-style')) return;
     const style = document.createElement('style');
@@ -1250,8 +1282,30 @@ function ensureCommercialStyles() {
             width: 100% !important;
             height: clamp(360px, 48dvh, 620px) !important;
             display: block;
-            background: #07110c !important;
+            background: #f8faf7 !important;
             border-radius: 22px !important;
+        }
+        .commercial-command-screen.commercial-farm-host {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            overflow: hidden !important;
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #f8faf7 !important;
+        }
+        .commercial-command-screen .commercial-farm-canvas {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
+            display: block !important;
+            border-radius: 0 !important;
+            background: #f8faf7 !important;
         }
         .cf-overlay {
             position: absolute;

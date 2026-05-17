@@ -178,6 +178,24 @@ function _injectStyles() {
     .pro-week-dot.done{background:#2C9A5C;}
     .pro-week-dot.active{background:#60C0FF;}
     .pro-week-dot.harvest{background:#D4A017;}
+    /* SeedDown commercial white override */
+    .pro-wif{font-family:Inter,system-ui,sans-serif;background:#f8faf7 !important;color:#17231b !important;padding:0 0 72px;min-height:100%;}
+    .pro-tabs{background:rgba(255,255,255,.92) !important;border-bottom:1px solid #e5e7eb !important;box-shadow:0 10px 26px rgba(15,23,42,.06);backdrop-filter:blur(14px);}
+    .pro-tab{color:#64748b !important;font-family:Inter,system-ui,sans-serif;border-bottom-color:transparent !important;}
+    .pro-tab.active{color:#166534 !important;border-bottom-color:#22c55e !important;background:#ecfdf5 !important;}
+    .pro-sec{padding:16px;background:#f8faf7 !important;}
+    .pro-card{background:#ffffff !important;border:1px solid #e5e7eb !important;border-radius:20px !important;box-shadow:0 10px 28px rgba(15,23,42,.07) !important;}
+    .pro-card-hd{color:#64748b !important;font-family:Inter,system-ui,sans-serif;}
+    .pro-card-hd::before{background:#22c55e !important;}
+    .pro-sel,.pro-input{background:#f8fafc !important;border:1px solid #e5e7eb !important;color:#17231b !important;font-family:Inter,system-ui,sans-serif;}
+    .pro-slider-row label,.pro-kpi-lbl,.pro-brow-lbl,.pro-zone-meta,.pro-week-lbl{color:#64748b !important;}
+    .pro-slider-val,.pro-kpi-val,.pro-zone-id{color:#047857 !important;}
+    .pro-kpi,.pro-zone-row,.pro-suggest-list,.pro-brow,.pro-impact-card{background:#f8fafc !important;border:1px solid #e5e7eb !important;}
+    .pro-table th{color:#64748b !important;border-bottom:1px solid #e5e7eb !important;}
+    .pro-table td{color:#17231b !important;border-bottom:1px solid #f1f5f9 !important;}
+    .pro-ai-note{background:#ecfdf5 !important;border-left-color:#22c55e !important;color:#166534 !important;}
+    .pro-savings-num{color:#047857 !important;}
+    .pro-hr{border-top-color:#e5e7eb !important;}
   `;
   document.head.appendChild(s);
 }
