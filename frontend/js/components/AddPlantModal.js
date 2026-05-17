@@ -53,36 +53,36 @@ export function openAddPlantModal() {
         <div style="padding:16px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
             <div>
-              <div style="font-size:${commercial ? '10px' : '13px'};font-weight:900;letter-spacing:${commercial ? '.16em' : '0'};text-transform:${commercial ? 'uppercase' : 'none'};color:${commercial ? '#a3e635' : 'var(--text,#111)'};">${commercial ? 'Production Slot Manager' : '🌱 Manage Plants'}</div>
-              ${commercial ? `<div style="font-size:11px;color:rgba(255,255,255,.42);font-weight:700;margin-top:3px;">Assign crop species to rack zones and production slots</div>` : ''}
+              <div style="font-size:${commercial ? '10px' : '13px'};font-weight:900;letter-spacing:${commercial ? '.16em' : '0'};text-transform:${commercial ? 'uppercase' : 'none'};color:${commercial ? '#047857' : 'var(--text,#111)'};">${commercial ? 'Production Slot Manager' : '🌱 Manage Plants'}</div>
+              ${commercial ? `<div style="font-size:11px;color:#64748b;font-weight:700;margin-top:3px;">Assign crop species to rack zones and production slots</div>` : ''}
             </div>
             <button id="closeAddPlantModal" class="${commercial ? 'commercial-plant-close' : ''}" style="background:none;border:none;font-size:20px;cursor:pointer;" aria-label="Close plant manager">✕</button>
           </div>
 
           <div style="margin-bottom:12px;">
-            <div style="font-size:0.7rem;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};margin-bottom:6px;font-weight:800;letter-spacing:.08em;">SEARCH OR ADD CUSTOM SPECIES</div>
+            <div style="font-size:0.7rem;color:${commercial ? '#64748b' : 'var(--text-secondary,#666)'};margin-bottom:6px;font-weight:800;letter-spacing:.08em;">SEARCH OR ADD CUSTOM SPECIES</div>
             <div style="display:flex;gap:8px;">
               <input id="speciesSearchInput" type="text" placeholder="e.g. kale, mint, cucumber..."
-                style="flex:1;padding:10px 12px;border:1px solid ${commercial ? 'rgba(163,230,53,.18)' : 'var(--border-color,#ddd)'};border-radius:10px;font-size:13px;background:${commercial ? 'rgba(255,255,255,.045)' : 'var(--bg-secondary,#f5f5f5)'};color:${commercial ? '#fff' : 'inherit'};">
+                style="flex:1;padding:10px 12px;border:1px solid ${commercial ? '#dbe7dc' : 'var(--border-color,#ddd)'};border-radius:10px;font-size:13px;background:${commercial ? '#f8fafc' : 'var(--bg-secondary,#f5f5f5)'};color:${commercial ? '#17231b' : 'inherit'};">
               <button id="speciesSearchBtn" class="${commercial ? 'commercial-plant-action' : ''}" style="background:var(--accent,#639922);color:white;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:900;cursor:pointer;">
                 ${commercial ? 'ADD' : '🔍 Add'}
               </button>
             </div>
-            <div id="speciesSearchStatus" style="font-size:11px;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};margin-top:4px;min-height:16px;"></div>
+            <div id="speciesSearchStatus" style="font-size:11px;color:${commercial ? '#64748b' : 'var(--text-secondary,#666)'};margin-top:4px;min-height:16px;"></div>
           </div>
 
-          <div style="font-size:0.7rem;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};margin-bottom:6px;font-weight:800;letter-spacing:.08em;">${commercial ? 'SPECIES CATALOG' : 'SELECT CROP'}</div>
+          <div style="font-size:0.7rem;color:${commercial ? '#64748b' : 'var(--text-secondary,#666)'};margin-bottom:6px;font-weight:800;letter-spacing:.08em;">${commercial ? 'SPECIES CATALOG' : 'SELECT CROP'}</div>
           <div id="cropGrid" class="${commercial ? 'commercial-crop-grid' : ''}" style="display:grid;grid-template-columns:repeat(${commercial ? 2 : 4},1fr);gap:8px;margin-bottom:16px;max-height:${commercial ? '220px' : '200px'};overflow-y:auto;"></div>
 
           <div style="display:flex;justify-content:space-between;align-items:end;margin-bottom:6px;gap:8px;">
             <div>
-              <div style="font-size:0.7rem;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};font-weight:800;letter-spacing:.08em;">${commercial ? 'ZONE / SLOT ASSIGNMENT' : 'SELECT POSITION'}</div>
-              <div style="font-size:11px;color:${commercial ? 'rgba(255,255,255,.36)' : 'var(--text-secondary,#666)'};">${rack.label} · select a slot to add, change, or remove</div>
+              <div style="font-size:0.7rem;color:${commercial ? '#64748b' : 'var(--text-secondary,#666)'};font-weight:800;letter-spacing:.08em;">${commercial ? 'ZONE / SLOT ASSIGNMENT' : 'SELECT POSITION'}</div>
+              <div style="font-size:11px;color:${commercial ? '#94a3b8' : 'var(--text-secondary,#666)'};">${rack.label} · select a slot to add, change, or remove</div>
             </div>
-            <div id="positionStatus" style="font-size:11px;color:${commercial ? '#a3e635' : 'var(--accent,#639922)'};font-weight:800;"></div>
+            <div id="positionStatus" style="font-size:11px;color:${commercial ? '#047857' : 'var(--accent,#639922)'};font-weight:800;"></div>
           </div>
           <div id="slotGrid" class="${commercial ? 'commercial-slot-grid' : ''}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
-          <div id="slotActionPanel" class="${commercial ? 'commercial-slot-panel' : ''}" style="border:1px solid ${commercial ? 'rgba(163,230,53,.14)' : 'var(--border-color,#e7e7e7)'};border-radius:12px;padding:10px;margin-bottom:12px;background:${commercial ? 'rgba(255,255,255,.04)' : 'var(--bg-secondary,#f7f7f7)'};font-size:12px;color:${commercial ? 'rgba(255,255,255,.55)' : 'var(--text-secondary,#666)'};"></div>
+          <div id="slotActionPanel" class="${commercial ? 'commercial-slot-panel' : ''}" style="border:1px solid ${commercial ? '#e5e7eb' : 'var(--border-color,#e7e7e7)'};border-radius:12px;padding:10px;margin-bottom:12px;background:${commercial ? '#f8fafc' : 'var(--bg-secondary,#f7f7f7)'};font-size:12px;color:${commercial ? '#475569' : 'var(--text-secondary,#666)'};"></div>
 
           <div style="display:grid;grid-template-columns:0.9fr 1.1fr;gap:8px;">
             <button id="removePlantBtn" class="${commercial ? 'commercial-remove-btn' : ''}" style="width:100%;border:1px solid #efb2b2;background:#fff5f5;color:#c83a3a;border-radius:10px;padding:11px 8px;font-weight:800;cursor:pointer;">${commercial ? 'CLEAR SLOT' : 'Remove'}</button>
@@ -179,7 +179,7 @@ async function handleSpeciesSearch() {
     console.warn('Species search fallback:', err.message);
   } finally {
     isLoadingSpecies = false;
-    document.getElementById('speciesSearchBtn').textContent = '🔍 Add';
+    document.getElementById('speciesSearchBtn').textContent = isCommercialContext() ? 'ADD' : '🔍 Add';
   }
 }
 
@@ -309,7 +309,7 @@ function renderSlotGrid(rack, slotPlants) {
 
     return `
       <div>
-        <div style="font-size:11px;font-weight:800;color:${commercial ? 'rgba(255,255,255,.42)' : 'var(--text-secondary,#666)'};margin-bottom:5px;">${commercial ? `Zone ${String.fromCharCode(65 + tierIndex)} · Tier ${tierIndex + 1}` : `Tier ${tierIndex + 1}`}</div>
+        <div style="font-size:11px;font-weight:800;color:${commercial ? '#64748b' : 'var(--text-secondary,#666)'};margin-bottom:5px;">${commercial ? `Zone ${String.fromCharCode(65 + tierIndex)} · Tier ${tierIndex + 1}` : `Tier ${tierIndex + 1}`}</div>
         <div style="display:grid;grid-template-columns:repeat(${rack.slotsPerTier},minmax(44px,1fr));gap:6px;">${slots}</div>
       </div>`;
   }).join('');
@@ -537,139 +537,145 @@ function ensurePlantModalStyles() {
   style.id = 'commercial-plant-modal-style';
   style.textContent = `
     .commercial-plant-overlay {
-      background: rgba(2, 6, 23, .72) !important;
-      backdrop-filter: blur(12px);
+      background: rgba(15, 23, 42, .22) !important;
+      backdrop-filter: blur(10px);
     }
     .commercial-plant-sheet {
-      background: #08110c !important;
-      color: #fff !important;
-      border: 1px solid rgba(163,230,53,.16) !important;
-      box-shadow: 0 28px 80px rgba(0,0,0,.45) !important;
+      background: rgba(255,255,255,.97) !important;
+      color: #17231b !important;
+      border: 1px solid #e5e7eb !important;
+      border-radius: 26px !important;
+      box-shadow: 0 24px 70px rgba(15,23,42,.18) !important;
+      backdrop-filter: blur(18px) !important;
     }
+    .commercial-plant-sheet input::placeholder { color: #94a3b8 !important; }
     .commercial-plant-close {
-      color: rgba(255,255,255,.62) !important;
+      color: #64748b !important;
       width: 34px;
       height: 34px;
       border-radius: 50%;
-      border: 1px solid rgba(255,255,255,.08) !important;
-      background: rgba(255,255,255,.04) !important;
+      border: 1px solid #e5e7eb !important;
+      background: #f8fafc !important;
     }
+    .commercial-plant-close:hover { background: #ecfdf5 !important; color: #047857 !important; }
     .commercial-plant-action,
     .commercial-confirm-btn {
-      background: rgba(163,230,53,.14) !important;
-      border: 1px solid rgba(163,230,53,.26) !important;
-      color: #a3e635 !important;
+      background: #166534 !important;
+      border: 1px solid #166534 !important;
+      color: #ffffff !important;
+      border-radius: 12px !important;
       letter-spacing: .08em;
+      box-shadow: 0 10px 26px rgba(22,101,52,.16) !important;
     }
     .commercial-remove-btn {
-      background: rgba(239,68,68,.08) !important;
-      border-color: rgba(239,68,68,.24) !important;
-      color: #f87171 !important;
+      background: #fef2f2 !important;
+      border-color: #fecaca !important;
+      color: #dc2626 !important;
+      border-radius: 12px !important;
       letter-spacing: .06em;
     }
     .commercial-crop-grid::-webkit-scrollbar,
     .commercial-slot-grid::-webkit-scrollbar { width: 5px; }
     .commercial-crop-grid::-webkit-scrollbar-thumb,
-    .commercial-slot-grid::-webkit-scrollbar-thumb { background: rgba(163,230,53,.18); border-radius: 999px; }
+    .commercial-slot-grid::-webkit-scrollbar-thumb { background: #bbf7d0; border-radius: 999px; }
     .commercial-crop-option {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 10px;
-      border-radius: 13px;
-      border: 1px solid rgba(255,255,255,.07);
-      background: rgba(255,255,255,.035);
+      border-radius: 14px;
+      border: 1px solid #e5e7eb;
+      background: #f8fafc;
       cursor: pointer;
       min-width: 0;
-      transition: border .18s, background .18s, transform .18s;
+      transition: border .18s, background .18s, transform .18s, box-shadow .18s;
     }
     .commercial-crop-option:hover,
     .commercial-crop-option.selected {
-      border-color: rgba(163,230,53,.34);
-      background: rgba(163,230,53,.08);
+      border-color: #86efac;
+      background: #ecfdf5;
       transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(22,101,52,.08);
     }
     .commercial-crop-code {
       width: 38px;
       height: 38px;
-      border-radius: 11px;
-      background: rgba(163,230,53,.12);
-      color: #a3e635;
+      border-radius: 12px;
+      background: #dcfce7;
+      color: #047857;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 11px;
-      font-weight: 900;
+      font-weight: 950;
       letter-spacing: .06em;
       flex-shrink: 0;
     }
     .commercial-crop-name {
-      color: #fff;
+      color: #17231b;
       font-size: 12px;
-      font-weight: 900;
+      font-weight: 950;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .commercial-crop-meta {
       margin-top: 3px;
-      color: rgba(255,255,255,.36);
+      color: #64748b;
       font-size: 10px;
-      font-weight: 700;
+      font-weight: 750;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .commercial-slot-option {
       min-height: 52px;
-      border-radius: 11px;
-      border: 1px solid rgba(255,255,255,.07);
-      background: rgba(255,255,255,.035);
-      color: rgba(255,255,255,.68);
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      background: #ffffff;
+      color: #475569;
       cursor: pointer;
-      padding: 7px;
+      padding: 8px;
       text-align: left;
       display: flex;
       flex-direction: column;
       gap: 2px;
-      transition: border .18s, background .18s;
+      transition: border .18s, background .18s, box-shadow .18s;
     }
-    .commercial-slot-option.filled {
-      border-color: rgba(163,230,53,.18);
-    }
+    .commercial-slot-option.filled { border-color: #bbf7d0; background: #f0fdf4; }
+    .commercial-slot-option:hover { border-color: #86efac; }
     .commercial-slot-option.selected {
-      border-color: rgba(56,189,248,.58);
-      background: rgba(56,189,248,.09);
+      border-color: #0ea5e9;
+      background: #eff6ff;
+      box-shadow: 0 8px 20px rgba(14,165,233,.12);
     }
     .commercial-slot-id {
-      color: #a3e635;
+      color: #047857;
       font-size: 9px;
-      font-weight: 900;
+      font-weight: 950;
       letter-spacing: .08em;
     }
     .commercial-slot-name {
-      color: #fff;
+      color: #17231b;
       font-size: 10px;
-      font-weight: 900;
+      font-weight: 950;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .commercial-slot-state {
-      color: rgba(255,255,255,.36);
+      color: #64748b;
       font-size: 8px;
-      font-weight: 900;
+      font-weight: 950;
       text-transform: uppercase;
       letter-spacing: .08em;
     }
+    .commercial-slot-panel { color: #475569 !important; }
     .commercial-slot-panel strong,
-    .commercial-slot-panel b {
-      color: #fff;
-    }
+    .commercial-slot-panel b { color: #17231b !important; }
   `;
   document.head.appendChild(style);
 }
-
 function positionLabel(slotIndex, rack) {
   return `Tier ${Math.floor(slotIndex / rack.slotsPerTier) + 1} · Slot ${(slotIndex % rack.slotsPerTier) + 1}`;
 }

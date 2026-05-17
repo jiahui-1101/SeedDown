@@ -157,6 +157,7 @@ function bindEvents() {
             showScreen('sensor-detail', {
                 key: card.getAttribute('data-key'),
                 name: card.getAttribute('data-label'),
+                from: 'dash-c',
             });
         });
     });
