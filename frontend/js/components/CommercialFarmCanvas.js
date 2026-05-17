@@ -48,6 +48,9 @@ export const CommercialFarmCanvas = {
     detailPanel: null,
     tooltip: null,
     fullscreenButton: null,
+    zoomControls: null,
+    originalParent: null,
+    originalNextSibling: null,
     resizeHandler: null,
     fullscreenHandler: null,
     rafId: null,
@@ -86,7 +89,7 @@ export const CommercialFarmCanvas = {
     prepareHost() {
         this.parent.classList.add('commercial-farm-host');
         this.canvas.classList.add('commercial-farm-canvas');
-        this.parent.querySelectorAll('.cf-overlay, .cf-tooltip, .cf-expand-btn').forEach(node => node.remove());
+        this.parent.querySelectorAll('.cf-overlay, .cf-tooltip, .cf-expand-btn, .cf-zoom-controls').forEach(node => node.remove());
     },
 
     initScene() {
@@ -114,12 +117,10 @@ export const CommercialFarmCanvas = {
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.07;
         this.controls.enablePan = true;
-        this.controls.enableZoom = true;
-        this.controls.minDistance = 3.2;
-        this.controls.maxDistance = 18;
+        this.controls.enableZoom = false;
         this.controls.maxPolarAngle = Math.PI * 0.48;
         this.controls.target.set(0, 1.55, 0);
-        this.controls.update();
+        this.setCameraFrame(false);
 
         this.raycaster = new THREE.Raycaster();
         this.pointer = new THREE.Vector2();
@@ -173,7 +174,7 @@ export const CommercialFarmCanvas = {
 
     addFloor() {
         const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(18, 14),
+            new THREE.PlaneGeometry(80, 60),
             new THREE.MeshStandardMaterial({ color: 0x343a36, roughness: 0.86, metalness: 0.04 })
         );
         floor.rotation.x = -Math.PI / 2;
@@ -181,7 +182,7 @@ export const CommercialFarmCanvas = {
         this.scene.add(floor);
 
         const aisle = new THREE.Mesh(
-            new THREE.PlaneGeometry(2.4, 12.6),
+            new THREE.PlaneGeometry(5.2, 56),
             new THREE.MeshStandardMaterial({ color: 0x454b45, roughness: 0.78 })
         );
         aisle.rotation.x = -Math.PI / 2;
@@ -190,11 +191,11 @@ export const CommercialFarmCanvas = {
         this.scene.add(aisle);
 
         const lineMat = new THREE.LineBasicMaterial({ color: 0x607466, transparent: true, opacity: 0.32 });
-        for (let x = -8; x <= 8; x += 1) {
-            this.scene.add(makeLine([x, 0.014, -6.5], [x, 0.014, 6.5], lineMat));
+        for (let x = -38; x <= 38; x += 2) {
+            this.scene.add(makeLine([x, 0.014, -28], [x, 0.014, 28], lineMat));
         }
-        for (let z = -6; z <= 6; z += 1) {
-            this.scene.add(makeLine([-8.5, 0.016, z], [8.5, 0.016, z], lineMat));
+        for (let z = -28; z <= 28; z += 2) {
+            this.scene.add(makeLine([-38, 0.016, z], [38, 0.016, z], lineMat));
         }
     },
 
@@ -613,7 +614,7 @@ export const CommercialFarmCanvas = {
             <span><i class="ok"></i>Healthy</span>
             <span><i class="warn"></i>Warning</span>
             <span><i class="danger"></i>Critical</span>
-            <span class="cf-legend-help">Drag rotate · Wheel zoom · Double click fullscreen</span>
+            <span class="cf-legend-help">Drag rotate · Wheel / +/- zoom · Double click fullscreen</span>
         `;
         this.parent.appendChild(legend);
 
@@ -626,14 +627,31 @@ export const CommercialFarmCanvas = {
             this.toggleFullscreen();
         });
         this.parent.appendChild(this.fullscreenButton);
-    },
 
+        this.zoomControls = document.createElement('div');
+        this.zoomControls.className = 'cf-zoom-controls';
+        this.zoomControls.innerHTML = `
+            <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
+            <button type="button" data-zoom="out" aria-label="Zoom out">-</button>
+            <button type="button" data-zoom="reset" aria-label="Reset view">RESET</button>
+        `;
+        this.zoomControls.addEventListener('click', event => {
+            const button = event.target.closest('button[data-zoom]');
+            if (!button) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (button.dataset.zoom === 'in') this.zoomCamera(0.82);
+            if (button.dataset.zoom === 'out') this.zoomCamera(1.22);
+            if (button.dataset.zoom === 'reset') this.resetCamera();
+        });
+        this.parent.appendChild(this.zoomControls);
+    },
     bindEvents() {
         this.resizeHandler = () => this.resize();
         window.addEventListener('resize', this.resizeHandler);
 
         this.fullscreenHandler = () => {
-            if (this.fullscreenButton) this.fullscreenButton.textContent = document.fullscreenElement === this.parent ? 'CLOSE' : 'EXPAND';
+            this.syncExpandButton();
             setTimeout(() => this.resize(), 80);
         };
         document.addEventListener('fullscreenchange', this.fullscreenHandler);
@@ -641,16 +659,19 @@ export const CommercialFarmCanvas = {
         this.canvas.addEventListener('pointermove', this.onPointerMove);
         this.canvas.addEventListener('click', this.onClick);
         this.canvas.addEventListener('dblclick', this.onDoubleClick);
+        this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
     },
 
     onPointerMove: null,
     onClick: null,
     onDoubleClick: null,
+    onWheel: null,
 
     installHandlers() {
         this.onPointerMove = event => this.handlePointerMove(event);
         this.onClick = event => this.handleClick(event);
         this.onDoubleClick = () => this.toggleFullscreen();
+        this.onWheel = event => this.handleWheel(event);
     },
 
     handlePointerMove(event) {
@@ -676,6 +697,49 @@ export const CommercialFarmCanvas = {
         this.selectedRoot = hit;
         this.setHighlight(hit, true, true);
         this.showRootDetail(hit);
+    },
+
+    handleWheel(event) {
+        if (!this.camera || !this.controls) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.zoomCamera(event.deltaY > 0 ? 1.12 : 0.88);
+    },
+
+    zoomCamera(scale) {
+        if (!this.camera || !this.controls) return;
+        const target = this.controls.target;
+        const offset = this.camera.position.clone().sub(target);
+        const currentDistance = offset.length() || 1;
+        const minDistance = this.parent?.classList.contains('cf-expanded') ? 2.4 : 2.8;
+        const maxDistance = this.parent?.classList.contains('cf-expanded') ? 24 : 18;
+        const nextDistance = THREE.MathUtils.clamp(currentDistance * scale, minDistance, maxDistance);
+        offset.setLength(nextDistance);
+        this.camera.position.copy(target).add(offset);
+        this.controls.update();
+    },
+
+    resetCamera() {
+        this.setCameraFrame(this.parent?.classList.contains('cf-expanded'));
+    },
+
+    setCameraFrame(expanded = false) {
+        if (!this.camera || !this.controls) return;
+        if (expanded) {
+            this.camera.fov = 38;
+            this.camera.position.set(0.35, 18.5, 0.35);
+            this.controls.target.set(0, 0, 0);
+            this.controls.minPolarAngle = Math.PI * 0.015;
+            this.controls.maxPolarAngle = Math.PI * 0.18;
+        } else {
+            this.camera.fov = 58;
+            this.camera.position.set(5.5, 4.6, 8.5);
+            this.controls.target.set(0, 1.55, 0);
+            this.controls.minPolarAngle = 0;
+            this.controls.maxPolarAngle = Math.PI * 0.48;
+        }
+        this.camera.updateProjectionMatrix();
+        this.controls.update();
     },
 
     pickRoot(event) {
@@ -755,18 +819,59 @@ export const CommercialFarmCanvas = {
 
     async toggleFullscreen() {
         if (!this.parent) return;
-        const expanded = !this.parent.classList.contains('cf-expanded');
-        this.parent.classList.toggle('cf-expanded', expanded);
-        if (this.fullscreenButton) this.fullscreenButton.textContent = expanded ? 'CLOSE' : 'EXPAND';
-        document.body.classList.toggle('cf-expanded-lock', expanded);
-        setTimeout(() => this.resize(), 80);
+        const shouldExpand = !this.parent.classList.contains('cf-expanded');
+        if (shouldExpand) this.enterExpandedView();
+        else this.exitExpandedView();
+    },
+
+    enterExpandedView() {
+        if (!this.parent || this.parent.classList.contains('cf-expanded')) return;
+        this.originalParent = this.parent.parentNode;
+        this.originalNextSibling = this.parent.nextSibling;
+        document.body.appendChild(this.parent);
+        this.parent.classList.add('cf-expanded');
+        document.documentElement.classList.add('cf-expanded-lock');
+        document.body.classList.add('cf-expanded-lock');
+        this.syncExpandButton();
+        this.setCameraFrame(true);
+        requestAnimationFrame(() => this.resize());
+        setTimeout(() => this.resize(), 120);
+    },
+
+    exitExpandedView() {
+        if (!this.parent) return;
+        this.parent.classList.remove('cf-expanded');
+        document.documentElement.classList.remove('cf-expanded-lock');
+        document.body.classList.remove('cf-expanded-lock');
+        this.restoreHostPlacement();
+        this.syncExpandButton();
+        this.setCameraFrame(false);
+        requestAnimationFrame(() => this.resize());
+        setTimeout(() => this.resize(), 120);
+    },
+
+    restoreHostPlacement() {
+        if (!this.parent || !this.originalParent) return;
+        if (this.originalNextSibling && this.originalNextSibling.parentNode === this.originalParent) {
+            this.originalParent.insertBefore(this.parent, this.originalNextSibling);
+        } else {
+            this.originalParent.appendChild(this.parent);
+        }
+        this.originalParent = null;
+        this.originalNextSibling = null;
+    },
+
+    syncExpandButton() {
+        if (!this.fullscreenButton || !this.parent) return;
+        this.fullscreenButton.textContent = this.parent.classList.contains('cf-expanded') ? 'CLOSE' : 'EXPAND';
     },
 
     resize() {
         if (!this.canvas || !this.renderer || !this.camera) return;
+        const expanded = this.parent?.classList.contains('cf-expanded');
         const rect = this.canvas.getBoundingClientRect();
-        const width = Math.max(320, rect.width || this.parent.clientWidth || 640);
-        const height = Math.max(300, rect.height || 420);
+        const width = expanded ? window.innerWidth : Math.max(320, rect.width || this.parent.clientWidth || 640);
+        const height = expanded ? window.innerHeight : Math.max(300, rect.height || 420);
         this.renderer.setSize(width, height, false);
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
@@ -843,6 +948,7 @@ export const CommercialFarmCanvas = {
         if (this.canvas && this.onPointerMove) this.canvas.removeEventListener('pointermove', this.onPointerMove);
         if (this.canvas && this.onClick) this.canvas.removeEventListener('click', this.onClick);
         if (this.canvas && this.onDoubleClick) this.canvas.removeEventListener('dblclick', this.onDoubleClick);
+        if (this.canvas && this.onWheel) this.canvas.removeEventListener('wheel', this.onWheel);
         if (this.controls) this.controls.dispose();
         if (this.scene) {
             this.scene.traverse(obj => {
@@ -855,11 +961,13 @@ export const CommercialFarmCanvas = {
             });
         }
         if (this.renderer) this.renderer.dispose();
+        if (this.parent?.classList.contains('cf-expanded')) this.exitExpandedView();
         if (this.parent) {
             this.parent.classList.remove('cf-expanded');
-            this.parent.querySelectorAll('.cf-overlay, .cf-tooltip, .cf-expand-btn').forEach(node => node.remove());
+            this.parent.querySelectorAll('.cf-overlay, .cf-tooltip, .cf-expand-btn, .cf-zoom-controls').forEach(node => node.remove());
             this.parent.classList.remove('commercial-farm-host');
         }
+        document.documentElement.classList.remove('cf-expanded-lock');
         document.body.classList.remove('cf-expanded-lock');
         this.canvas = null;
         this.parent = null;
@@ -877,11 +985,15 @@ export const CommercialFarmCanvas = {
         this.detailPanel = null;
         this.tooltip = null;
         this.fullscreenButton = null;
+        this.zoomControls = null;
+        this.originalParent = null;
+        this.originalNextSibling = null;
         this.resizeHandler = null;
         this.fullscreenHandler = null;
         this.onPointerMove = null;
         this.onClick = null;
         this.onDoubleClick = null;
+        this.onWheel = null;
     },
 };
 
@@ -1325,6 +1437,45 @@ function ensureCommercialStyles() {
         .cf-expand-btn:hover {
             background: rgba(163, 230, 53, .12);
         }
+        .cf-zoom-controls {
+            position: absolute;
+            top: 58px;
+            right: 14px;
+            z-index: 9;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 7px;
+            border-radius: 18px;
+            background: rgba(8, 15, 11, .68);
+            border: 1px solid rgba(163, 230, 53, .18);
+            backdrop-filter: blur(12px);
+        }
+        .cf-zoom-controls button {
+            width: 38px;
+            min-height: 34px;
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 12px;
+            background: rgba(255,255,255,.06);
+            color: #ecfccb;
+            font-size: 15px;
+            font-weight: 900;
+            line-height: 1;
+            cursor: pointer;
+        }
+        .cf-zoom-controls button[data-zoom="reset"] {
+            width: 48px;
+            min-height: 30px;
+            font-size: 8px;
+            letter-spacing: .08em;
+        }
+        .cf-zoom-controls button:hover {
+            background: rgba(163, 230, 53, .14);
+            border-color: rgba(163, 230, 53, .28);
+        }
+        .cf-zoom-controls button:active {
+            transform: translateY(1px);
+        }
         .commercial-farm-host:fullscreen {
             width: 100vw !important;
             height: 100vh !important;
@@ -1341,23 +1492,32 @@ function ensureCommercialStyles() {
             left: 20px;
             width: 360px;
         }
+        html.cf-expanded-lock,
         body.cf-expanded-lock {
             overflow: hidden !important;
+            width: 100vw !important;
+            height: 100vh !important;
         }
         .commercial-farm-host.cf-expanded {
             position: fixed !important;
             inset: 0 !important;
-            z-index: 9999 !important;
+            z-index: 99999 !important;
             width: 100vw !important;
             height: 100vh !important;
+            height: 100dvh !important;
             margin: 0 !important;
+            padding: 0 !important;
             border-radius: 0 !important;
             background: #07110c !important;
             border: none !important;
+            box-shadow: none !important;
+            transform: none !important;
+            max-width: none !important;
         }
         .commercial-farm-host.cf-expanded .commercial-farm-canvas {
             width: 100vw !important;
             height: 100vh !important;
+            height: 100dvh !important;
             border-radius: 0 !important;
         }
         .commercial-farm-host.cf-expanded .cf-info-panel {
@@ -1367,6 +1527,10 @@ function ensureCommercialStyles() {
         }
         .commercial-farm-host.cf-expanded .cf-expand-btn {
             top: 20px;
+            right: 20px;
+        }
+        .commercial-farm-host.cf-expanded .cf-zoom-controls {
+            top: 68px;
             right: 20px;
         }
         @media (max-width: 520px) {

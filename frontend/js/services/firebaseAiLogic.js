@@ -27,6 +27,29 @@ export async function scanPlantsWithFirebaseAI({ image, mediaType, targetPlant }
     return parsePlantRecognition(text);
 }
 
+export async function scanPlantDiseaseWithFirebaseAI({ image, mediaType, plantName, plantSpecies, farmContext = {}, answers = {} }) {
+    if (!hasFirebaseAIConfig()) {
+        return null;
+    }
+
+    const model = await getFirebaseAIModel();
+    const result = await model.generateContent([
+        {
+            inlineData: {
+                data: image,
+                mimeType: mediaType || 'image/jpeg',
+            },
+        },
+        { text: plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }) },
+    ]);
+
+    const text = typeof result.response?.text === 'function'
+        ? result.response.text()
+        : extractText(result.response);
+
+    return parseDiseaseAnalysis(text, plantName);
+}
+
 function hasFirebaseAIConfig() {
     return Boolean(
         import.meta.env.VITE_FIREBASE_API_KEY
@@ -68,6 +91,41 @@ async function getFirebaseAIModel() {
     return modelPromise;
 }
 
+function plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }) {
+    const context = JSON.stringify({ plantName, plantSpecies, farmContext, answers }, null, 2);
+    return [
+        'You are SeedDown\'s commercial vertical farming plant health analyst.',
+        'Analyse the uploaded plant photo using the known plant context below.',
+        '',
+        'Known context:',
+        context,
+        '',
+        'Return ONLY valid JSON, no markdown fences, no preamble:',
+        '',
+        '{',
+        '  \"plant\": \"Plant name\",',
+        '  \"condition\": \"Most likely disease or stress condition\",',
+        '  \"severity\": \"low | medium | high | unknown\",',
+        '  \"confidence\": 0.78,',
+        '  \"confidenceExplanation\": \"Short explanation of why this confidence was selected\",',
+        '  \"evidence\": [\"visible symptom or contextual clue\"],',
+        '  \"likelyCauses\": [\"cause 1\", \"cause 2\"],',
+        '  \"solutions\": [\"specific action 1\", \"specific action 2\", \"specific action 3\"],',
+        '  \"prevention\": [\"future prevention step 1\", \"future prevention step 2\"],',
+        '  \"needsMoreInfo\": false,',
+        '  \"followUpQuestions\": []',
+        '}',
+        '',
+        'Rules:',
+        '- Use the known plant species strongly, because recognition happened earlier.',
+        '- If the photo is unclear, symptoms are not visible, or multiple diseases look similar, set confidence below 0.55, needsMoreInfo true, and ask 3 concise follow-up questions.',
+        '- If it looks like environmental stress instead of infection, say so clearly.',
+        '- Do not claim certainty. Keep recommendations practical for indoor vertical farming.',
+        '- confidence must be from 0.0 to 1.0.',
+        '- return raw JSON only.',
+    ].join('\n');
+}
+
 function plantRecognitionPrompt(targetPlant) {
     const hint = targetPlant
         ? `\nUser says the intended plant is: ${targetPlant}. Use this as a hint, but only return it if it matches the photo or the photo is unclear.`
@@ -106,6 +164,38 @@ Rules:
 
 function extractText(response) {
     return response?.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('\n') || '{"plants":[]}';
+}
+
+function parseDiseaseAnalysis(rawText, fallbackPlant = 'Plant') {
+    const cleaned = String(rawText || '{}')
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    const jsonText = start >= 0 && end >= start ? cleaned.slice(start, end + 1) : '{}';
+    const parsed = JSON.parse(jsonText);
+    const confidence = Math.min(1, Math.max(0, parseFloat(parsed.confidence) || 0));
+    return {
+        plant: parsed.plant || fallbackPlant || 'Plant',
+        condition: parsed.condition || 'Unable to confirm plant disease from this image',
+        severity: ['low', 'medium', 'high', 'unknown'].includes(parsed.severity) ? parsed.severity : 'unknown',
+        confidence,
+        confidenceExplanation: parsed.confidenceExplanation || 'Confidence is based on image clarity, visible symptoms, and match with the known plant profile.',
+        evidence: sanitizeStringList(parsed.evidence),
+        likelyCauses: sanitizeStringList(parsed.likelyCauses),
+        solutions: sanitizeStringList(parsed.solutions),
+        prevention: sanitizeStringList(parsed.prevention),
+        needsMoreInfo: Boolean(parsed.needsMoreInfo) || confidence < 0.55,
+        followUpQuestions: sanitizeStringList(parsed.followUpQuestions).slice(0, 4),
+    };
+}
+
+function sanitizeStringList(list) {
+    return Array.isArray(list)
+        ? list.map(item => String(item || '').trim()).filter(Boolean).slice(0, 6)
+        : [];
 }
 
 function parsePlantRecognition(rawText) {

@@ -75,6 +75,19 @@ export function render() {
                     </div>
                 </div>
 
+
+
+                <div id="controlAiRecommendation" style="background:#F8FAFC;border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:16px;padding:14px 15px;box-shadow:var(--shadow-sm);">
+                    <div style="display:flex;gap:10px;align-items:flex-start;">
+                        <div id="controlAiIcon" style="width:34px;height:34px;border-radius:12px;background:var(--accent-l);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;flex-shrink:0;color:var(--accent);">AI</div>
+                        <div style="flex:1;min-width:0;">
+                            <div id="controlAiTitle" style="font-size:11px;font-weight:900;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;">AI Threshold Check</div>
+                            <div id="controlAiSummary" style="font-size:13px;color:var(--sub);line-height:1.4;margin-top:3px;">Settings look safe for commercial automation.</div>
+                            <div id="controlAiList" style="display:none;margin-top:9px;flex-direction:column;gap:6px;"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
                     <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:12px;">PRESETS</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -145,6 +158,11 @@ function bindEvents() {
     slider('controlWaterDur', 'waterDurVal', v => `${v}s`);
     slider('controlLight', 'lightVal', v => `${v} raw`);
     slider('controlGas', 'gasVal', v => `${v} raw`);
+
+    ['controlDeviceId', 'controlTempMin', 'controlTempMax', 'controlPhMin', 'controlPhMax'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', updateControlRecommendations);
+    });
+    updateControlRecommendations();
 }
 
 async function fetchLatestCommand(showResult) {
@@ -249,6 +267,7 @@ function applyPreset(name) {
     setText('lightVal', `${preset.lightThreshold} raw`);
     setInput('controlWaterDur', preset.wateringDuration);
     setText('waterDurVal', `${preset.wateringDuration}s`);
+    updateControlRecommendations();
     showToast('info', 'Preset applied. Press Sync to send it to IoT.');
 }
 async function fetchCurrentPreferences(showResult) {
@@ -279,16 +298,23 @@ function applyPreferences(pref) {
     setText('lightVal', `${pref.darkThreshold ?? value('controlLight')} raw`);
     setInput('controlWaterDur', pref.wateringDurationSeconds);
     setText('waterDurVal', `${pref.wateringDurationSeconds ?? value('controlWaterDur')}s`);
+    updateControlRecommendations();
 }
 
 function saveControls() {
-    const profile = { ...defaultControls(), ...(loadProfile(AppState.currentFarmId) || {}), ...collectControls() };
+    const controls = collectControls();
+    const recommendation = updateControlRecommendations();
+    const profile = { ...defaultControls(), ...(loadProfile(AppState.currentFarmId) || {}), ...controls };
     saveProfile(profile, AppState.currentFarmId);
-    showToast('success', 'Control thresholds saved locally');
+    showToast(recommendation.level === 'danger' ? 'warning' : 'success', recommendation.level === 'danger' ? 'Saved locally, but AI recommends adjusting risky thresholds.' : 'Control thresholds saved locally');
 }
 
 async function syncControls() {
     const controls = collectControls();
+    const recommendation = updateControlRecommendations();
+    if (recommendation.level === 'danger') {
+        showToast('warning', 'AI warning: thresholds are risky. Review the recommendation before syncing.');
+    }
     const icon = document.getElementById('controlSyncIcon');
     const btn = document.getElementById('controlSyncBtn');
     btn.disabled = true;
@@ -341,6 +367,84 @@ function collectControls() {
         lightThreshold: intValue('controlLight', 1500),
         wateringDuration: intValue('controlWaterDur', 10),
     };
+}
+
+function updateControlRecommendations() {
+    const controls = collectControls();
+    const findings = getControlRecommendations(controls);
+    const level = findings.some(item => item.level === 'danger') ? 'danger' : findings.some(item => item.level === 'warning') ? 'warning' : 'safe';
+    const box = document.getElementById('controlAiRecommendation');
+    const icon = document.getElementById('controlAiIcon');
+    const title = document.getElementById('controlAiTitle');
+    const summary = document.getElementById('controlAiSummary');
+    const list = document.getElementById('controlAiList');
+    if (!box || !icon || !title || !summary || !list) return { level, findings };
+
+    const style = {
+        safe: { border: 'var(--accent)', bg: '#F8FAFC', iconBg: 'var(--accent-l)', color: 'var(--accent)', icon: 'AI', title: 'AI Threshold Check' },
+        warning: { border: '#D97706', bg: '#FFFBEB', iconBg: '#FEF3C7', color: '#B45309', icon: '!', title: 'AI Recommendation' },
+        danger: { border: 'var(--danger)', bg: '#FEF2F2', iconBg: '#FEE2E2', color: 'var(--danger)', icon: '!!', title: 'AI Safety Warning' },
+    }[level];
+
+    box.style.borderLeftColor = style.border;
+    box.style.background = style.bg;
+    icon.style.background = style.iconBg;
+    icon.style.color = style.color;
+    icon.textContent = style.icon;
+    title.textContent = style.title;
+    title.style.color = style.color;
+
+    if (!findings.length) {
+        summary.textContent = 'Settings look safe for commercial automation.';
+        list.style.display = 'none';
+        list.innerHTML = '';
+        return { level, findings };
+    }
+
+    summary.textContent = level === 'danger'
+        ? 'Some settings can delay emergency actions or make automation unstable.'
+        : 'AI found settings that may cause false alarms or inefficient device response.';
+    list.style.display = 'flex';
+    list.innerHTML = findings.slice(0, 4).map(item => `
+        <div style="display:flex;gap:7px;align-items:flex-start;font-size:11px;line-height:1.35;color:${item.level === 'danger' ? 'var(--danger)' : '#92400E'};font-weight:800;">
+            <span>${item.level === 'danger' ? '!' : '-'}</span>
+            <span>${escapeHTML(item.message)}</span>
+        </div>
+    `).join('');
+    return { level, findings };
+}
+
+function getControlRecommendations(c) {
+    const findings = [];
+    const add = (level, message) => findings.push({ level, message });
+
+    if (!c.deviceId.trim()) add('danger', 'Device ID is empty, so ESP32 preferences cannot sync correctly.');
+
+    if (c.tempMin >= c.tempMax) add('danger', 'Temperature min must be lower than max. Recommended range: 18C to 35C.');
+    else {
+        if (c.tempMin < 10) add('warning', 'Temperature min is very low; cold stress may be ignored too long. Consider 18C.');
+        if (c.tempMax > 42) add('danger', 'Temperature max is too high; buzzer/fan may react too late. Keep it near 35C.');
+        if (c.tempMax - c.tempMin < 5) add('warning', 'Temperature range is too narrow and may create frequent false alerts.');
+        if (c.tempMax - c.tempMin > 25) add('warning', 'Temperature range is too wide and may miss crop stress.');
+    }
+
+    if (c.phMin >= c.phMax) add('danger', 'pH min must be lower than pH max. Recommended range: 5.5 to 6.5.');
+    else {
+        if (c.phMin < 4.8) add('warning', 'pH min is too acidic for most crops. Consider 5.5.');
+        if (c.phMax > 7.2) add('warning', 'pH max is too alkaline for nutrient uptake. Consider 6.5.');
+        if (c.phMax - c.phMin > 1.8) add('warning', 'pH range is too wide; nutrient issues may be detected late.');
+    }
+
+    if (c.gasDangerThreshold > 3300) add('danger', 'Gas danger threshold is very high; buzzer may trigger too late. Consider 2500 or lower.');
+    if (c.gasDangerThreshold < 900) add('warning', 'Gas danger threshold is very sensitive and may cause frequent buzzer alerts.');
+    if (c.soilDryThreshold < 900) add('warning', 'Soil threshold is very low; watering may wait until plants are too dry.');
+    if (c.soilDryThreshold > 2700) add('warning', 'Soil threshold is very high; pump may run too often and waste water.');
+    if (c.lightThreshold < 700) add('warning', 'Light threshold is very low; plants may stay under-lit before action triggers.');
+    if (c.lightThreshold > 3200) add('warning', 'Light threshold is very high; lighting/fan simulation may trigger too often and waste energy.');
+    if (c.wateringDuration > 30) add('warning', 'Watering duration is long; risk of overwatering. Try 8-15 seconds first.');
+    if (c.wateringDuration < 4) add('warning', 'Watering duration is very short; pump may not deliver enough water.');
+
+    return findings;
 }
 
 function presetButton(preset, icon, label) {
@@ -432,7 +536,10 @@ function slider(inputId, labelId, format) {
     const input = document.getElementById(inputId);
     const label = document.getElementById(labelId);
     if (!input || !label) return;
-    input.addEventListener('input', () => { label.textContent = format(input.value); });
+    input.addEventListener('input', () => {
+        label.textContent = format(input.value);
+        updateControlRecommendations();
+    });
 }
 
 function setInput(id, value) {

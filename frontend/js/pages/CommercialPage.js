@@ -77,11 +77,12 @@ export function render() {
 
                 <div style="margin:0 16px 12px 16px;">
                     <div style="font-size:0.6rem;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:8px;">Commercial Tools</div>
-                    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px;">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(74px,1fr)); gap:10px;">
                         ${featureButton('whatif', '🔮', 'What-If')}
                         ${featureButton('consumption', '⚡', 'ESG')}
                         ${featureButton('alerts', '🚨', 'Alerts')}
                         ${featureButton('control', '🎛️', 'Control')}
+                        ${featureButton('disease', '🧫', 'Disease')}
                     </div>
                 </div>
             </div>
@@ -123,6 +124,8 @@ function bindEvents() {
                 showScreen('whatif-pro');
             } else if (feature === 'control') {
                 showScreen('control');
+            } else if (feature === 'disease') {
+                showScreen('disease');
             } else {
                 showScreen('feature', { feature, from: 'dash-c' });
             }
