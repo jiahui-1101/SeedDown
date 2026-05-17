@@ -652,12 +652,51 @@ function ensureCommercialCommandStyles() {
             font-weight:950;
             cursor:pointer;
         }
-        .commercial-command-screen .cf-info-panel,
-        .commercial-command-screen .cf-tooltip,
         .commercial-command-screen .cf-legend,
         .commercial-command-screen .cf-expand-btn,
         .commercial-command-screen .cf-zoom-controls {
             display: none !important;
+        }
+        .commercial-command-screen .cf-info-panel {
+            display: block !important;
+            top: 132px !important;
+            left: 18px !important;
+            width: min(360px, calc(100vw - 470px)) !important;
+            min-width: 280px !important;
+            color: #17231b !important;
+            background: rgba(255,255,255,.92) !important;
+            border: 1px solid rgba(22,101,52,.12) !important;
+            box-shadow: 0 18px 48px rgba(15,23,42,.12) !important;
+            backdrop-filter: blur(18px) !important;
+        }
+        .commercial-command-screen .cf-panel-title,
+        .commercial-command-screen .cf-mini-metric strong {
+            color: #17231b !important;
+        }
+        .commercial-command-screen .cf-panel-kicker,
+        .commercial-command-screen .cf-plant-list b,
+        .commercial-command-screen .cf-tooltip strong {
+            color: #047857 !important;
+        }
+        .commercial-command-screen .cf-panel-sub,
+        .commercial-command-screen .cf-mini-metric span,
+        .commercial-command-screen .cf-plant-list span,
+        .commercial-command-screen .cf-tooltip small {
+            color: #64748b !important;
+        }
+        .commercial-command-screen .cf-mini-metric,
+        .commercial-command-screen .cf-plant-list span {
+            background: #f8fafc !important;
+            border: 1px solid #e5e7eb !important;
+        }
+        .commercial-command-screen .cf-tooltip {
+            display: flex !important;
+            bottom: 18px !important;
+            left: 50% !important;
+            color: #17231b !important;
+            background: rgba(255,255,255,.9) !important;
+            border: 1px solid rgba(22,101,52,.12) !important;
+            box-shadow: 0 12px 34px rgba(15,23,42,.1) !important;
         }
         @media (max-width: 760px) {
             .commercial-top-shell { left: 12px; top: 12px; }
