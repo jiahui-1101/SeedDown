@@ -69,6 +69,8 @@ export function render() {
                             ${sensorCard('pH', 'pro-ph', '--', 'ph')}
                             ${sensorCard('Water', 'pro-water', '--', 'water')}
                             ${sensorCard('Gas', 'pro-gas', '--', 'nutrient')}
+                            ${sensorCard('EC', 'pro-ec', '--', 'ec')}
+                            ${sensorCard('CO2', 'pro-co2', '--', 'co2')}
                         </div>
                     </section>
 
@@ -239,7 +241,7 @@ function initProDashboard() {
 
     const syncData = async () => {
         try {
-            const res = await fetch(`${API_BASE}/api/sensors/latest?deviceId=farm_001`);
+            const res = await fetch(`${API_BASE}/api/sensors/latest?${buildSensorQuery().toString()}`);
             const data = await res.json();
             if (!data || !data.reading) return;
             const r = data.reading;
@@ -250,6 +252,8 @@ function initProDashboard() {
             const ph = Number(r.ph || 0);
             const water = Number(r.waterDistanceCm || 0);
             const gas = Number(r.gasRaw || 0);
+            const ec = Number(r.ec || 0);
+            const co2 = Number(r.co2Ppm || 0);
             const plantTotal = plantCount(getCurrentFarm());
             const estProfit = Math.max(0, plantTotal * 1.35 + light * 0.012).toFixed(2);
             const energyCost = Math.max(0, temp * 0.65 + plantTotal * 0.18).toFixed(1);
@@ -262,6 +266,8 @@ function initProDashboard() {
             setText('pro-ph', ph || '--');
             setText('pro-water', `${water}cm`);
             setText('pro-gas', gas);
+            setText('pro-ec', ec ? ec.toFixed(2) + ' mS' : '--');
+            setText('pro-co2', co2 ? co2 + ' ppm' : '--');
 
             if (!AppState.aiConsulted) {
                 fetchAIGlobalAdvice(r);
@@ -277,6 +283,15 @@ function initProDashboard() {
     AppState.proInterval = setInterval(syncData, 5000);
 }
 
+function buildSensorQuery() {
+    const farm = getCurrentFarm();
+    const query = new URLSearchParams();
+    if (farm?.deviceId) query.set('deviceId', farm.deviceId);
+    else if (farm?.zoneId) query.set('zoneId', farm.zoneId);
+    else if (farm?.id) query.set('fieldId', farm.id);
+    else query.set('deviceId', 'farm_001');
+    return query;
+}
 async function fetchAIGlobalAdvice(currentData) {
     const prompt = `You are SeedDown's commercial farm AI. Current sensor data: ${JSON.stringify(currentData)}. Give one concise operations insight about risk, yield, energy, or automation.`;
     try {
@@ -787,4 +802,6 @@ function ensureCommercialCommandStyles() {
     `;
     document.head.appendChild(style);
 }
+
+
 

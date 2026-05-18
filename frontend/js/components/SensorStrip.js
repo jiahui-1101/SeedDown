@@ -1,107 +1,196 @@
 import { AppState } from '../store.js';
 import { showScreen } from '../utils/navigation.js';
 
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
+
 export const SensorStrip = {
     container: null,
     refreshInterval: null,
+    lastReading: null,
+    lastQuery: null,
 
     async init() {
         this.container = document.getElementById('dashStrip');
         if (!this.container) return;
-        
-        this.container.className = ''; 
+
+        this.container.className = '';
         this.container.style.display = 'block';
         this.container.style.width = '100%';
 
-        // 1. 订阅状态变化 (保持原逻辑)
         AppState.subscribe(() => this.render());
-
-        // 2. 立即执行一次真数据获取
         await this.fetchLatestData();
 
-        // 3. 设置每 10 秒自动刷新一次，实现真正的 "Live Data"
         if (this.refreshInterval) clearInterval(this.refreshInterval);
         this.refreshInterval = setInterval(() => this.fetchLatestData(), 10000);
     },
 
-    // 新增：专门从后端拿数据并更新 AppState
     async fetchLatestData() {
         try {
-            const response = await fetch(`http://localhost:3000/api/sensors/latest?deviceId=farm_001`);
+            const query = buildSensorQuery();
+            this.lastQuery = query;
+            const response = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
             const data = await response.json();
-            
-            if (data && data.reading) {
-                const r = data.reading;
-                
-                // 将 Firebase 的字段名映射到你的 AppState 格式
-                // 注意：这里要确保 AppState.sensors 的结构能被更新
-                AppState.sensors = {
-                    temp: { val: r.temperature || 0, status: r.temperature > 30 ? 'danger' : 'normal' },
-                    humid: { val: r.humidity || 0, status: 'normal' },
-                    light: { val: r.lightRaw || 0, status: 'normal' },
-                    ph: { val: r.ph || 0, status: r.ph < 5.5 ? 'warning' : 'normal' },
-                    water: { val: r.waterDistanceCm || 0, status: 'normal' },
-                    nutrient: { val: r.gasRaw || 0, status: 'normal' }
-                };
-                
-                // 触发通知，AppState 的订阅者会自动调用 render()
-                AppState.notify(); 
+
+            if (data?.reading) {
+                const reading = data.reading;
+                this.lastReading = reading;
+                AppState.latestReading = reading;
+                AppState.sensors = mapReadingToSensors(reading, getCurrentFarm()?.thresholds || {});
+                AppState.notify();
             }
         } catch (err) {
-            console.error("error， cannot fetch latest data:", err);
+            console.error('Dashboard cannot fetch latest sensor data:', err);
         }
     },
 
     render() {
         if (!this.container) return;
-        const s = AppState.sensors;
-        
+        const s = AppState.sensors || {};
+        const farm = getCurrentFarm();
+        const reading = this.lastReading || AppState.latestReading || {};
+        const metadata = [
+            farm?.deviceId || reading.deviceId || 'farm_001',
+            reading.fieldId || farm?.id,
+            reading.zoneId || farm?.zone,
+            reading.packageLevel || farm?.packageLevel,
+        ].filter(Boolean);
+
         const items = [
             { icon: '🌡️', key: 'temp', label: 'Temp', unit: '°C' },
             { icon: '💧', key: 'humid', label: 'Humid', unit: '%rh' },
-            { icon: '☀️', key: 'light', label: 'Light', unit: '%' },
+            { icon: '☀️', key: 'light', label: 'Light', unit: '' },
             { icon: '🧪', key: 'ph', label: 'pH', unit: 'pH' },
-            { icon: '💦', key: 'water', label: 'Water', unit: 'cm' }, // 根据你 Firebase 修改了单位
-            { icon: '🧬', key: 'nutrient', label: 'Gas', unit: '' }    // 改为 Gas 对应你的 gasRaw
+            { icon: '💦', key: 'water', label: 'Water', unit: 'cm' },
+            { icon: '🧬', key: 'nutrient', label: 'Gas', unit: '' },
+            { icon: '🧫', key: 'ec', label: 'EC', unit: 'mS/cm' },
+            { icon: '🌬️', key: 'co2', label: 'CO2', unit: 'ppm' },
         ];
 
         this.container.innerHTML = `
-            <div style="background: #FFFFFF; border-radius: 24px; padding: 20px 16px; margin: 0 16px 16px 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);">
-                <div style="display: flex; align-items: center; margin-bottom: 16px;">
-                    <div style="width: 4px; height: 16px; background: #059669; border-radius: 4px; margin-right: 8px;"></div>
-                    <div style="font-size: 1.05rem; font-weight: 700; color: #1A1A1A;">Live Data</div>
+            <div style="background:#FFFFFF;border-radius:24px;padding:20px 16px;margin:0 16px 16px 16px;box-shadow:0 4px 20px rgba(0,0,0,0.03);">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:16px;">
+                    <div style="display:flex;align-items:center;min-width:0;">
+                        <div style="width:4px;height:16px;background:#059669;border-radius:4px;margin-right:8px;"></div>
+                        <div>
+                            <div style="font-size:1.05rem;font-weight:700;color:#1A1A1A;">Live Data</div>
+                            <div style="font-size:0.62rem;color:#64748B;font-weight:700;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;">
+                                ${escapeHTML(metadata.join(' · ') || 'Waiting for device data')}
+                            </div>
+                        </div>
+                    </div>
+                    <span style="font-size:0.62rem;font-weight:900;color:${reading.deviceId ? '#059669' : '#D97706'};background:${reading.deviceId ? '#ECFDF5' : '#FFFBEB'};padding:6px 8px;border-radius:999px;white-space:nowrap;">
+                        ${reading.deviceId ? 'LIVE' : 'NO DATA'}
+                    </span>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 10px;">
-                    ${items.map(item => this.createGridCard(item, s[item.key] || {val:0, status:'normal'})).join('')}
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:1fr;gap:10px;">
+                    ${items.map(item => this.createGridCard(item, s[item.key] || { val: '--', status: 'normal', note: '' })).join('')}
                 </div>
+                ${thresholdSummaryHtml(s)}
             </div>
         `;
 
         this.container.querySelectorAll('.sensor-click-card').forEach(card => {
             card.addEventListener('click', () => {
-                const sk = card.getAttribute('data-key');
-                const sl = card.getAttribute('data-label');
-                showScreen('sensor-detail', { key: sk, name: sl });
+                showScreen('sensor-detail', {
+                    key: card.getAttribute('data-key'),
+                    name: card.getAttribute('data-label'),
+                    deviceId: farm?.deviceId || reading.deviceId || 'farm_001',
+                });
             });
         });
     },
 
     createGridCard(item, sensorData) {
-        let valColor = sensorData.status === 'danger' ? '#DC2626' : (sensorData.status === 'warning' ? '#D97706' : '#059669');
-        let currentBg = sensorData.status === 'danger' ? '#FEE2E2' : (sensorData.status === 'warning' ? '#FFFBEB' : '#ECFDF5');
-        
+        const valColor = sensorData.status === 'danger' ? '#DC2626' : sensorData.status === 'warning' ? '#D97706' : '#059669';
+        const currentBg = sensorData.status === 'danger' ? '#FEE2E2' : sensorData.status === 'warning' ? '#FFFBEB' : '#ECFDF5';
+
         return `
-            <div class="sensor-click-card" data-key="${item.key}" data-label="${item.label}" style="cursor:pointer; background: ${currentBg}; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; min-height: 90px; position: relative; overflow: hidden; transition: all 0.2s ease;">
-                <div style="position: absolute; top: -5px; right: -5px; font-size: 36px; opacity: 0.1;">${item.icon}</div>
-                <div style="font-size: 14px; opacity: 0.7; margin-bottom: auto;">${item.icon}</div>
-                <div style="margin-top: 12px;">
-                    <div style="display: flex; align-items: baseline; gap: 2px;">
-                        <span style="font-size: 1.15rem; font-weight: 700; color: ${valColor};">${sensorData.val}</span>
-                        <span style="font-size: 0.6rem; color: #64748B;">${item.unit}</span>
+            <div class="sensor-click-card" data-key="${item.key}" data-label="${item.label}" style="cursor:pointer;background:${currentBg};border-radius:12px;padding:12px;display:flex;flex-direction:column;min-height:90px;position:relative;overflow:hidden;transition:all .2s ease;">
+                <div style="position:absolute;top:-5px;right:-5px;font-size:36px;opacity:.1;">${item.icon}</div>
+                <div style="font-size:14px;opacity:.7;margin-bottom:auto;">${item.icon}</div>
+                <div style="margin-top:12px;">
+                    <div style="display:flex;align-items:baseline;gap:2px;min-width:0;">
+                        <span style="font-size:1.05rem;font-weight:800;color:${valColor};word-break:break-word;">${escapeHTML(sensorData.val)}</span>
+                        <span style="font-size:.55rem;color:#64748B;">${item.unit}</span>
                     </div>
-                    <div style="font-size: 0.6rem; font-weight: 600; color: #9AA5B8; margin-top: 2px;">${item.label}</div>
+                    <div style="font-size:.6rem;font-weight:700;color:#9AA5B8;margin-top:2px;">${item.label}</div>
                 </div>
             </div>
         `;
-    }
+    },
 };
+
+function buildSensorQuery() {
+    const farm = getCurrentFarm();
+    const query = new URLSearchParams();
+    if (farm?.deviceId) query.set('deviceId', farm.deviceId);
+    else if (farm?.zoneId) query.set('zoneId', farm.zoneId);
+    else if (farm?.id) query.set('fieldId', farm.id);
+    else query.set('deviceId', 'farm_001');
+    return query;
+}
+
+function mapReadingToSensors(reading, thresholds = {}) {
+    return {
+        temp: sensorValue(reading.temperature, statusRange(reading.temperature, thresholds.tempMin ?? 18, thresholds.tempMax ?? 35)),
+        humid: sensorValue(reading.humidity, statusRange(reading.humidity, thresholds.humidityMin ?? 35, thresholds.humidityMax ?? 80)),
+        light: sensorValue(reading.lightRaw, reading.lightRaw !== undefined && reading.lightRaw < (thresholds.darkThreshold ?? 1500) ? 'warning' : 'normal'),
+        ph: sensorValue(reading.ph, statusRange(reading.ph, thresholds.phMin ?? 5.5, thresholds.phMax ?? 6.8)),
+        water: sensorValue(reading.waterDistanceCm, reading.waterDistanceCm !== undefined && reading.waterDistanceCm > (thresholds.waterLowCm ?? 20) ? 'warning' : 'normal'),
+        nutrient: sensorValue(reading.gasRaw, reading.gasRaw !== undefined && reading.gasRaw > (thresholds.gasDangerThreshold ?? 3000) ? 'danger' : 'normal'),
+        ec: sensorValue(reading.ec, statusRange(reading.ec, thresholds.ecMin ?? 1.2, thresholds.ecMax ?? 2.0)),
+        co2: sensorValue(reading.co2Ppm, reading.co2Ppm !== undefined && reading.co2Ppm < (thresholds.co2MinPpm ?? 800) ? 'warning' : 'normal'),
+    };
+}
+
+function sensorValue(value, status) {
+    const numeric = Number(value);
+    const val = Number.isFinite(numeric) ? Number(numeric.toFixed(2)).toString() : '--';
+    return { val, status };
+}
+
+function statusRange(value, min, max) {
+    if (value === undefined || value === null || value === '') return 'normal';
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 'normal';
+    if (numeric < min || numeric > max) return 'warning';
+    return 'normal';
+}
+
+function thresholdSummaryHtml(sensors = {}) {
+    const alerts = Object.entries(sensors)
+        .filter(([, sensor]) => sensor.status === 'warning' || sensor.status === 'danger')
+        .map(([key, sensor]) => `${labelForKey(key)} ${sensor.status}`);
+
+    const ok = alerts.length === 0;
+    return `
+        <div style="margin-top:12px;padding:10px 12px;border-radius:14px;background:${ok ? '#ECFDF5' : '#FFFBEB'};color:${ok ? '#047857' : '#B45309'};font-size:.72rem;font-weight:800;line-height:1.35;">
+            ${ok ? 'Threshold status: all readings are inside the current field recipe.' : `Threshold status: ${escapeHTML(alerts.join(' · '))}`}
+        </div>
+    `;
+}
+
+function labelForKey(key) {
+    return ({ temp: 'Temp', humid: 'Humidity', light: 'Light', ph: 'pH', water: 'Water', nutrient: 'Gas', ec: 'EC', co2: 'CO2' })[key] || key;
+}
+
+function getCurrentFarm() {
+    if (AppState.currentFarm) return AppState.currentFarm;
+    try {
+        const farms = JSON.parse(localStorage.getItem('user_farms')) || [];
+        return farms.find(farm => farm.id === AppState.currentFarmId) || farms[farms.length - 1] || null;
+    } catch {
+        return null;
+    }
+}
+
+function escapeHTML(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}

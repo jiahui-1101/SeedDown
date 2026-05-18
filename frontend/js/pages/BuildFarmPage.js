@@ -1325,6 +1325,39 @@ async function goToFarmList(message) {
 function handleCancel() {
     goToFarmList('New field creation cancelled');
 }
+
+async function syncDevicePreferences(thresholds = {}) {
+    if (!registeredDevice?.deviceId) return { synced: false, reason: 'No registered device' };
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (registeredDevice.deviceToken && !registeredDevice.isDemoFallback) {
+        headers['x-device-token'] = registeredDevice.deviceToken;
+    }
+
+    const response = await fetch(`${API_BASE}/api/sensors/preferences`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+            deviceId: registeredDevice.deviceId,
+            fieldId: registeredDevice.fieldId || null,
+            farmId: registeredDevice.farmId || AppState.currentFarmId || null,
+            zoneId: registeredDevice.zoneId || fieldInfo.location.trim() || null,
+            packageLevel: registeredDevice.packageLevel,
+            goalPriority,
+            thresholdSource: generatedThresholds?.source || 'manual',
+            thresholdNotes: generatedThresholds?.notes || '',
+            ...thresholds,
+        }),
+    });
+
+    const data = await safeJson(response);
+    if (!response.ok || data.ok === false) {
+        throw new Error(data.error || 'Preference sync failed');
+    }
+
+    return { synced: true, preferences: data.preferences || data };
+}
+
 async function createField() {
     const button = document.getElementById('bfNext');
     if (button) {
@@ -1352,32 +1385,40 @@ async function createField() {
         thresholds,
     };
 
+    let backendFarmId = null;
     try {
-        await fetch(`${API_BASE}/api/farms/create`, {
+        const response = await fetch(`${API_BASE}/api/farms/create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+                ...payload,
+                fieldId,
+                zoneId: fieldInfo.location.trim() || null,
+                thresholdSource: generatedThresholds?.source || 'manual',
+                thresholdNotes: generatedThresholds?.notes || '',
+            }),
         });
+        const data = await safeJson(response);
+        if (response.ok && data?.farmId) backendFarmId = data.farmId;
     } catch (error) {
         console.warn('[BuildFarm] create field API unavailable:', error.message);
     }
 
+    let preferenceSync = { synced: false };
     if (registeredDevice?.deviceId) {
-        fetch(`${API_BASE}/api/sensors/preferences`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'x-device-token': registeredDevice.deviceToken || '' },
-            body: JSON.stringify({
-                deviceId: registeredDevice.deviceId,
-                packageLevel: registeredDevice.packageLevel,
-                goalPriority,
-                ...thresholds,
-            }),
-        }).catch(error => console.warn('[BuildFarm] preference sync skipped:', error.message));
+        try {
+            preferenceSync = await syncDevicePreferences(thresholds);
+            showToast('success', 'Device thresholds synced');
+        } catch (error) {
+            console.warn('[BuildFarm] preference sync skipped:', error.message);
+            showToast('warning', `Field saved, but thresholds not synced: ${error.message}`);
+        }
     }
 
     const saved = loadSavedFarms();
     const farm = {
         id: fieldId,
+        backendFarmId,
         name: payload.name,
         location: payload.location,
         description: payload.description,
@@ -1393,6 +1434,9 @@ async function createField() {
         packageLevel: registeredDevice?.packageLevel || 'standard',
         goalPriority: [...goalPriority],
         thresholds: { ...thresholds },
+        thresholdSource: generatedThresholds?.source || 'manual',
+        thresholdNotes: generatedThresholds?.notes || '',
+        preferenceSynced: Boolean(preferenceSync.synced),
         viewMode,
         photoPreview: payload.photoPreview,
         plants: detectedPlants.map(plant => ({ ...plant })),

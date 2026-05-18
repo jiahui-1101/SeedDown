@@ -42,6 +42,11 @@ const defaultPreferences = {
   fanDurationSeconds: 10,
   packageLevel: 'standard',
   goalPriority: ['beginner_safe'],
+  farmId: null,
+  fieldId: null,
+  zoneId: null,
+  thresholdSource: 'default',
+  thresholdNotes: '',
 };
 
 const allowedCommands = new Set([
@@ -370,6 +375,11 @@ async function updatePreferences(deviceId = 'farm_001', body = {}) {
     fanDurationSeconds: numberOrUndefined(body.fanDurationSeconds) ?? current.fanDurationSeconds,
     packageLevel: body.packageLevel || current.packageLevel,
     goalPriority: normalizeGoalPriority(body.goalPriority || body.goal_priority || current.goalPriority),
+    farmId: body.farmId ?? current.farmId ?? null,
+    fieldId: body.fieldId ?? current.fieldId ?? null,
+    zoneId: body.zoneId ?? current.zoneId ?? null,
+    thresholdSource: body.thresholdSource || current.thresholdSource || 'manual',
+    thresholdNotes: body.thresholdNotes || current.thresholdNotes || '',
     updatedAt: new Date(),
   };
 

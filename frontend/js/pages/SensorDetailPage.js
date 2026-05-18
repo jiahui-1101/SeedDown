@@ -24,7 +24,7 @@ export async function render(params = {}) {
     const backTarget = params.from || (isCommercial ? 'dash-c' : 'home');
     const container = document.getElementById('screenContainer');
 
-    const historyRows = await fetchHistory(meta);
+    const historyRows = await fetchHistory(meta, params);
     const chart = buildChart(historyRows);
     const theme = getTheme(isCommercial);
 
@@ -109,7 +109,7 @@ export async function render(params = {}) {
     bindEvents({ backTarget, sensorKey, unit: meta.unit });
 }
 
-async function fetchHistory(meta) {
+async function fetchHistory(meta, params = {}) {
     try {
         const response = await fetch(`${API_BASE}/api/sensors/history?deviceId=farm_001&limit=8`);
         const result = await response.json();
@@ -181,7 +181,7 @@ function bindEvents({ backTarget, sensorKey, unit }) {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    deviceId: 'farm_001',
+                    deviceId: params.deviceId || getCurrentFarm()?.deviceId || 'farm_001',
                     sensorIntervalSeconds: hours * 3600,
                     sensorType: sensorKey,
                 }),
@@ -195,6 +195,26 @@ function bindEvents({ backTarget, sensorKey, unit }) {
     };
 }
 
+function buildSensorQuery(params = {}) {
+    const farm = getCurrentFarm();
+    const query = new URLSearchParams();
+    if (params.deviceId) query.set('deviceId', params.deviceId);
+    else if (farm?.deviceId) query.set('deviceId', farm.deviceId);
+    else if (farm?.zoneId) query.set('zoneId', farm.zoneId);
+    else if (farm?.id) query.set('fieldId', farm.id);
+    else query.set('deviceId', 'farm_001');
+    return query;
+}
+
+function getCurrentFarm() {
+    if (AppState.currentFarm) return AppState.currentFarm;
+    try {
+        const farms = JSON.parse(localStorage.getItem('user_farms')) || [];
+        return farms.find(farm => farm.id === AppState.currentFarmId) || farms[farms.length - 1] || null;
+    } catch {
+        return null;
+    }
+}
 function getTheme(isCommercial) {
     if (isCommercial) {
         return {
@@ -227,3 +247,4 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
