@@ -5,6 +5,7 @@
 
 import { AppState } from '../store.js';
 import { showToast } from '../utils/toast.js';
+import jsQR from 'jsqr';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
@@ -157,7 +158,7 @@ function drawStep() {
     if (step === 1) {
         renderDeviceStep(content);
         cancelBtn.textContent = 'Cancel';
-        btn.textContent = registeredDevice ? 'Next: Field Info' : 'Register Device';
+        btn.textContent = registeredDevice ? 'Next: Field Info' : 'Scan QR';
     }
     if (step === 2) {
         renderStep1(content);
@@ -207,13 +208,20 @@ function renderStepDots() {
 function renderDeviceStep(content) {
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
-            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow-sm);">
                 <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">SCAN DEVICE QR</div>
-                <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px;">
-                    Choose a SeedDown package QR. This simulates scanning the QR code on the physical device box.
-                </div>
-                <div id="qrPackageGrid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
-                    ${packageQrCardsHtml()}
+                <div style="border:1.5px dashed var(--border);border-radius:18px;background:var(--surface2);padding:22px;text-align:center;">
+                    <div style="width:92px;height:92px;border-radius:22px;margin:0 auto 14px;background:#fff;border:1px solid var(--border);display:grid;place-items:center;box-shadow:var(--shadow-sm);">
+                        <span style="font-size:42px;line-height:1;">▦</span>
+                    </div>
+                    <div style="font-size:15px;font-weight:900;color:var(--text);">Scan SeedDown Device QR</div>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.45;margin:7px auto 16px;max-width:280px;">
+                        Use the QR png from the device package. The QR contains the serial, package tier, and account type.
+                    </div>
+                    <button id="scanQrBtn" type="button" style="width:100%;max-width:260px;padding:13px;border:none;border-radius:14px;background:var(--accent);color:white;font-size:14px;font-weight:900;cursor:pointer;">
+                        Scan QR
+                    </button>
+                    <input id="deviceQrInput" type="file" accept="image/*" capture="environment" style="display:none;">
                 </div>
                 <div id="deviceStatus" style="margin-top:12px;font-size:12px;color:${registeredDevice ? 'var(--accent)' : 'var(--muted)'};line-height:1.45;">
                     ${registeredDevice ? `Linked ${escapeHTML(registeredDevice.deviceId)} · ${escapeHTML(registeredDevice.packageLevel)} · ${escapeHTML(registeredDevice.serial || deviceSetup.serial)}` : 'No QR scanned yet.'}
@@ -234,11 +242,15 @@ function renderDeviceStep(content) {
 
     bindTextInput('wifiSsidInput', value => { deviceSetup.wifiSsid = value; registeredDevice = null; });
     bindTextInput('wifiPasswordInput', value => { deviceSetup.wifiPassword = value; registeredDevice = null; });
-    document.querySelectorAll('.qr-package-card').forEach(button => {
-        button.addEventListener('click', () => scanPackageQr(button.dataset.packageId));
+
+    const input = document.getElementById('deviceQrInput');
+    document.getElementById('scanQrBtn')?.addEventListener('click', () => input?.click());
+    input?.addEventListener('change', event => {
+        const file = event.target.files?.[0];
+        if (file) handleDeviceQrFile(file);
+        event.target.value = '';
     });
 }
-
 function packageQrCardsHtml() {
     return PACKAGE_QR_OPTIONS.map(option => {
         const selected = deviceSetup.serial === option.serial || registeredDevice?.serial === option.serial;
@@ -271,10 +283,72 @@ function fakeQrGrid(serial) {
 
 async function scanPackageQr(packageId) {
     const option = PACKAGE_QR_OPTIONS.find(item => item.id === packageId) || PACKAGE_QR_OPTIONS[1];
+    await applyScannedDevicePayload(option);
+}
+
+function handleDeviceQrFile(file) {
+    const reader = new FileReader();
+    reader.onload = async event => {
+        try {
+            const payload = await decodeDeviceQr(event.target.result);
+            await applyScannedDevicePayload(payload);
+        } catch (error) {
+            showToast('error', error.message || 'Could not read QR code');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function decodeDeviceQr(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth || image.width;
+            canvas.height = image.naturalHeight || image.height;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (!code?.data) {
+                reject(new Error('QR not detected. Try the generated SeedDown QR png.'));
+                return;
+            }
+            try {
+                resolve(parseDeviceQrPayload(code.data));
+            } catch (error) {
+                reject(error);
+            }
+        };
+        image.onerror = () => reject(new Error('Unable to load QR image'));
+        image.src = dataUrl;
+    });
+}
+
+function parseDeviceQrPayload(raw) {
+    const text = String(raw || '').trim();
+    let payload;
+    try {
+        payload = JSON.parse(text);
+    } catch {
+        payload = { serial: text };
+    }
+
+    if (payload.type && payload.type !== 'seeddown_device_qr') {
+        throw new Error('This is not a SeedDown device QR');
+    }
+
+    if (!payload.serial) throw new Error('QR does not contain a device serial');
+    const known = PACKAGE_QR_OPTIONS.find(option => option.serial === payload.serial);
+    return { ...(known || {}), ...payload };
+}
+
+async function applyScannedDevicePayload(payload) {
+    const option = PACKAGE_QR_OPTIONS.find(item => item.serial === payload.serial) || payload;
     deviceSetup.serial = option.serial;
     deviceSetup.accountType = option.accountType;
     registeredDevice = null;
-    showToast('info', `Scanned ${option.label} QR`);
+    showToast('info', `Scanned ${option.label || option.serial}`);
     await registerDeviceFromStep(option);
 }
 function renderStep1(content) {
@@ -1182,8 +1256,9 @@ async function generateThresholdsForField() {
 async function handleNext() {
     if (step === 1) {
         if (!registeredDevice) {
-            const device = await registerDeviceFromStep();
-            if (!device) return;
+            document.getElementById('deviceQrInput')?.click();
+            showToast('info', 'Scan the SeedDown package QR first');
+            return;
         }
         step = 2;
         drawStep();
@@ -1476,6 +1551,7 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
 
 
 
