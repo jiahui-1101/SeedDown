@@ -176,7 +176,8 @@ const STYLE = `
 /* ══════════════════════════════════════════
    RENDER — neighbour list
 ══════════════════════════════════════════ */
-export async function renderVisitsTab(containerId) {
+// 📑 修改后的 renderVisitsTab 函数
+export async function renderVisitsTab(containerId, skipFetch = false) {
     currentContainerId = containerId;
     const area = document.getElementById(containerId);
 
@@ -185,18 +186,22 @@ export async function renderVisitsTab(containerId) {
     }
 
     area.innerHTML = `
-        <div style="position: sticky; top: 0; z-index: 100; background: var(--bg, #f4f6f8); padding: 15px 0; margin-top: -15px; margin-bottom: 10px;">
+        <div style="position: sticky; top: 0; z-index: 100; background: #eff6ff; padding: 15px 0; margin-top: -15px; margin-bottom: 10px;">
             <h3 style="margin:0 0 4px; color:#1f2937;">🏡 Neighborhood Farms</h3>
             <p style="margin:0; font-size:.78rem; color:gray;">
-                Drag 🪣 to water thirsty plants · drag 🦾 to catch bugs · earn 🍃 coins!
+                Drag 🪣 to water thirsty plants · drag 🥢 to catch bugs · earn 🍃 coins!
             </p>
         </div>
-        
         <div id="neighborsListArea" style="display:flex;flex-direction:column;gap:12px;">
             <div style="text-align:center;padding:24px;color:gray;">Scouting neighborhood…</div>
         </div>`;
 
-    await loadNeighbors();
+    // 👇 【核心修改】：如果是返回上级，并且本地已经有数据了，直接渲染，不重新 Fetch
+    if (skipFetch && neighborsData.length > 0) {
+        renderNeighborsList();
+    } else {
+        await loadNeighbors();
+    }
 }
 
 async function loadNeighbors() {
@@ -634,7 +639,9 @@ window.zoomFarm = function(delta) {
 /* ══════════════════════════════════════════
    UTILS
 ══════════════════════════════════════════ */
-window.backToNeighbors = function() { renderVisitsTab(currentContainerId); };
+window.backToNeighbors = function() { 
+    renderVisitsTab(currentContainerId, true); 
+};
 
 function updateTopNavCoins(newAmount) {
     if (!newAmount) return;

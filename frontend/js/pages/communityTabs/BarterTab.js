@@ -73,16 +73,20 @@ export async function renderBarterTab(containerId) {
 
     area.innerHTML = `
         <!-- view toggle -->
-        <div class="view-toggle" style="margin-top:15px;margin-bottom:12px;">
-            <button id="btnViewPasar"  class="view-pill" style="background:#D1FAE5;color:#065F46;">🛍️ Pasar</button>
-            <button id="btnViewMyShop" class="view-pill" style="background:transparent;color:gray;">🏪 My Shop</button>
-        </div>
+      <div style="position: sticky; top: -1px; z-index: 100; background: #f4f6f8; padding: 15px 0 15px 0; margin-top: -15px; margin-bottom: 15px;">
+            
+            <div class="view-toggle" style="margin: 0 0 10px 0;">
+                <button id="btnViewPasar"  class="view-pill" style="background:#D1FAE5;color:#065F46;">🛍️ Pasar</button>
+                <button id="btnViewMyShop" class="view-pill" style="background:transparent;color:gray;">🏪 My Shop</button>
+                <button id="btnViewMyOrders" class="view-pill" style="background:transparent;color:gray;">🛒 My Orders</button>
+            </div>
 
-        <!-- search bar (pasar only) -->
-        <div id="pasarSearchBar" style="display:flex;gap:8px;margin-bottom:14px;">
-            <input type="text" id="searchInput" placeholder="Search veg, seeds, tools…"
-                   style="flex:1;padding:10px 15px;border-radius:20px;border:1px solid #ddd;outline:none;font-size:.9rem;">
-            <button id="btnSearch" style="border-radius:20px;padding:0 18px;background:#10B981;color:white;border:none;font-weight:700;cursor:pointer;">🔍</button>
+            <div id="pasarSearchBar" style="display:flex; gap:8px;">
+                <input type="text" id="searchInput" placeholder="Search veg, seeds, tools…"
+                       style="flex:1; padding:10px 15px; border-radius:20px; border:1px solid #ddd; outline:none; font-size:.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+                <button id="btnSearch" style="border-radius:20px; padding:0 18px; background:#10B981; color:white; border:none; font-weight:700; cursor:pointer; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🔍</button>
+            </div>
+            
         </div>
 
         <!-- grid -->
@@ -113,8 +117,14 @@ export async function renderBarterTab(containerId) {
                     <input id="postCoins" type="number" placeholder="🍃 Price" style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;">
                     <input id="postLookingFor" type="text" placeholder="🔄 Want" style="flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;">
                 </div>
-                <input id="postLocation" type="text" placeholder="📍 Meetup Location"
-                       style="width:100%;padding:10px;margin-bottom:10px;border-radius:8px;border:1px solid #ddd;box-sizing:border-box;">
+                <div style="display:flex; gap:10px; margin-bottom:10px;">
+                    <div style="flex:1;">
+                        <input id="postLocation" type="text" placeholder="📍 Location (e.g. Hall A)" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; box-sizing:border-box;">
+                    </div>
+                    <div style="flex:1;">
+                        <input id="postContact" type="text" placeholder="📱 Telegram / WhatsApp" style="width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; box-sizing:border-box;">
+                    </div>
+                </div>
                 <div style="margin-bottom:14px;text-align:center;">
                     <label for="barterImageUpload" style="display:inline-block;padding:8px 14px;background:#f0f0f0;border-radius:8px;cursor:pointer;font-size:.8rem;font-weight:700;">📷 Upload Photo</label>
                     <input type="file" id="barterImageUpload" accept="image/*" style="display:none;">
@@ -138,6 +148,36 @@ export async function renderBarterTab(containerId) {
                 <button style="width:100%;padding:12px;border-radius:20px;background:#10B981;color:white;border:none;font-weight:700;cursor:pointer;"
                         onclick="document.getElementById('magicMatchModal').style.display='none'">Awesome! 🙌</button>
             </div>
+        </div>
+        <div id="customTransactionModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+            <div style="background:white; padding:25px; border-radius:20px; width:80%; max-width:320px; text-align:center; box-shadow: 0 15px 35px rgba(0,0,0,0.2); transform: translateY(-20px); transition: all 0.3s ease;">
+                
+                <div id="txModalIcon" style="font-size: 50px; margin-bottom: 10px;">🤝</div>
+                <h3 id="txModalTitle" style="margin:0 0 10px 0; color:#1f2937;">Reserve Item?</h3>
+                
+                <div id="txPaymentSelection" style="display:none; margin: 15px 0; text-align: left;">
+                    <label style="font-size: 0.75rem; font-weight: 700; color: #6B7280; margin-bottom:8px; display:block; text-align:center;">Choose Payment Method:</label>
+                    <div style="display: flex; gap: 10px;">
+                        <label id="lblPayCoins" style="flex: 1; padding: 12px; border: 2px solid #10B981; border-radius: 12px; cursor: pointer; text-align: center; background: #ECFDF5; transition: 0.2s;">
+                            <input type="radio" name="payMethod" value="coins" style="display: none;" checked>
+                            <div style="font-size: 1.5rem; margin-bottom: 4px;">🍃</div>
+                            <div style="font-size: 0.75rem; font-weight: 700; color:#065F46;">Coins</div>
+                        </label>
+                        <label id="lblPayItem" style="flex: 1; padding: 12px; border: 2px solid #E5E7EB; border-radius: 12px; cursor: pointer; text-align: center; background: white; transition: 0.2s;">
+                            <input type="radio" name="payMethod" value="barter" style="display: none;">
+                            <div style="font-size: 1.5rem; margin-bottom: 4px;">🔄</div>
+                            <div style="font-size: 0.75rem; font-weight: 700; color:#374151;">Item</div>
+                        </label>
+                    </div>
+                </div>
+
+                <p id="txModalDesc" style="font-size:0.85rem; color:#4B5563; line-height:1.5; margin-bottom:20px; background:#F3F4F6; padding:10px; border-radius:8px;">Description goes here.</p>
+                
+                <div style="display:flex; gap:12px;">
+                    <button id="btnTxCancel" style="flex:1; padding:10px; border-radius:12px; border:1px solid #E5E7EB; background:white; color:#4B5563; font-weight:bold; cursor:pointer;">Cancel</button>
+                    <button id="btnTxConfirm" style="flex:1; padding:10px; border-radius:12px; border:none; background:#10B981; color:white; font-weight:bold; cursor:pointer; box-shadow:0 4px 10px rgba(16,185,129,0.3);">Confirm</button>
+                </div>
+            </div>
         </div>`;
 
     bindBarterLogic();
@@ -151,19 +191,36 @@ function bindBarterLogic() {
     let base64Img   = null;
 
     // View toggle
-    document.getElementById('btnViewPasar').addEventListener('click', e => {
+    const btnPasar = document.getElementById('btnViewPasar');
+    const btnShop = document.getElementById('btnViewMyShop');
+    const btnOrders = document.getElementById('btnViewMyOrders'); // 获取第三个按钮
+
+    function resetTabs() {
+        [btnPasar, btnShop, btnOrders].forEach(btn => {
+            btn.style.background = 'transparent'; btn.style.color = 'gray';
+        });
+    }
+
+    btnPasar.addEventListener('click', () => {
         currentBarterView = 'pasar';
-        e.target.style.background = '#D1FAE5'; e.target.style.color = '#065F46';
-        document.getElementById('btnViewMyShop').style.background = 'transparent';
-        document.getElementById('btnViewMyShop').style.color = 'gray';
+        resetTabs();
+        btnPasar.style.background = '#D1FAE5'; btnPasar.style.color = '#065F46';
         fab.style.display = 'none'; searchBar.style.display = 'flex'; renderList();
     });
-    document.getElementById('btnViewMyShop').addEventListener('click', e => {
+
+    btnShop.addEventListener('click', () => {
         currentBarterView = 'myshop';
-        e.target.style.background = '#FEF3C7'; e.target.style.color = '#D97706';
-        document.getElementById('btnViewPasar').style.background = 'transparent';
-        document.getElementById('btnViewPasar').style.color = 'gray';
+        resetTabs();
+        btnShop.style.background = '#FEF3C7'; btnShop.style.color = '#D97706';
         fab.style.display = 'flex'; searchBar.style.display = 'none'; renderList();
+    });
+
+    // 补上第三个按钮的点击事件！
+    btnOrders.addEventListener('click', () => {
+        currentBarterView = 'myorders';
+        resetTabs();
+        btnOrders.style.background = '#E0F2FE'; btnOrders.style.color = '#0369A1';
+        fab.style.display = 'none'; searchBar.style.display = 'none'; renderList();
     });
 
     // Image upload
@@ -175,20 +232,63 @@ function bindBarterLogic() {
     });
 
     fab.addEventListener('click', () => modal.style.display = 'flex');
+    // ==========================================
+    // 💡 表单防呆逻辑：根据 Trade Type 动态禁用输入框
+    // ==========================================
+    document.getElementById('postTradeType').addEventListener('change', (e) => {
+        const val = e.target.value;
+        const coinInput = document.getElementById('postCoins');
+        const barterInput = document.getElementById('postLookingFor');
+
+        if (val === 'coins') {
+            // 只卖金币：启用金币，禁用并清空换物
+            coinInput.disabled = false; coinInput.style.background = 'white'; coinInput.style.opacity = '1';
+            barterInput.disabled = true; barterInput.style.background = '#f3f4f6'; barterInput.style.opacity = '0.4'; barterInput.value = '';
+        } else if (val === 'barter') {
+            // 只换物：启用换物，禁用并清空金币
+            coinInput.disabled = true; coinInput.style.background = '#f3f4f6'; coinInput.style.opacity = '0.4'; coinInput.value = '';
+            barterInput.disabled = false; barterInput.style.background = 'white'; barterInput.style.opacity = '1';
+        } else {
+            // Both：两个都启用
+            coinInput.disabled = false; coinInput.style.background = 'white'; coinInput.style.opacity = '1';
+            barterInput.disabled = false; barterInput.style.background = 'white'; barterInput.style.opacity = '1';
+        }
+    });
+
+    // 顺便在打开弹窗的时候，重置一下它们的状态（防止上次填完关掉后的残留）
+    fab.addEventListener('click', () => {
+        modal.style.display = 'flex';
+        // 触发一次 change 事件，让界面重置为默认的 "both" 状态
+        document.getElementById('postTradeType').value = 'both';
+        document.getElementById('postTradeType').dispatchEvent(new Event('change'));
+    });
+
     document.getElementById('btnCancelBarter').addEventListener('click', () => modal.style.display = 'none');
 
-    document.getElementById('btnSubmitBarter').addEventListener('click', async () => {
-        const title = document.getElementById('postTitle').value;
-        const type  = document.getElementById('postTradeType').value;
-        if (!title) return showToast('warning', 'Item name is required!');
-        try {
-            const res  = await fetch(`${API}/api/community/barter`, {
-                method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ title, tradeType:type, author:currentUser, image:base64Img,
-                    priceCoins: document.getElementById('postCoins').value,
-                    lookingFor: document.getElementById('postLookingFor').value,
-                    location:   document.getElementById('postLocation').value }),
-            });
+   // === 提交发布逻辑更新 (合并地点与联系方式) ===
+   document.getElementById('btnSubmitBarter').addEventListener('click', async () => {
+    const title = document.getElementById('postTitle').value;
+    const type = document.getElementById('postTradeType').value;
+    const loc = document.getElementById('postLocation').value;
+    const contact = document.getElementById('postContact').value; // 获取联系方式
+    
+    if(!title) return showToast('warning', 'Item name is required!');
+    if(!contact) return showToast('warning', 'Please provide a contact method!');
+
+    // 🚀 核心技巧：用 " | " 把两者拼在一起存进 location 字段
+    const combinedLocation = `${loc || 'Campus'} | ${contact}`;
+
+    try {
+        const res = await fetch(`${API}/api/community/barter`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                title, tradeType: type, author: currentUser, image: base64Img,
+                priceCoins: document.getElementById('postCoins').value,
+                lookingFor: document.getElementById('postLookingFor').value,
+                location: combinedLocation // 👈 传给后端拼接好的字符串
+            })
+        });
             const data = await res.json();
             modal.style.display = 'none';
             showToast('success', 'Listed on Pasar!');
@@ -206,7 +306,108 @@ function bindBarterLogic() {
     document.getElementById('searchInput').addEventListener('keydown', e => {
         if (e.key === 'Enter') loadItems(e.target.value);
     });
-}
+// ... 前面是你 bindBarterLogic 原本的代码 (比如 btnSearch 等) ...
+
+    // ==========================================
+    // 🌟 修复：将弹窗事件绑定移到这里，确保每次重新渲染都能绑上！
+    // ==========================================
+// ==========================================
+    // 🌟 弹窗内的按钮与选择器逻辑绑定
+    // ==========================================
+    const txModal = document.getElementById('customTransactionModal');
+    
+    // 监听：用户在 "Both" 的情况下来回切换支付方式
+    const radios = document.querySelectorAll('input[name="payMethod"]');
+    radios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            if (currentTransaction && currentTransaction.type === 'reserve') {
+                const method = e.target.value;
+                currentTransaction.selectedMethod = method; // 记录用户选的
+                
+                // 动态改卡片样式
+                const isCoins = method === 'coins';
+                document.getElementById('lblPayCoins').style.borderColor = isCoins ? '#10B981' : '#E5E7EB';
+                document.getElementById('lblPayCoins').style.background = isCoins ? '#ECFDF5' : 'white';
+                document.getElementById('lblPayItem').style.borderColor = !isCoins ? '#10B981' : '#E5E7EB';
+                document.getElementById('lblPayItem').style.background = !isCoins ? '#ECFDF5' : 'white';
+
+                // 动态改提示文案
+                const desc = document.getElementById('txModalDesc');
+                if (isCoins) {
+                    desc.innerHTML = `<span style="font-weight:bold;color:#065F46;">🍃 ${currentTransaction.priceCoins} Coins</span> will be locked for this transaction.<br><br>Meet at the location to trade!`;
+                } else {
+                    desc.innerHTML = `Please prepare your <span style="font-weight:bold;color:#D97706;">🔄 ${currentTransaction.lookingFor}</span>.<br><br>Bring it to the meetup location to exchange!`;
+                }
+            }
+        });
+    });
+
+    document.getElementById('btnTxCancel').addEventListener('click', () => {
+        txModal.style.display = 'none';
+        currentTransaction = null;
+    });
+
+    document.getElementById('btnTxConfirm').addEventListener('click', async () => {
+        if (!currentTransaction) return;
+        
+        const confirmBtn = document.getElementById('btnTxConfirm');
+        const originalText = confirmBtn.innerText;
+        confirmBtn.innerText = 'Processing...';
+        confirmBtn.style.opacity = '0.7';
+        confirmBtn.style.pointerEvents = 'none'; 
+        
+        const { type, id, selectedMethod } = currentTransaction;
+        
+        try {
+            if (type === 'reserve') {
+                const res = await fetch(`${API}/api/community/barter/${id}/reserve`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ buyer: currentUser, paymentMethod: selectedMethod })
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    showToast('success', 'Reserved! Check My Orders.');
+                    
+                    // 🌟 👇 新增：把用户的支付选择死死记在本地缓存里！
+                    localStorage.setItem(`payMethod_${id}`, selectedMethod);
+
+                    if (selectedMethod === 'coins' && currentTransaction.priceCoins) {
+                        updateWalletVisually(currentTransaction.priceCoins);
+                    }
+                    loadItems(); 
+                } else {
+                    showToast('warning', data.message || 'Error occurred!');
+                }
+            } 
+            else if (type === 'complete') {
+                await fetch(`${API}/api/community/barter/${id}/complete`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({rating: 5}) 
+                });
+                showToast('success', 'Transaction Completed! 🌟');
+                
+                // 🌟 👇 新增：如果是金币交易或Both，触发右上角红色扣款特效
+                if (currentTransaction.tradeType !== 'barter' && currentTransaction.priceCoins) {
+                    updateWalletVisually(currentTransaction.priceCoins);
+                }
+                
+                loadItems();
+            }
+        } catch (e) {
+            console.error("Trade Error:", e);
+            showToast('error', 'Network error. Please try again.');
+        } finally {
+            confirmBtn.innerText = originalText;
+            confirmBtn.style.opacity = '1';
+            confirmBtn.style.pointerEvents = 'auto';
+            txModal.style.display = 'none';
+            currentTransaction = null;
+        }
+    });
+} 
 
 async function loadItems(query = '') {
     document.getElementById('barterFeedList').innerHTML =
@@ -222,12 +423,36 @@ async function loadItems(query = '') {
     }
 }
 
+// 渲染瀑布流 / 我的店铺 / 我的订单
 function renderList() {
     const list = document.getElementById('barterFeedList');
-    const displayItems = currentBarterView === 'pasar'
-        ? allBarterItems.filter(i => i.status === 'available')
-        : allBarterItems.filter(i => i.author === currentUser || i.buyer === currentUser);
+    
+    let displayItems = [];
 
+    // ==========================================
+    // 1. 数据过滤 (3个 Tab 完美分离)
+    // ==========================================
+    if (currentBarterView === 'pasar') {
+        // 逛市集：别人卖的、还没卖出去的
+        displayItems = allBarterItems.filter(i => i.status === 'available' && i.author !== currentUser);
+    } 
+    else if (currentBarterView === 'myshop') {
+        // 我的店铺：我发布的所有商品
+        displayItems = allBarterItems.filter(i => i.author === currentUser);
+    } 
+    else if (currentBarterView === 'myorders') {
+        // 我的订单：我买的东西 (正在进行的排前面，已完成的排后面)
+        const myPurchases = allBarterItems.filter(i => i.buyer === currentUser);
+        displayItems = myPurchases.sort((a, b) => {
+            if (a.status === 'reserved' && b.status === 'completed') return -1;
+            if (a.status === 'completed' && b.status === 'reserved') return 1;
+            return 0;
+        });
+    }
+
+    // ==========================================
+    // 2. 判空状态
+    // ==========================================
     if (!displayItems.length) {
         list.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px 20px;color:gray;">
             <div style="font-size:42px;margin-bottom:10px;">🛒</div>
@@ -237,62 +462,204 @@ function renderList() {
         return;
     }
 
+    // ==========================================
+    // 3. 渲染卡片
+    // ==========================================
     list.innerHTML = displayItems.map(item => {
         const isMine   = item.author === currentUser;
         const amIBuyer = item.buyer  === currentUser;
 
-        let priceTag = '';
-        if (item.tradeType==='coins')  priceTag = `🍃 ${item.priceCoins} coins`;
-        else if (item.tradeType==='barter') priceTag = `🔄 ${item.lookingFor}`;
-        else priceTag = `🍃 ${item.priceCoins} · 🔄 ${item.lookingFor}`;
+        // 拆解后端的 location 字段 (提取出地点和隐藏的盲盒联系方式)
+        const locString = item.location || '';
+        const locParts = locString.split(' | ');
+        const realLocation = locParts[0] || 'Campus';
+        const realContact = locParts[1] || 'Hidden';
 
-        let actionBtn = '';
-        if (currentBarterView==='pasar' && item.status==='available') {
-            actionBtn = isMine
-                ? `<button class="barter-card-btn" style="background:#F3F4F6;color:#6B7280;cursor:default;">Your item</button>`
-                : `<button class="barter-card-btn" style="background:#10B981;color:white;" onclick="window.reserveItem('${item.id}')">Reserve Now</button>`;
-        } else if (amIBuyer && item.status==='reserved') {
-            actionBtn = `<button class="barter-card-btn" style="background:#EAB308;color:white;" onclick="window.completeItem('${item.id}')">📦 Confirm Receipt</button>`;
+        let priceTag = '';
+        
+        // 🌟 尝试读取后端的 paymentMethod，如果后端没存，就读取我们存在本地的记忆！
+        const finalMethod = item.paymentMethod || localStorage.getItem(`payMethod_${item.id}`);
+
+        if ((item.status === 'reserved' || item.status === 'completed') && finalMethod) {
+            if (finalMethod === 'coins') {
+                priceTag = `🍃 ${item.priceCoins}`;
+            } else if (finalMethod === 'barter') {
+                priceTag = `🔄 ${item.lookingFor}`;
+            }
+        } 
+        else {
+            if(item.tradeType === 'coins') priceTag = `🍃 ${item.priceCoins}`;
+            else if(item.tradeType === 'barter') priceTag = `🔄 ${item.lookingFor}`;
+            else priceTag = `🍃 ${item.priceCoins} <span style="color:#94A3B8;font-size:0.75rem;margin:0 2px;">or</span> 🔄 ${item.lookingFor}`;
         }
 
-        const tagClass = { available:'tag-available', reserved:'tag-reserved', completed:'tag-completed' }[item.status] || 'tag-available';
+        // 根据不同 Tab 身份，决定按钮和盲盒状态
+        let actionBtn = '';
+        if (currentBarterView === 'pasar') {
+            // 逛街模式：只能预订，盲盒是盖着的
+            actionBtn = `<button class="btn-primary" style="width:100%; padding:8px; border-radius:8px; font-size:0.8rem; background:#10B981; border:none;" onclick="window.reserveItem('${item.id}')">Reserve Now</button>`;
+        } 
+        else if (currentBarterView === 'myshop') {
+            // 卖家模式：查看售卖状态
+            if (item.status === 'available') {
+                actionBtn = `<div style="text-align:center; font-size:0.8rem; color:gray; padding:8px; border:1px dashed #ccc; border-radius:8px;">Waiting for buyer...</div>`;
+            } else if (item.status === 'reserved') {
+                actionBtn = `<div style="text-align:center; font-size:0.8rem; color:#D97706; padding:8px; background:#FEF3C7; border-radius:8px; font-weight:bold;">Reserved by ${item.buyer}</div>`;
+            } else {
+                actionBtn = `<div style="text-align:center; font-size:0.8rem; color:#065F46; padding:8px; background:#D1FAE5; border-radius:8px; font-weight:bold;">Sold out 🎉</div>`;
+            }
+        }
+        else if (currentBarterView === 'myorders') {
+            // 买家模式：开盲盒！
+            if (item.status === 'reserved') {
+                actionBtn = `
+                    <div style="margin-bottom:8px; padding:10px; background:#E0F2FE; border:1px solid #BAE6FD; border-radius:8px; text-align:center;">
+                        <div style="font-size:0.75rem; color:#0369A1; margin-bottom:4px;">💬 Contact Seller via:</div>
+                        <div style="font-weight:900; color:#0284C7; font-size:0.95rem; letter-spacing:0.5px;">${realContact}</div>
+                    </div>
+                    <button class="btn-primary" style="width:100%; padding:8px; border-radius:8px; font-size:0.8rem; background:#EAB308; border:none; box-shadow:0 3px 8px rgba(234,179,8,0.3);" onclick="window.completeItem('${item.id}')">📦 Confirm Receipt</button>
+                `;
+            } else {
+                actionBtn = `<div style="text-align:center; font-size:0.8rem; color:gray; padding:8px; background:#F3F4F6; border-radius:8px;">Order Completed</div>`;
+            }
+        }
 
         return `
-        <div class="barter-card">
-            <img src="${getItemImage(item)}" class="barter-card-img"
-                 onerror="this.src='${CATEGORY_IMAGES.default}'" loading="lazy">
-            <div class="barter-card-body">
-                <span class="item-tag ${tagClass}">${item.status.toUpperCase()}</span>
-                <div class="barter-card-title">${item.title}</div>
-                <div class="barter-card-meta">
-                    By: ${item.author}<span class="trust-badge">★</span><br>
-                    📍 ${item.location || 'College Hall'}
+        <div class="barter-card" style="${item.status === 'completed' ? 'opacity:0.7;' : ''}">
+            <div class="status-badge status-${item.status}">${item.status.toUpperCase()}</div>
+            
+           <img src="${getItemImage(item)}" class="barter-img"
+                onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1540420773420-3366772f4999?w=300&q=80'">
+            
+            <div style="padding:10px; display:flex; flex-direction:column; flex:1;">
+                <h4 style="margin:0 0 5px 0; font-size:0.95rem;">${item.title}</h4>
+                <div style="font-size:0.7rem; color:gray; margin-bottom:5px;">By: ${item.author} <span class="trust-badge">★ Trusted</span></div>
+                
+                <div style="font-size:0.75rem; color:#4B5563; margin-bottom:10px; display:flex; align-items:center; gap:4px;">
+                    <span>📍</span> <span style="font-weight:600;">${realLocation}</span>
                 </div>
-                <div class="barter-card-price">${priceTag}</div>
+                
+                <div style="color:#059669; font-weight:bold; font-size:0.85rem; margin-top:auto; margin-bottom:10px;">
+                    ${priceTag}
+                </div>
+                
                 ${actionBtn}
             </div>
-        </div>`;
-    }).join('');
+        </div>
+        `;
+    }).join(''); // 👈 注意这里！这是非常关键的 join('')
 }
 
-window.reserveItem = async function(id) {
-    if (!confirm('Reserve this item? Coins will be locked.')) return;
-    try {
-        const res  = await fetch(`${API}/api/community/barter/${id}/reserve`, {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ buyer:currentUser, paymentMethod:'coins' }),
-        });
-        const data = await res.json();
-        if (res.ok) { showToast('success', 'Reserved! Meet at the location.'); loadItems(); }
-        else showToast('warning', data.message);
-    } catch (_) { showToast('error', 'Error reserving'); }
+// 全局记录交易状态
+let currentTransaction = null;
+
+// ==========================================
+// 1. 预订物品 (Reserve - 智能感知支付方式)
+// ==========================================
+window.reserveItem = function(id) {
+    // 根据 ID 找到正在点的商品
+    const item = allBarterItems.find(i => i.id === id);
+    if (!item) return;
+
+    currentTransaction = { 
+        type: 'reserve', id: id, 
+        tradeType: item.tradeType, priceCoins: item.priceCoins, lookingFor: item.lookingFor, 
+        selectedMethod: item.tradeType === 'barter' ? 'barter' : 'coins' 
+    };
+    
+    document.getElementById('txModalIcon').innerText = '🤝';
+    document.getElementById('txModalTitle').innerText = 'Reserve Item?';
+    document.getElementById('btnTxConfirm').style.background = '#10B981';
+    document.getElementById('btnTxConfirm').style.boxShadow = '0 4px 10px rgba(16,185,129,0.3)';
+    
+    const paymentSelection = document.getElementById('txPaymentSelection');
+    const modalDesc = document.getElementById('txModalDesc');
+
+    // 辅助函数：更新文字提示
+    const updateDesc = (method) => {
+        if (method === 'coins') {
+            modalDesc.innerHTML = `<span style="font-weight:bold;color:#065F46;">🍃 ${item.priceCoins} Coins</span> will be locked for this transaction.<br><br>Meet at the location to trade!`;
+        } else {
+            modalDesc.innerHTML = `Please prepare your <span style="font-weight:bold;color:#D97706;">🔄 ${item.lookingFor}</span>.<br><br>Bring it to the meetup location to exchange!`;
+        }
+    };
+
+    if (item.tradeType === 'both') {
+        // 如果都可以选，显示选择框，并默认重置为 Coins
+        paymentSelection.style.display = 'block';
+        document.querySelector('input[name="payMethod"][value="coins"]').checked = true;
+        document.getElementById('lblPayCoins').style.borderColor = '#10B981';
+        document.getElementById('lblPayCoins').style.background = '#ECFDF5';
+        document.getElementById('lblPayItem').style.borderColor = '#E5E7EB';
+        document.getElementById('lblPayItem').style.background = 'white';
+        updateDesc('coins');
+    } else {
+        // 只能用一种方式，隐藏选择框，直接显示那一种的文案
+        paymentSelection.style.display = 'none';
+        updateDesc(item.tradeType);
+    }
+    
+    document.getElementById('customTransactionModal').style.display = 'flex';
 };
 
-window.completeItem = async function(id) {
-    if (!confirm('Did you receive the item?')) return;
-    try {
-        await fetch(`${API}/api/community/barter/${id}/complete`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ rating:5 }) });
-        showToast('success', 'Transaction Completed! Seller gets +1 Trust. 🌿');
-        loadItems();
-    } catch (_) { showToast('error', 'Error'); }
+// ==========================================
+// 2. 确认收货 (Complete - 隐藏支付选项)
+// ==========================================
+// ==========================================
+// 2. 确认收货 (Complete)
+// ==========================================
+window.completeItem = function(id) {
+    // 🌟 新增：找到当前商品，获取它的价格和交易类型
+    const item = allBarterItems.find(i => i.id === id);
+    if (!item) return;
+
+    currentTransaction = { 
+        type: 'complete', 
+        id: id,
+        priceCoins: item.priceCoins, // 记录价格
+        tradeType: item.tradeType    // 记录类型
+    };
+    
+    document.getElementById('txPaymentSelection').style.display = 'none'; // 隐藏支付选择
+    document.getElementById('txModalIcon').innerText = '📦';
+    document.getElementById('txModalTitle').innerText = 'Confirm Receipt?';
+    document.getElementById('txModalDesc').innerText = 'Did you receive the item? Funds will be released to the seller.';
+    document.getElementById('btnTxConfirm').style.background = '#F59E0B'; 
+    document.getElementById('btnTxConfirm').style.boxShadow = '0 4px 10px rgba(245,158,11,0.3)';
+    
+    document.getElementById('customTransactionModal').style.display = 'flex';
 };
+
+// ==========================================
+// 💰 前端钱包 UI 视觉扣款特效
+// ==========================================
+function updateWalletVisually(amountToDeduct) {
+    const coinDisplay = document.getElementById('myCoinsDisplay'); // 👈 使用你真实的 ID
+    if (!coinDisplay) return;
+
+    // 获取当前文字并提取数字 (处理从 "--" 到真实数字的过渡)
+    let currentText = coinDisplay.innerText;
+    let currentCoins = parseInt(currentText.replace(/[^0-9]/g, ''));
+    
+    if (!isNaN(currentCoins)) {
+        let newBalance = currentCoins - parseInt(amountToDeduct);
+        
+        // 加上过渡动画，防止显得生硬
+        coinDisplay.style.transition = 'all 0.3s ease';
+        
+        // 1. 瞬间更新文字并变红放大 (警告色)
+        coinDisplay.innerText = `🍃 ${newBalance} Coins`;
+        coinDisplay.style.color = '#EF4444'; // 红色文字
+        coinDisplay.style.background = '#FEE2E2'; // 浅红背景
+        coinDisplay.style.borderColor = '#FCA5A5'; // 红色边框
+        coinDisplay.style.transform = 'scale(1.15)'; // 放大
+        
+        // 2. 400毫秒后，恢复成你原本的绿色主题！
+        setTimeout(() => {
+            coinDisplay.style.color = 'var(--green-800)'; 
+            coinDisplay.style.background = 'var(--green-50)';
+            coinDisplay.style.borderColor = 'var(--green-200)';
+            coinDisplay.style.transform = 'scale(1)';
+        }, 400);
+    }
+}
