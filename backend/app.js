@@ -33,6 +33,7 @@ app.use('/api/whatif', require('./src/routes/whatIfRoutes'));
 app.use('/api/chat', require('./src/routes/chatRoutes'));
 app.use('/api/crops', require('./src/routes/cropRoutes'));
 app.use('/api/community', communityRouter);
+app.use('/api/consumption', require('./src/routes/consumptionRoutes'));
 
 app.get('/', (req, res) =>
   res.json({ status: 'SeedDown API running' })

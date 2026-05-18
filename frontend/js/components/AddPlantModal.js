@@ -1,6 +1,7 @@
 import { AppState } from '../store.js';
 import { FarmCanvas } from './FarmCanvas.js';
 import { showToast } from '../utils/toast.js';
+import { saveFarmsToFirestore } from '../utils/firebase.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -235,7 +236,7 @@ function removePlantFromCurrentFarm(slotIndex, rack) {
   saveUpdatedFarm(current, plants, index, saved, plants[0]?.name || current.targetPlant || 'Plant');
 }
 
-function saveUpdatedFarm(current, plants, index, saved, fallbackTargetPlant) {
+async function saveUpdatedFarm(current, plants, index, saved, fallbackTargetPlant) {
   const updated = {
     ...current,
     plants,
@@ -247,6 +248,14 @@ function saveUpdatedFarm(current, plants, index, saved, fallbackTargetPlant) {
     saved[index] = updated;
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
   }
+  if (AppState.uid) {
+    try {
+        await saveFarmsToFirestore(AppState.uid, saved);
+        console.log('✅ Plant synced to Firebase');
+    } catch (err) {
+        console.error('❌ Failed to sync plant to Firebase', err);
+    }
+}
 
   AppState.currentFarm = updated;
   AppState.currentFarmId = updated.id || AppState.currentFarmId;
