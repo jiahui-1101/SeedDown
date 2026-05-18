@@ -1047,6 +1047,21 @@ async function createField() {
     AppState.farmName = farm.name;
     showToast('success', `"${farm.name}" field created`);
     dispose3D();
+
+    // ── Close-loop: register this farm so it appears in Community Farm Visits ──
+    // Build a 9-tile emoji layout from detectedPlants for the 2D grid preview
+    const EMOJI_FALLBACK = { tomato:'🍅', mint:'🌿', basil:'🌿', chili:'🌶️', lettuce:'🥬', spinach:'🌿', carrot:'🥕', cucumber:'🥒', pepper:'🌶️', strawberry:'🍓', default:'🌱' };
+    const farmLayout = Array(9).fill(null);
+    detectedPlants.slice(0, 9).forEach((p, i) => {
+        const key = (p.name || '').toLowerCase();
+        farmLayout[i] = EMOJI_FALLBACK[key] || EMOJI_FALLBACK.default;
+    });
+    fetch(`${API_BASE}/api/community/visits/register-farm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ farmLayout, displayName: farm.name, avatar: '🧑‍🌾' }),
+    }).catch(() => {}); // fire-and-forget
+
     setTimeout(() => goToFarmList(), 500);
 }
 
@@ -1175,11 +1190,3 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
-
-
-
-
-
-
-
-

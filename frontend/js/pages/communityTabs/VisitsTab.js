@@ -1,229 +1,383 @@
-// 文件路径: /frontend/js/pages/communityTabs/VisitsTab.js
+// VisitsTab.js — 2D PvZ-style farm visits with close-loop + water-drop drag animation
 import { showToast } from '../../utils/toast.js';
 
-let neighborsData = [];
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:3000' : window.location.origin;
+
+let neighborsData     = [];
 let currentContainerId = '';
 
 /* ══════════════════════════════════════════
-    RENDER — Neighbor List
+   STYLES (injected once)
+══════════════════════════════════════════ */
+const STYLE = `
+<style id="visitsTabStyle">
+/* ── animations ── */
+@keyframes bugWiggle {
+    0%,100% { transform:rotate(-15deg) scale(1);   }
+    50%      { transform:rotate(15deg)  scale(1.15); }
+}
+@keyframes dropFall {
+    0%   { opacity:1; transform:translateY(0)    scaleX(1); }
+    80%  { opacity:1; transform:translateY(44px) scaleX(0.9); }
+    100% { opacity:0; transform:translateY(56px) scaleX(0.6); }
+}
+@keyframes splashRing {
+    0%   { opacity:0.9; transform:scale(0.2); }
+    100% { opacity:0;   transform:scale(2.2); }
+}
+@keyframes clampSnap {
+    0%   { transform:scale(1)   rotate(0deg);  opacity:1; }
+    40%  { transform:scale(1.6) rotate(-25deg);opacity:1; }
+    100% { transform:scale(0)   rotate(40deg); opacity:0; }
+}
+@keyframes coinPop {
+    0%   { opacity:1; transform:translate(-50%,-50%) scale(0.5); }
+    60%  { opacity:1; transform:translate(-50%,-130%) scale(1.2); }
+    100% { opacity:0; transform:translate(-50%,-180%) scale(1); }
+}
+@keyframes tilePulse {
+    0%,100% { box-shadow:0 0 0 0 rgba(96,165,250,0.4); }
+    50%      { box-shadow:0 0 0 8px rgba(96,165,250,0);  }
+}
+/* ── 动画：筷子命中夹死虫子 ── */
+@keyframes bugDie {
+    0%   { transform: scale(1) rotate(0deg); opacity: 1; }
+    30%  { transform: scale(0.8) translateY(-10px) rotate(-15deg); opacity: 1; background: rgba(0,0,0,0.1); border-radius: 50%; } /* 被夹起来 */
+    100% { transform: scale(0.1) translateY(-40px) rotate(90deg); opacity: 0; } /* 被夹扁带走 */
+}
+
+/* ── 动画：筷子抓空 (像手抖了一下夹空) ── */
+@keyframes toolMiss {
+    0%, 100% { transform: translateX(0) scale(1); }
+    25% { transform: translateX(-4px) scale(0.9) rotate(-10deg); }
+    50% { transform: translateX(0) scale(0.8) rotate(5deg); } /* 夹紧 */
+    75% { transform: translateX(4px) scale(0.9) rotate(-5deg); }
+}
+
+/* ── 动画：筷子命中动作 ── */
+@keyframes chopstickAction {
+    0% { transform: scale(1) translateY(0); }
+    50% { transform: scale(0.8) translateY(10px) rotate(15deg); } /* 用力戳下去夹 */
+    100% { transform: scale(1) translateY(0); }
+}
+
+
+/* ── neighbour list ── */
+.neighbor-card {
+    display:flex; align-items:center; padding:14px;
+    border-radius:16px; border:1px solid #f0f0f0;
+    background:white; cursor:pointer;
+    box-shadow:0 3px 10px rgba(0,0,0,0.04);
+    transition:transform .2s, box-shadow .2s;
+}
+.neighbor-card:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+
+.status-badge {
+    padding:4px 11px; border-radius:12px;
+    font-size:.72rem; font-weight:700;
+}
+.badge-thirsty { background:#FEF08A; color:#854D0E; }
+.badge-healthy { background:#D1FAE5; color:#065F46; }
+.badge-bugged  { background:#FEE2E2; color:#991B1B; }
+
+/* ── 2D farm grid ── */
+.farm-viewport {
+    width: 100%;
+    height: 380px; /* 固定的展示区高度 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto; /* 如果放得太大，允许滑动查看 */
+    position: relative;
+}
+
+.farm-grid {
+    display: grid;
+    /* 将 1fr 改为固定的像素值，比如 85px */
+    grid-template-columns: repeat(3, 85px);
+    grid-template-rows: repeat(3, 85px);
+    gap: 8px; 
+    background: #5C3317;
+    padding: 12px; 
+    border-radius: 14px;
+    box-shadow: inset 0 4px 10px rgba(0,0,0,0.35), 0 10px 20px rgba(0,0,0,0.15);
+    /* 加入平滑的缩放动画 */
+    transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transform-origin: center center;
+}
+
+.farm-tile {
+    width: 100%;
+    height: 100%;
+    background: #7B4A23;
+    border-radius: 9px; 
+    border: 2px solid #4A2C11;
+    display: flex; 
+    justify-content: center; 
+    align-items: center;
+    font-size: 2.2rem; 
+    position: relative;
+    transition: background 0.4s;
+}
+.farm-tile.dry   { background:#C19A6B; border-color:#A07850; }
+.farm-tile.watered { animation:tilePulse .6s ease; }
+
+.bug-icon {
+    position:absolute; top:-7px; right:-7px;
+    font-size:1.4rem; z-index:10;
+    animation:bugWiggle .5s infinite alternate;
+    filter:drop-shadow(0 2px 4px rgba(0,0,0,.3));
+    cursor:default;
+}
+
+/* ── drag tool ── */
+.drag-tool {
+    font-size:2.6rem; cursor:grab; user-select:none;
+    display:inline-block; touch-action:none;
+    transition:transform .15s;
+}
+.drag-tool:active { cursor:grabbing; transform:scale(1.1); }
+.drag-clone {
+    position:fixed; pointer-events:none; z-index:9999;
+    font-size:2.8rem; filter:drop-shadow(0 8px 20px rgba(0,0,0,.4));
+}
+.drop-zone.drag-over { outline:3px dashed #60A5FA; background:rgba(96,165,250,.06); }
+
+/* ── water drops ── */
+.water-drop {
+    position:absolute; pointer-events:none; z-index:30;
+    width:10px; height:14px;
+    border-radius:50% 50% 50% 50% / 60% 60% 40% 40%;
+    background:#3B82F6;
+    animation:dropFall .55s ease-in forwards;
+}
+.water-splash {
+    position:absolute; pointer-events:none; z-index:29;
+    width:30px; height:30px; border-radius:50%;
+    border:3px solid rgba(96,165,250,.7);
+    animation:splashRing .45s ease-out forwards;
+}
+.coin-pop {
+    position:absolute; pointer-events:none; z-index:40;
+    font-size:1.1rem; font-weight:800; color:#F59E0B;
+    white-space:nowrap;
+    animation:coinPop .9s ease forwards;
+}
+
+/* ── empty-state ── */
+.empty-farm-state {
+    text-align:center; padding:40px 20px;
+    background:white; border-radius:16px;
+    border:2px dashed #D1FAE5;
+}
+</style>`;
+
+/* ══════════════════════════════════════════
+   RENDER — neighbour list
 ══════════════════════════════════════════ */
 export async function renderVisitsTab(containerId) {
     currentContainerId = containerId;
     const area = document.getElementById(containerId);
 
-    area.innerHTML = `
-        <style>
-            @keyframes bugWiggle {
-                0%,100% { transform: rotate(-10deg) translateX(0); }
-                50%      { transform: rotate(10deg) translateX(4px); }
-            }
-            @keyframes bucketPour {
-                0%   { transform: rotate(0deg); }
-                35%  { transform: rotate(-120deg); }
-                65%  { transform: rotate(-120deg); }
-                100% { transform: rotate(0deg); }
-            }
-            @keyframes clampSnap {
-                0%   { transform: scale(1) rotate(0deg); opacity:1; }
-                30%  { transform: scale(1.5) rotate(-25deg); opacity:1; }
-                60%  { transform: scale(0.5) rotate(20deg); opacity:0.6; }
-                100% { transform: scale(0) rotate(40deg); opacity:0; }
-            }
-            .neighbor-card {
-                display:flex; align-items:center; padding:15px;
-                border-radius:16px; border:1px solid #f0f0f0;
-                box-shadow:0 4px 10px rgba(0,0,0,0.03);
-                cursor:pointer; transition:transform 0.2s, box-shadow 0.2s;
-                background:white;
-            }
-            .neighbor-card:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(0,0,0,0.08); }
-            .drag-tool {
-                font-size:2.6rem; cursor:grab; user-select:none;
-                display:inline-block; transition:transform 0.15s;
-                touch-action:none;
-            }
-            .drag-tool:active { cursor:grabbing; }
-            .drag-clone {
-                position:fixed; pointer-events:none; z-index:9999;
-                font-size:2.8rem;
-                filter:drop-shadow(0 8px 20px rgba(0,0,0,0.45));
-            }
-            .drop-zone.drag-over { outline: 3px dashed #60A5FA; background: rgba(96,165,250,0.06); }
-            .status-badge {
-                padding:4px 12px; border-radius:12px;
-                font-size:0.75rem; font-weight:bold;
-                transition: all 0.5s ease;
-            }
-            .badge-thirsty { background:#FEF08A; color:#854D0E; }
-            .badge-healthy { background:#D1FAE5; color:#065F46; }
-        </style>
+    if (!document.getElementById('visitsTabStyle')) {
+        area.insertAdjacentHTML('beforebegin', STYLE);
+    }
 
-        <div style="margin-top:15px; margin-bottom:15px;">
-            <h3 style="margin:0 0 4px 0; color:#1f2937;">🏡 Neighborhood Farms</h3>
-            <p style="margin:0; font-size:0.8rem; color:gray;">
-                Visit neighbors · drag 🪣 to water · drag 🦾 to catch bugs!
+    area.innerHTML = `
+        <div style="position: sticky; top: 0; z-index: 100; background: var(--bg, #f4f6f8); padding: 15px 0; margin-top: -15px; margin-bottom: 10px;">
+            <h3 style="margin:0 0 4px; color:#1f2937;">🏡 Neighborhood Farms</h3>
+            <p style="margin:0; font-size:.78rem; color:gray;">
+                Drag 🪣 to water thirsty plants · drag 🦾 to catch bugs · earn 🍃 coins!
             </p>
         </div>
-
-        <div id="neighborsListArea" style="display:flex; flex-direction:column; gap:12px;">
-            <div style="text-align:center; padding:20px; color:gray;">Scouting neighborhood...</div>
-        </div>
-    `;
+        
+        <div id="neighborsListArea" style="display:flex;flex-direction:column;gap:12px;">
+            <div style="text-align:center;padding:24px;color:gray;">Scouting neighborhood…</div>
+        </div>`;
 
     await loadNeighbors();
 }
 
 async function loadNeighbors() {
     try {
-        const res = await fetch('http://localhost:3000/api/community/visits/neighbors');
+        const res   = await fetch(`${API}/api/community/visits/neighbors`);
         neighborsData = await res.json();
     } catch (_) {
-        neighborsData = [
-            { id:'farm_01', name:'Aisha.Farm',     avatar:'👩‍🌾', plant:'Tomato', moisture:18, hasBug:true,  rack:'3-tier', tiles:mockTiles('danger')  },
-            { id:'farm_02', name:'Botani_Master', avatar:'👨‍🌾', plant:'Mint',   moisture:65, hasBug:false, rack:'5-tier', tiles:mockTiles('healthy') },
-            { id:'farm_03', name:'GreenThumb99',   avatar:'🧑‍🌾', plant:'Basil',  moisture:22, hasBug:false, rack:'wall',   tiles:mockTiles('warning') },
-            { id:'farm_04', name:'UTM_Agri',       avatar:'🏫',   plant:'Chili',  moisture:80, hasBug:true,  rack:'3-tier', tiles:mockTiles('healthy') },
-        ];
+        neighborsData = getFallbackNeighbors();
     }
     renderNeighborsList();
 }
 
-function mockTiles(status) {
-    const emojis = ['🌿','🥬','🌱','🍅','🌶️'];
-    return Array.from({ length:9 }, (_,i) => ({ emoji: emojis[i % emojis.length], status }));
+function getFallbackNeighbors() {
+    const layouts = [
+        ['🍅','🍅','🌿',null,'🌿',null,'🌱',null,'🌶️'],
+        ['🌿','🌿',null,'🥬','🌱',null,null,'🌿',null],
+        [null,'🥬',null,'🌿',null,'🌱',null,null,'🌿'],
+        ['🌶️','🌶️','🌶️',null,'🌱',null,'🥕',null,'🥕'],
+        ['🍅','🥬','🌶️',null,null,null,'🌿','🌱',null],
+    ];
+    const names   = ['Aisha.Farm','Botani_Master','GreenThumb99','UTM_Agri','CityPlanter'];
+    const avatars = ['👩‍🌾','👨‍🌾','🧑‍🌾','🏫','🏙️'];
+    return names.map((name,i) => {
+        const h = Math.floor(Math.random() * 23);
+        return {
+            id:`npc_${i}`, name, avatar:avatars[i],
+            farmLayout:layouts[i], isNPC:true,
+            isThirsty:h>=5, bugCount:h>=18?2:h>=16?1:0, hoursOffline:h,
+        };
+    });
 }
 
 function renderNeighborsList() {
-    const listArea = document.getElementById('neighborsListArea');
-    listArea.innerHTML = neighborsData.map(farm => {
-        const isThirsty = farm.moisture < 30;
+    const area = document.getElementById('neighborsListArea');
+
+    if (!neighborsData.length) {
+        area.innerHTML = `
+            <div class="empty-farm-state">
+                <div style="font-size:3rem;margin-bottom:10px;">🌱</div>
+                <h4 style="margin:0 0 6px;color:#1f2937;">No farms yet!</h4>
+                <p style="font-size:.82rem;color:gray;margin:0;">
+                    Create your farm first, then your neighbors will appear here.
+                </p>
+            </div>`;
+        return;
+    }
+
+    area.innerHTML = neighborsData.map(farm => {
+        const alerts = [];
+        if (farm.isThirsty) alerts.push(`<span class="status-badge badge-thirsty">💧 Thirsty</span>`);
+        if (farm.bugCount)  alerts.push(`<span class="status-badge badge-bugged">🐛 ${farm.bugCount} Bug${farm.bugCount>1?'s':''}</span>`);
+        if (!alerts.length) alerts.push(`<span class="status-badge badge-healthy">🌿 Healthy</span>`);
+
+        const miniTiles = (farm.farmLayout||Array(9).fill(null))
+            .slice(0,9)
+            .map(e => `<div style="width:22px;height:22px;background:${e?'#7B4A23':'#5C3317'};border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;">${e||''}</div>`)
+            .join('');
+
         return `
         <div class="neighbor-card" onclick="window.visitFarm('${farm.id}')">
-            <div style="font-size:35px; margin-right:15px; background:#f9fafb; border-radius:50%;
-                        width:60px; height:60px; display:flex; justify-content:center; align-items:center;">
+            <div style="font-size:32px;margin-right:12px;background:#f9fafb;border-radius:50%;
+                        width:56px;height:56px;display:flex;justify-content:center;align-items:center;">
                 ${farm.avatar}
             </div>
-            <div style="flex:1;">
-                <h4 style="margin:0 0 4px 0; font-size:1.05rem;">${farm.name}</h4>
-                <div style="font-size:0.8rem; color:gray;">Growing: ${farm.plant}</div>
-            </div>
-            <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
-                ${farm.hasBug ? `<div style="font-size:1rem; animation:bugWiggle 1s infinite;">🐛 Bug!</div>` : ''}
-                <div class="status-badge ${isThirsty ? 'badge-thirsty' : 'badge-healthy'}">
-                    ${isThirsty ? '💧 Needs Water' : '🌿 Healthy'}
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:800;font-size:1rem;margin-bottom:4px;">${farm.name}</div>
+                <div style="display:grid;grid-template-columns:repeat(3,22px);gap:3px;margin-bottom:6px;">
+                    ${miniTiles}
                 </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">${alerts.join('')}</div>
             </div>
+            <div style="font-size:1.4rem;color:#d1d5db;margin-left:8px;">›</div>
         </div>`;
     }).join('');
 }
 
 /* ══════════════════════════════════════════
-    VISIT FARM VIEW
+   VISIT FARM VIEW
 ══════════════════════════════════════════ */
 window.visitFarm = function(farmId) {
-    const farm = neighborsData.find(f => f.id === farmId);
-    const area = document.getElementById(currentContainerId);
-    const isThirsty = farm.moisture < 30;
+    // 重置缩放比例，确保每次进入别人农场时都是默认大小
+window.currentZoomLevel = 1;
+
+    const farm    = neighborsData.find(f => f.id === farmId);
+    if (!farm) return;
+    const area    = document.getElementById(currentContainerId);
+    const canWater = farm.isThirsty;
+    const canCatch = farm.bugCount > 0;
+
+    // Build 3x3 grid tiles
+    const tilesHTML = (farm.farmLayout || Array(9).fill(null)).slice(0,9).map((emoji, i) => {
+        const hasBug = (farm.bugCount >= 1 && i === 2) || (farm.bugCount >= 2 && i === 6);
+        return `
+        <div class="farm-tile ${farm.isThirsty ? 'dry' : ''}" id="tile_${i}">
+            ${emoji ? `<span>${emoji}</span>` : ''}
+            ${hasBug ? `<div class="bug-icon" id="bugOn_${farmId}_${i}">🐛</div>` : ''}
+        </div>`;
+    }).join('');
 
     area.innerHTML = `
-        <button class="back-btn" aria-label="Back" style="margin:15px 0; color:#2563EB;" onclick="window.backToNeighbors()">←</button>
+        <div style="position: sticky; top: 0; z-index: 100; background: var(--bg, #f4f6f8); padding: 15px 0; margin-top: -15px; margin-bottom: 5px;">
+            <button style="color:#2563EB;background:none;border:none;font-size:1rem;cursor:pointer;font-weight:700;"
+                    onclick="window.backToNeighbors()">← Back</button>
+        </div>
 
-        <div class="card" style="padding:0; overflow:hidden; border-radius:16px; box-shadow:0 4px 15px rgba(0,0,0,0.08);">
+        <div style="border-radius:18px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.09);background:white;">
 
-            <!-- Farm header -->
-            <div style="padding:16px; display:flex; align-items:center; gap:12px; background:white;">
-                <div style="font-size:35px;">${farm.avatar}</div>
+            <!-- Header -->
+            <div style="padding:16px;display:flex;align-items:center;gap:12px;">
+                <div style="font-size:34px;">${farm.avatar}</div>
                 <div style="flex:1;">
-                    <div style="font-weight:900; font-size:1.1rem;">${farm.name}</div>
-                    <div style="font-size:0.75rem; color:gray;">
-                        Soil Moisture: <span id="uiMoisture">${farm.moisture}</span>%
+                    <div style="font-weight:900;font-size:1.05rem;">${farm.name}</div>
+                    <div style="font-size:.75rem;color:gray;">
+                        ${farm.isNPC ? '🤖 NPC Farm' : '👥 Real Farm'} ·
+                        Offline ${farm.hoursOffline}h
                     </div>
                 </div>
-                <div id="statusBadge" class="status-badge ${isThirsty ? 'badge-thirsty' : 'badge-healthy'}">
-                    ${isThirsty ? '💧 Thirsty' : '🌿 Healthy'}
+                <div id="farmStatusBadge" class="status-badge ${farm.isThirsty ? 'badge-thirsty' : farm.bugCount ? 'badge-bugged' : 'badge-healthy'}">
+                    ${farm.isThirsty ? '💧 Thirsty' : farm.bugCount ? `🐛 ${farm.bugCount} Bug${farm.bugCount>1?'s':''}` : '🌿 Healthy'}
                 </div>
             </div>
 
-            <!-- 3D canvas -->
-            <div id="canvasDropZone" class="drop-zone" style="position:relative; background:#eaf4ff;">
-                <canvas id="visitFarmCanvas" style="width:100%; height:260px; display:block;"></canvas>
+            <!-- 2D Farm Grid -->
+            <div id="canvasDropZone" class="drop-zone"
+                 style="position:relative; 
+                        background: radial-gradient(circle at 50% 0%, #FEF9C3 0%, #E0F2FE 40%, #DCFCE7 100%);
+                        padding:16px; overflow:hidden;">
+                
+                <div style="position: absolute; top: 15px; right: 15px; display: flex; flex-direction: column; gap: 8px; z-index: 50;">
+                    <button onclick="window.zoomFarm(0.2)" style="width:40px; height:40px; border-radius:50%; border:none; background:white; box-shadow:0 4px 10px rgba(0,0,0,0.15); cursor:pointer; font-size:1.2rem; transition:transform 0.1s;">➕</button>
+                    <button onclick="window.zoomFarm(-0.2)" style="width:40px; height:40px; border-radius:50%; border:none; background:white; box-shadow:0 4px 10px rgba(0,0,0,0.15); cursor:pointer; font-size:1.2rem; transition:transform 0.1s;">➖</button>
+                </div>
 
-                <!-- Bug sitting on canvas -->
-                ${farm.hasBug ? `
-                <div id="bugOverlay"
-                    style="position:absolute; top:16px; right:26px; text-align:center; z-index:10;
-                           animation:bugWiggle 1.1s infinite;">
-                    <div style="font-size:2.2rem; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.25));">🐛</div>
-                    <div style="font-size:0.6rem; background:#FEF08A; color:#854D0E;
-                                border-radius:8px; padding:2px 7px; font-weight:bold; margin-top:2px;">drag clamp!</div>
-                </div>` : ''}
+                <div style="font-size:.65rem;font-weight:800;color:#64748B;
+                            letter-spacing:.08em;text-align:center;margin-bottom:5px;">
+                    ↓ DRAG TOOLS ONTO THE FARM ↓
+                </div>
+                
+                <div class="farm-viewport">
+                    <div class="farm-grid" id="farmGridEl">
+                        ${tilesHTML}
+                    </div>
+                </div>
             </div>
 
             <!-- Toolbar -->
-            <div style="padding:16px; background:white; border-top:1px solid #f3f4f6;">
-                <div style="font-size:0.65rem; font-weight:700; color:#9CA3AF;
-                            letter-spacing:0.08em; margin-bottom:12px; text-align:center;">
-                    ↑ DRAG A TOOL ONTO THE FARM ABOVE ↑
-                </div>
-                <div style="display:flex; justify-content:center; gap:40px;">
+            <div style="padding:16px;border-top:1px solid #f3f4f6;">
+                <div style="display:flex;justify-content:center;gap:48px;">
 
                     <!-- Bucket -->
                     <div style="text-align:center;">
                         <div id="toolBucket" class="drag-tool"
-                            style="${!isThirsty ? 'opacity:0.3; cursor:not-allowed;' : ''}">🪣</div>
-                        <div id="bucketLabel" style="font-size:0.7rem; color:#6B7280; margin-top:6px;">
-                            ${isThirsty ? '💧 Water (+5 🍃)' : 'Not thirsty'}
+                             style="${!canWater ? 'opacity:.3;cursor:not-allowed;' : ''}">🪣</div>
+                        <div id="bucketLabel" style="font-size:.7rem;color:#6B7280;margin-top:6px;">
+                            ${canWater ? '💧 Water (+5 🍃)' : 'Not thirsty'}
                         </div>
                     </div>
 
                     <!-- Clamp -->
                     <div style="text-align:center;">
                         <div id="toolClamp" class="drag-tool"
-                            style="${!farm.hasBug ? 'opacity:0.3; cursor:not-allowed;' : ''}">🦾</div>
-                        <div id="clampLabel" style="font-size:0.7rem; color:#6B7280; margin-top:6px;">
-                            ${farm.hasBug ? '🐛 Catch bug (+8 🍃)' : 'No bugs'}
+                             style="${!canCatch ? 'opacity:.3;cursor:not-allowed;' : ''}">🥢</div>
+                        <div id="clampLabel" style="font-size:.7rem;color:#6B7280;margin-top:6px;">
+                            ${canCatch ? `🐛 Catch Bug (+10 🍃)` : 'No bugs'}
                         </div>
                     </div>
 
                 </div>
             </div>
-        </div>
-    `;
-
-    initVisitCanvas(farm);
+        </div>`;
 
     const dropZone = document.getElementById('canvasDropZone');
     const bucket   = document.getElementById('toolBucket');
     const clamp    = document.getElementById('toolClamp');
 
-    if (isThirsty  && bucket) makeDraggable(bucket, dropZone, () => doWater(farm.id));
-    if (farm.hasBug && clamp) makeDraggable(clamp,  dropZone, () => doCatch(farm.id));
+    if (canWater && bucket) makeDraggable(bucket, dropZone, () => doWater(farmId));
+    if (canCatch && clamp)  makeDraggable(clamp,  dropZone, (cx, cy) => doCatch(farmId, cx, cy));
 };
 
-/* ── 3D Canvas bootstrap ── */
-function initVisitCanvas(farm) {
-    import('../../components/FarmCanvas.js').then(({ FarmCanvas }) => {
-        import('../../store.js').then(({ AppState }) => {
-            const saved      = JSON.parse(localStorage.getItem('user_farms') || '[]');
-            const originalId = AppState.currentFarmId;
-            const tempFarm   = {
-                id: farm.id, name: farm.name,
-                rack: farm.rack || '3-tier', zone: 'A',
-                tiles: (farm.tiles || []).map((t,i) => ({
-                    id: i, emoji: t.emoji || null, status: t.status || 'healthy'
-                }))
-            };
-            localStorage.setItem('user_farms', JSON.stringify([...saved, tempFarm]));
-            AppState.currentFarmId = farm.id;
-            FarmCanvas.init('visitFarmCanvas');
-            localStorage.setItem('user_farms', JSON.stringify(saved));
-            AppState.currentFarmId = originalId;
-        });
-    }).catch(() => {});
-}
-
 /* ══════════════════════════════════════════
-    DRAG ENGINE
+   DRAG ENGINE
 ══════════════════════════════════════════ */
 function makeDraggable(tool, dropZone, onDrop) {
     let clone = null, overZone = false, offX = 0, offY = 0;
@@ -232,8 +386,7 @@ function makeDraggable(tool, dropZone, onDrop) {
         clone = document.createElement('div');
         clone.className = 'drag-clone';
         clone.innerText = tool.innerText;
-        clone.style.left = cx - offX + 'px';
-        clone.style.top  = cy - offY + 'px';
+        Object.assign(clone.style, { left: cx - offX + 'px', top: cy - offY + 'px' });
         document.body.appendChild(clone);
     }
     function moveClone(cx, cy) {
@@ -243,10 +396,13 @@ function makeDraggable(tool, dropZone, onDrop) {
         overZone = isOver(cx, cy, dropZone);
         dropZone.classList.toggle('drag-over', overZone);
     }
-    function endDrag() {
+    function endDrag(cx, cy) {
         dropZone.classList.remove('drag-over');
         clone?.remove(); clone = null;
-        if (overZone) { overZone = false; onDrop(); }
+        if (overZone) { 
+            overZone = false; 
+            onDrop(cx, cy); // 必须把 cx, cy 传出去！
+        }
     }
     function isOver(x, y, el) {
         const r = el.getBoundingClientRect();
@@ -259,98 +415,224 @@ function makeDraggable(tool, dropZone, onDrop) {
         offX = e.clientX - r.left; offY = e.clientY - r.top;
         spawnClone(e.clientX, e.clientY);
         const mm = ev => moveClone(ev.clientX, ev.clientY);
-        const mu = ()  => { endDrag(); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
+        const mu = ev => { endDrag(ev.clientX, ev.clientY); window.removeEventListener('mousemove', mm); window.removeEventListener('mouseup', mu); };
         window.addEventListener('mousemove', mm);
         window.addEventListener('mouseup',   mu);
     });
-
     tool.addEventListener('touchstart', e => {
         e.preventDefault();
         const t = e.touches[0];
         const r = tool.getBoundingClientRect();
         offX = t.clientX - r.left; offY = t.clientY - r.top;
         spawnClone(t.clientX, t.clientY);
-    }, { passive: false });
+    }, { passive:false });
     tool.addEventListener('touchmove', e => {
         e.preventDefault();
-        const t = e.touches[0];
-        moveClone(t.clientX, t.clientY);
-    }, { passive: false });
+        const t = e.touches[0]; moveClone(t.clientX, t.clientY);
+    }, { passive:false });
     tool.addEventListener('touchend', e => {
         e.preventDefault();
-        endDrag();
-    }, { passive: false });
+        const t = e.changedTouches[0]; endDrag(t.clientX, t.clientY);
+    }, { passive:false });
 }
 
 /* ══════════════════════════════════════════
-    ACTIONS
+   WATER DROP ANIMATION
+   Spawns multiple falling drops + splash rings
+   over random tiles in the farm grid.
+══════════════════════════════════════════ */
+function spawnWaterAnimation(dropZone) {
+    const grid = document.getElementById('farmGridEl');
+    if (!grid) return;
+    const gridRect = grid.getBoundingClientRect();
+    const zoneRect = dropZone.getBoundingClientRect();
+
+    // 1. 增加水滴数量到 24 滴，确保足够覆盖整个 9 宫格
+    const dropsCount = 24;
+
+    for (let i = 0; i < dropsCount; i++) {
+        setTimeout(() => {
+            const drop = document.createElement('div');
+            drop.className = 'water-drop';
+            
+            // 2. 【核心修复】：随机 X 轴覆盖整个宽度，随机 Y 轴覆盖整个高度
+            const rx = gridRect.left - zoneRect.left + (Math.random() * gridRect.width);
+            // Y轴减去 40px 是为了防止最底部的水滴落到网格外面去
+            const ry = gridRect.top - zoneRect.top + (Math.random() * (gridRect.height - 40)); 
+            
+            drop.style.left = rx + 'px';
+            drop.style.top  = ry + 'px';
+            dropZone.appendChild(drop);
+
+            // Splash at landing (水花四溅效果)
+            setTimeout(() => {
+                const splash = document.createElement('div');
+                splash.className = 'water-splash';
+                
+                // 调整水花涟漪的坐标，使其完美对齐水滴坠落(translateY)的终点
+                splash.style.left = rx - 10 + 'px'; 
+                splash.style.top  = ry + 40 + 'px'; 
+                dropZone.appendChild(splash);
+                
+                setTimeout(() => { drop.remove(); splash.remove(); }, 500);
+            }, 450); // 与 CSS 里的 dropFall 动画时长相匹配
+            
+        }, i * 40); // 缩短生成间隔 (40ms)，让雨下得更连贯
+    }
+}
+
+/* ══════════════════════════════════════════
+   ACTIONS
 ══════════════════════════════════════════ */
 async function doWater(farmId) {
     const farm = neighborsData.find(f => f.id === farmId);
-    if (!farm || farm.moisture >= 30) return;
+    if (!farm || !farm.isThirsty) return;
 
+    const dropZone = document.getElementById('canvasDropZone');
+    spawnWaterAnimation(dropZone);
+
+    // Grey out bucket
     const bucket = document.getElementById('toolBucket');
-    if (bucket) {
-        bucket.style.transformOrigin = 'bottom right';
-        bucket.style.animation = 'bucketPour 0.8s ease forwards';
-        setTimeout(() => {
-            if (bucket) { bucket.style.animation = ''; bucket.style.opacity = '0.3'; bucket.style.cursor = 'not-allowed'; }
-        }, 800);
-    }
+    if (bucket) { bucket.style.opacity = '.3'; bucket.style.cursor = 'not-allowed'; }
 
+    // Update tiles to un-dry
+    document.querySelectorAll('.farm-tile').forEach(t => {
+        t.classList.remove('dry');
+        t.classList.add('watered');
+        setTimeout(() => t.classList.remove('watered'), 700);
+    });
+
+    let earned = 5;
     try {
-        const res  = await fetch(`http://localhost:3000/api/community/visits/water/${farmId}`, { method: 'POST' });
+        const res  = await fetch(`${API}/api/community/visits/interact/${farmId}`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ action:'water' }),
+        });
         const data = await res.json();
-        applyWaterUI(farm, data);
-    } catch (_) {
-        applyWaterUI(farm, { earned: 5 });
-    }
-}
+        earned     = data.earned || 5;
+        updateTopNavCoins(data.newTotal);
+    } catch (_) {}
 
-function applyWaterUI(farm, data) {
-    farm.moisture = 85;
-    const moistEl = document.getElementById('uiMoisture');
-    if (moistEl) moistEl.innerText = '85';
-    const badge = document.getElementById('statusBadge');
-    if (badge) {
-        badge.className = 'status-badge badge-healthy';
-        badge.innerText = '🌿 Healthy';
-    }
+    farm.isThirsty = false;
+    const badge = document.getElementById('farmStatusBadge');
+    if (badge) { badge.className = 'status-badge badge-healthy'; badge.innerText = '🌿 Healthy'; }
     const lbl = document.getElementById('bucketLabel');
     if (lbl) lbl.innerText = '✅ Watered!';
-    showToast('success', `💧 Watered! +${data?.earned ?? 5} 🍃`);
-    updateTopNavCoins(data?.newTotal);
-}
 
-async function doCatch(farmId) {
-    const farm = neighborsData.find(f => f.id === farmId);
-    if (!farm || !farm.hasBug) return;
-
-    const bugEl = document.getElementById('bugOverlay');
-    if (bugEl) {
-        bugEl.style.animation = 'clampSnap 0.5s ease forwards';
-        setTimeout(() => bugEl?.remove(), 500);
-    }
-
-    const clamp = document.getElementById('toolClamp');
-    if (clamp) { clamp.style.opacity = '0.3'; clamp.style.cursor = 'not-allowed'; }
-    const lbl = document.getElementById('clampLabel');
-    if (lbl) lbl.innerText = '✅ Bug caught!';
-
-    farm.hasBug = false;
-
-    try {
-        const res  = await fetch(`http://localhost:3000/api/community/visits/catch-bug/${farmId}`, { method: 'POST' });
-        const data = await res.json();
-        showToast('success', `💥 Bug squished! +${data?.earned ?? 8} 🍃`);
-        updateTopNavCoins(data?.newTotal);
-    } catch (_) {
-        showToast('success', '💥 Bug squished! +8 🍃');
-    }
+    // Coin pop
+    spawnCoinPop(dropZone, `+${earned} 🍃`);
+    showToast('success', `💧 Watered! +${earned} 🍃`);
 }
 
 /* ══════════════════════════════════════════
-    UTILS
+   PRECISION BUG CATCHING (Chopsticks 🥢)
+══════════════════════════════════════════ */
+async function doCatch(farmId, dropX, dropY) {
+    const farm = neighborsData.find(f => f.id === farmId);
+    if (!farm || farm.bugCount <= 0) return;
+
+    // 1. 获取所有活着的虫子
+    const bugs = document.querySelectorAll(`[id^="bugOn_${farmId}_"]`);
+    let hitBug = null;
+
+    // 2. 命中判定 (25px 的容错范围)
+    bugs.forEach(bug => {
+        const rect = bug.getBoundingClientRect();
+        const padding = 25; 
+        if (dropX >= rect.left - padding && dropX <= rect.right + padding &&
+            dropY >= rect.top - padding && dropY <= rect.bottom + padding) {
+            hitBug = bug;
+        }
+    });
+
+    const clampTool = document.getElementById('toolClamp');
+
+    // 3. 【失败】：夹空了
+    if (!hitBug) {
+        if (clampTool) {
+            clampTool.style.animation = 'toolMiss 0.4s ease';
+            setTimeout(() => clampTool.style.animation = '', 400);
+        }
+        showToast('warning', 'Missed! Use the chopsticks 🥢 directly on the bug! 🎯');
+        return;
+    }
+
+    // 4. 【成功】：夹到了！
+    if (clampTool) {
+        clampTool.style.animation = 'chopstickAction 0.5s ease';
+        setTimeout(() => clampTool.style.animation = '', 500);
+    }
+
+    // 播放虫子被夹走死亡的动画
+    hitBug.style.animation = 'bugDie 0.5s forwards';
+    hitBug.removeAttribute('id'); // 移除 ID 防止被重复抓取
+    setTimeout(() => hitBug.remove(), 500);
+
+    farm.bugCount -= 1;
+
+    // 更新界面状态文字
+    const badge = document.getElementById('farmStatusBadge');
+    if (badge) {
+        if (farm.bugCount > 0) {
+            badge.innerText = `🐛 ${farm.bugCount} Bug${farm.bugCount > 1 ? 's' : ''}`;
+        } else {
+            badge.className = 'status-badge badge-healthy'; 
+            badge.innerText = '🌿 Healthy';
+        }
+    }
+
+    const lbl = document.getElementById('clampLabel');
+    if (lbl) {
+        lbl.innerText = farm.bugCount > 0 ? `🐛 ${farm.bugCount} left!` : '✅ All bugs cleared!';
+    }
+    
+    // 全抓完了，工具变灰
+    if (farm.bugCount === 0 && clampTool) {
+        clampTool.style.opacity = '.3'; 
+        clampTool.style.cursor = 'not-allowed';
+    }
+
+    // 5. 后端 API 奖励
+    let earned = 10;
+    try {
+        const res  = await fetch(`${API}/api/community/visits/interact/${farmId}`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ action:'catch_bug' }),
+        });
+        const data = await res.json();
+        earned     = data.earned || 10;
+        updateTopNavCoins(data.newTotal);
+    } catch (_) {}
+
+    const dropZone = document.getElementById('canvasDropZone');
+    spawnCoinPop(dropZone, `+${earned} 🍃`);
+    showToast('success', `Gotcha! +${earned} 🍃`);
+}
+
+function spawnCoinPop(container, text) {
+    const el = document.createElement('div');
+    el.className = 'coin-pop';
+    el.innerText = text;
+    el.style.left = '50%';
+    el.style.top  = '50%';
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 950);
+}
+window.zoomFarm = function(delta) {
+    window.currentZoomLevel += delta;
+    
+    // 限制最大和最小的缩放范围，防止缩小到看不见或放大到破音
+    if (window.currentZoomLevel < 0.6) window.currentZoomLevel = 0.6;
+    if (window.currentZoomLevel > 2.5) window.currentZoomLevel = 2.5;
+    
+    const gridEl = document.getElementById('farmGridEl');
+    if (gridEl) {
+        gridEl.style.transform = `scale(${window.currentZoomLevel})`;
+    }
+};
+
+/* ══════════════════════════════════════════
+   UTILS
 ══════════════════════════════════════════ */
 window.backToNeighbors = function() { renderVisitsTab(currentContainerId); };
 
@@ -359,4 +641,3 @@ function updateTopNavCoins(newAmount) {
     const el = document.getElementById('myCoinsDisplay');
     if (el) el.innerText = `🍃 ${newAmount} Coins`;
 }
-
