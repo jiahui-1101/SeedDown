@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { forecastYieldAndRecipes, askClaude } = require('../services/aiService');
+const { forecastYieldAndRecipes, askText } = require('../services/aiService');
 
 // ── Data helpers (JSON files only — no MongoDB) ──────────────────────────────
 
@@ -117,7 +117,7 @@ Temp ${temp}°C ${temp > 30 ? '(too hot)' : temp < 18 ? '(too cold)' : '(optimal
 Condition: ${conditionScore}/100 (${conditionLabel}). Automation saved ${waterSavedLiters}L water + ${energySavedkWh}kWh energy = RM ${totalSavedRM}.
 Sentence 1: describe current ${plant} conditions. Sentence 2: mention RM ${totalSavedRM} saved by automation.`;
 
-    const raw     = await askClaude('', prompt, 200);
+    const raw     = await askText('', prompt, 200);
     const insight = raw.replace(/```/g, '').trim();
 
     res.json({
@@ -162,7 +162,7 @@ A user wants to add "${species}" to their indoor vertical farm.
 Explain in exactly 2 sentences why this is not suitable for indoor vertical farming.
 Be specific about why ${species} cannot grow in a rack/shelf system indoors.`;
 
-      const raw = await askClaude('', prompt, 150);
+      const raw = await askText('', prompt, 150);
       return res.json({
         unsuitable: true,
         impacts: { tempChange:0, humidChange:0, lightChange:0, waterChange:0, nutrientChange:0 },
@@ -207,7 +207,7 @@ Projected: Temp ${projected.temp}°C, Humidity ${projected.humid}%, Moisture ${p
 ${warnings.length ? 'Warnings: ' + warnings.join('; ') : 'All projected values within safe range.'}
 Write exactly 2 sentences: is it safe to add ${quantity} ${species}? What one action should user take?`;
 
-    const raw     = await askClaude('', prompt, 200);
+    const raw     = await askText('', prompt, 200);
     const insight = raw.replace(/```/g, '').trim();
 
     res.json({ impacts, projected, warnings, insight });
@@ -252,7 +252,7 @@ Respond in valid JSON only. No markdown, no explanation outside the JSON.
   "estimatedHarvestDays": number or null
 }`;
 
-    const raw = await askClaude('', prompt, 300);
+    const raw = await askText('', prompt, 300);
 
     let parsed;
     try {

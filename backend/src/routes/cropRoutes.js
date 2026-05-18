@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const path    = require('path');
 const fs      = require('fs');
-const { askClaude } = require('../services/aiService');
+const { askText } = require('../services/aiService');
 
 const CROPS_FILE = path.join(__dirname, '../../crops_data.json');
 
@@ -27,7 +27,7 @@ router.get('/species/:name', async (req, res) => {
 Return single-line JSON only, no markdown:
 {"species":"${name}","commonName":"${name}","emoji":"🌱","requirements":{"tempMin":18,"tempMax":28,"humidityMin":50,"humidityMax":75,"lightHours":6,"waterPerDay":150,"fertilizerPerWeek":3,"growthDays":45},"yield":{"avgGramsPerPlant":200,"harvestsPerCycle":3,"peakWeek":6},"impacts":{"tempChange":0.5,"humidChange":3,"lightChange":0,"waterChange":6,"nutrientChange":5},"recipeKeywords":["${name}"]}`;
 
-      const raw       = await askClaude('', prompt, 400);
+      const raw       = await askText('', prompt, 400);
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('AI could not estimate species data');
       crop        = JSON.parse(jsonMatch[0]);

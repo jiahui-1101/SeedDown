@@ -1,215 +1,113 @@
 /**
  * farmController.js
  *
- * POST /api/farms/scan-plants   — Gemini/Claude Vision plant recognition
- * POST /api/farms/generate-3d   — Proxy to DA3 depth service for .glb mesh
- * POST /api/farms/create        — Persist new farm to Firestore (or local fallback)
- *
- * Env vars:
- * GEMINI_API_KEY  — Google Gemini API key for Vision calls
- * CLAUDE_API_KEY  — optional Anthropic fallback for Vision calls
- * DA3_SERVICE_URL — URL of the DA3 backend service
+ * AI calls are backend-only. Provider order:
+ * 1. GROQ_API_KEY
+ * 2. GEMINI_API_KEY_2
+ * 3. GEMINI_API_KEY
  */
 
 const fetch = (...args) =>
     import('node-fetch').then(({ default: f }) => f(...args));
+const { analyzePlantImage, analyzePlantDisease } = require('../services/aiService');
 
 // ─────────────────────────────────────────────────────────────
-// Scan Plants (Gemini Vision, Claude fallback)
+// Scan Plants via backend AI provider chain
 // ─────────────────────────────────────────────────────────────
 async function scanPlants(req, res) {
     const { image, mediaType, targetPlant } = req.body;
 
     if (!image) {
-        return res.status(400).json({
-            error: 'No image provided',
-            plants: [],
-        });
+        return res.status(400).json({ error: 'No image provided', plants: [] });
     }
 
-    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
-    const claudeKey = process.env.CLAUDE_API_KEY;
-
     try {
-        if (geminiKey) {
-            const parsed = await scanPlantsWithGemini({
-                apiKey: geminiKey,
-                image,
-                mediaType,
-                targetPlant,
-            });
-            return res.json(parsed);
-        }
-
-        if (claudeKey) {
-            const parsed = await scanPlantsWithClaude({
-                apiKey: claudeKey,
-                image,
-                mediaType,
-                targetPlant,
-            });
-            return res.json(parsed);
-        }
-
-        console.warn('[farmController] No Gemini or Claude key set for plant recognition');
-        return res.json({
-            plants: fallbackPlants(targetPlant),
-            warning: 'Set GEMINI_API_KEY to enable AI photo recognition; using target plant fallback.',
-        });
+        const parsed = await analyzePlantImage({ image, mediaType, targetPlant });
+        return res.json({ ...parsed, source: 'backend-ai' });
     } catch (err) {
         const message = err.message || 'Unknown AI error';
-        const quotaIssue = /credit|quota|billing|prepayment/i.test(message);
-        console.warn(
-            quotaIssue
-                ? '[farmController] Gemini quota unavailable; using target plant fallback'
-                : `[farmController] scanPlants error: ${message}`
-        );
+        const quotaIssue = /credit|quota|billing|prepayment|rate/i.test(message);
+        console.warn('[farmController] scanPlants backend AI fallback:', message);
 
         return res.json({
             plants: fallbackPlants(targetPlant),
+            source: 'fallback',
             warning: quotaIssue
-                ? 'Gemini reached, but credits or billing are unavailable; using target plant fallback.'
+                ? 'AI provider reached, but quota or billing is unavailable; using target plant fallback.'
                 : `AI photo recognition unavailable: ${message}`,
         });
     }
 }
 
-async function scanPlantsWithGemini({ apiKey, image, mediaType, targetPlant }) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+// ─────────────────────────────────────────────────────────────
+// Disease Analysis via backend AI provider chain
+// ─────────────────────────────────────────────────────────────
+async function analyzeDisease(req, res) {
+    const { image, mediaType, plantName, plantSpecies, farmContext = {}, answers = {} } = req.body;
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [
-                {
-                    role: 'user',
-                    parts: [
-                        {
-                            inline_data: {
-                                mime_type: mediaType || 'image/jpeg',
-                                data: image,
-                            },
-                        },
-                        { text: plantRecognitionPrompt(targetPlant) },
-                    ],
-                },
-            ],
-            generationConfig: {
-                temperature: 0.2,
-                maxOutputTokens: 900,
-                responseMimeType: 'application/json',
-            },
-        }),
-    });
-
-    const data = await response.json();
-    if (!response.ok || data.error) {
-        throw new Error(data.error?.message || `Gemini API error ${response.status}`);
+    if (!image) {
+        return res.status(400).json({ error: 'No image provided' });
     }
 
-    const rawText = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('\n') || '{"plants":[]}';
-    return parsePlantRecognition(rawText);
+    try {
+        const result = await analyzePlantDisease({ image, mediaType, plantName, plantSpecies, farmContext, answers });
+        return res.json({ ...result, source: 'backend-ai' });
+    } catch (err) {
+        const message = err.message || 'Unknown AI error';
+        console.warn('[farmController] analyzeDisease backend AI fallback:', message);
+        return res.json({
+            ...fallbackDisease(plantName, plantSpecies),
+            source: 'fallback',
+            warning: `AI disease analysis unavailable: ${message}`,
+        });
+    }
 }
 
-async function scanPlantsWithClaude({ apiKey, image, mediaType, targetPlant }) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 900,
-            messages: [
-                {
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: mediaType || 'image/jpeg',
-                                data: image,
-                            },
-                        },
-                        { type: 'text', text: plantRecognitionPrompt(targetPlant) },
-                    ],
-                },
-            ],
-        }),
-    });
+function fallbackDisease(plantName, plantSpecies) {
+    const key = String(plantSpecies || plantName || '').toLowerCase();
+    const base = {
+        plant: plantName || 'Plant',
+        severity: 'unknown',
+        confidence: 0.46,
+        confidenceExplanation: 'AI provider was unavailable, so this is a cautious rule-based estimate using plant type only.',
+        needsMoreInfo: true,
+        followUpQuestions: [
+            'Are the marks powdery, watery, dry, or yellow?',
+            'Did symptoms start on older leaves, new leaves, stem, or fruit?',
+            'Has humidity, airflow, watering, or nutrient mix changed recently?',
+        ],
+    };
 
-    const data = await response.json();
-    if (!response.ok || data.error) {
-        throw new Error(data.error?.message || `Claude API error ${response.status}`);
+    if (key.includes('tomato') || key.includes('chili') || key.includes('pepper')) {
+        return {
+            ...base,
+            condition: 'Possible leaf spot or early blight stress',
+            evidence: ['Fruiting crop context suggests leaf spot or airflow-related stress'],
+            likelyCauses: ['High humidity with weak ventilation', 'Water splashing on leaves', 'Nutrient imbalance'],
+            solutions: ['Remove heavily affected leaves', 'Improve airflow', 'Avoid wetting leaves during watering'],
+            prevention: ['Keep foliage dry', 'Space plants better', 'Check pH and nutrient EC regularly'],
+        };
     }
 
-    const rawText = data.content?.[0]?.text || '{"plants":[]}';
-    return parsePlantRecognition(rawText);
-}
-
-function plantRecognitionPrompt(targetPlant) {
-    const hint = targetPlant ? `\nUser says the intended plant is: ${targetPlant}. Use this as a hint, but only return it if it matches the photo or the photo is unclear.` : '';
-
-    return `
-You are a vertical farm expert. Analyse this indoor/vertical farm photo.${hint}
-
-Identify every plant species you can see and estimate how many slots/pots each occupies.
-
-Return ONLY valid JSON, no markdown fences, no preamble:
-
-{
-  "plants": [
-    {
-      "name": "Common Name",
-      "emoji": "🥬",
-      "species": "species_slug",
-      "confidence": 0.92,
-      "slots": 4
+    if (key.includes('lettuce') || key.includes('kale') || key.includes('spinach')) {
+        return {
+            ...base,
+            condition: 'Possible tip burn, nutrient stress, or downy mildew',
+            evidence: ['Leafy greens are sensitive to airflow, calcium movement, humidity, and pH'],
+            likelyCauses: ['Poor airflow', 'High humidity', 'Nutrient or pH imbalance'],
+            solutions: ['Check pH and nutrient concentration', 'Increase air circulation', 'Remove damaged outer leaves'],
+            prevention: ['Maintain stable pH', 'Avoid overcrowding', 'Keep air moving between tiers'],
+        };
     }
-  ]
-}
 
-Rules:
-- confidence: 0.0-1.0
-- slots: integer, estimated pot/slot count for this species visible
-- species: lowercase, underscores for spaces
-- use realistic vegetable / herb emojis
-- if photo is unclear but the target plant hint is useful, return one plant using the hint with lower confidence
-- if no plants are visible and no hint is useful, return {"plants":[]}
-- do NOT wrap in markdown
-- return raw JSON only
-`;
-}
-
-function parsePlantRecognition(rawText) {
-    const cleaned = String(rawText || '{"plants":[]}')
-        .replace(/```json/g, '')
-        .replace(/```/g, '')
-        .trim();
-
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    const jsonText = start >= 0 && end >= start ? cleaned.slice(start, end + 1) : '{"plants":[]}';
-    const parsed = JSON.parse(jsonText);
-    parsed.plants = sanitizePlants(parsed.plants || []);
-    return parsed;
-}
-
-function sanitizePlants(plants) {
-    return plants.map((p) => ({
-        name: p.name || 'Unknown Plant',
-        emoji: p.emoji || emojiForPlant(p.name),
-        species: (p.species || p.name || 'unknown')
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '_')
-            .replace(/^_+|_+$/g, ''),
-        confidence: Math.min(1, Math.max(0, parseFloat(p.confidence) || 0)),
-        slots: Math.max(1, Math.min(50, parseInt(p.slots, 10) || 3)),
-    }));
+    return {
+        ...base,
+        condition: 'Possible environmental stress, disease not confirmed',
+        evidence: ['Plant type is known but symptoms need clearer confirmation'],
+        likelyCauses: ['Watering inconsistency', 'pH or nutrient imbalance', 'Low airflow or lighting stress'],
+        solutions: ['Take a closer photo of affected leaves', 'Check pH, moisture, and light readings', 'Compare new and old leaves'],
+        prevention: ['Record symptoms daily', 'Keep sensor thresholds within crop range', 'Avoid sudden changes in irrigation or light'],
+    };
 }
 
 function fallbackPlants(targetPlant) {
@@ -232,6 +130,19 @@ function fallbackPlants(targetPlant) {
         confidence: 0.45,
         slots: 3,
     })));
+}
+
+function sanitizePlants(plants) {
+    return plants.map((p) => ({
+        name: p.name || 'Unknown Plant',
+        emoji: p.emoji || emojiForPlant(p.name),
+        species: (p.species || p.name || 'unknown')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, ''),
+        confidence: Math.min(1, Math.max(0, parseFloat(p.confidence) || 0)),
+        slots: Math.max(1, Math.min(50, parseInt(p.slots, 10) || 3)),
+    }));
 }
 
 function emojiForPlant(name = '') {
@@ -423,6 +334,7 @@ async function createFarm(req, res) {
 
 module.exports = {
     scanPlants,
+    analyzeDisease,
     generate3D,
     createFarm,
 };

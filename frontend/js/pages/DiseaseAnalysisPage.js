@@ -1,7 +1,10 @@
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
 import { showToast } from '../utils/toast.js';
-import { scanPlantDiseaseWithFirebaseAI } from '../services/firebaseAiLogic.js';
+
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
 
 const FARMS_KEY = 'user_farms';
 const REPORTS_KEY = 'seeddown_disease_reports';
@@ -132,18 +135,24 @@ async function runAnalysis(extraAnswers = {}) {
     setLoading(true);
     try {
         const farmContext = buildFarmContext(currentFarm, selectedPlant);
-        const aiResult = await scanPlantDiseaseWithFirebaseAI({
-            image: selectedImage,
-            mediaType: selectedMediaType,
-            plantName: selectedPlant.name,
-            plantSpecies: selectedPlant.species,
-            farmContext,
-            answers: extraAnswers,
+        const response = await fetch(`${API_BASE}/api/farms/analyze-disease`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                image: selectedImage,
+                mediaType: selectedMediaType,
+                plantName: selectedPlant.name,
+                plantSpecies: selectedPlant.species,
+                farmContext,
+                answers: extraAnswers,
+            }),
         });
+        const aiResult = await response.json();
+        if (!response.ok || aiResult.error) throw new Error(aiResult.error || 'Disease analysis failed');
         lastResult = normalizeResult(aiResult || fallbackDiagnosis(selectedPlant, farmContext), selectedPlant);
         saveReport(lastResult, selectedPlant, currentFarm);
         renderResult(lastResult);
-        showToast(aiResult ? 'success' : 'warning', aiResult ? 'AI disease analysis completed' : 'AI unavailable, using safe fallback analysis');
+        showToast(aiResult.source === 'backend-ai' ? 'success' : 'warning', aiResult.source === 'backend-ai' ? 'AI disease analysis completed' : 'AI unavailable, using safe fallback analysis');
     } catch (error) {
         console.warn('[DiseaseAnalysis] AI failed, using fallback:', error);
         const farmContext = buildFarmContext(currentFarm, selectedPlant);
