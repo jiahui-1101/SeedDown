@@ -6,7 +6,7 @@
 import { AppState } from '../store.js';
 import { saveFarmsToFirestore } from '../utils/firebase.js';
 import { showToast } from '../utils/toast.js';
-import jsQR from 'jsqr';
+import jsQR from 'https://esm.sh/jsqr';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
