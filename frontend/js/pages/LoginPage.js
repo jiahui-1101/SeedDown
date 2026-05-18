@@ -3,13 +3,15 @@ import { showToast }  from '../utils/toast.js';
 import { AppState }   from '../store.js';
 import { initFirebase, getAuth, loadUserData } from '../utils/firebase.js';
 
-/* ── INIT FIREBASE ── */
+/* ── GUEST DEMO ACCOUNT (real Firebase account) ── */
+const GUEST_EMAIL    = 'demo@seeddown.com';
+const GUEST_PASSWORD = 'seeddown2026';
+
 async function _initFirebase() {
     await initFirebase();
     return getAuth();
 }
 
-/* RENDER */
 export function render() {
     const container = document.getElementById('screenContainer');
     container.innerHTML = `
@@ -20,14 +22,12 @@ export function render() {
         ">
             <div style="flex:1; padding:36px 24px; display:flex; flex-direction:column; justify-content:center; max-width:420px; margin:0 auto; width:100%;">
 
-                <!-- LOGO -->
                 <div style="text-align:center; margin-bottom:36px;">
                     <div style="font-size:3rem; margin-bottom:8px;">🌿</div>
                     <div style="font-size:1.6rem; font-weight:800; color:#1a2b3c; letter-spacing:-0.5px;">SeedDown</div>
                     <div style="font-size:0.75rem; color:#64748b; margin-top:4px; letter-spacing:0.05em;">SMART FARM MANAGEMENT</div>
                 </div>
 
-                <!-- MODE SELECTOR -->
                 <div style="margin-bottom:24px;">
                     <div style="font-size:0.65rem; font-weight:700; color:#64748b; letter-spacing:0.1em; margin-bottom:10px;">SELECT FARMING MODE</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
@@ -53,10 +53,8 @@ export function render() {
                     </div>
                 </div>
 
-                <!-- LOGIN CARD -->
                 <div style="background:white; border-radius:20px; padding:24px; box-shadow:0 4px 24px rgba(0,0,0,0.07); border:1px solid #e2e8f0;">
 
-                    <!-- TAB -->
                     <div style="display:flex; background:#f1f5f9; border-radius:10px; padding:3px; margin-bottom:20px;">
                         <button id="tabLogin" style="
                             flex:1; padding:8px; border:none; border-radius:8px;
@@ -71,7 +69,6 @@ export function render() {
                         ">Register</button>
                     </div>
 
-                    <!-- EMAIL -->
                     <div style="margin-bottom:12px;">
                         <label style="font-size:0.7rem; font-weight:700; color:#374151; display:block; margin-bottom:6px;">Email</label>
                         <input type="email" id="loginEmail" placeholder="farmer@email.com" style="
@@ -82,7 +79,6 @@ export function render() {
                         " onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
                     </div>
 
-                    <!-- PASSWORD -->
                     <div style="margin-bottom:8px; position:relative;">
                         <label style="font-size:0.7rem; font-weight:700; color:#374151; display:block; margin-bottom:6px;">Password</label>
                         <input type="password" id="loginPassword" placeholder="••••••••" style="
@@ -98,7 +94,6 @@ export function render() {
                         ">👁</button>
                     </div>
 
-                    <!-- FORGOT (sign in only) -->
                     <div id="forgotRow" style="text-align:right; margin-bottom:16px;">
                         <button id="forgotBtn" style="
                             background:none; border:none; font-size:0.7rem;
@@ -106,25 +101,31 @@ export function render() {
                         ">Forgot password?</button>
                     </div>
 
-                    <!-- CONFIRM PASSWORD (register only) -->
                     <div id="confirmRow" style="display:none; margin-bottom:16px;">
-                        <label style="font-size:0.7rem; font-weight:700; color:#374151; display:block; margin-bottom:6px;">Confirm Password</label>
-                        <input type="password" id="loginConfirm" placeholder="••••••••" style="
-                            width:100%; padding:11px 14px; border-radius:10px;
-                            border:1.5px solid #e2e8f0; font-size:0.85rem;
-                            outline:none; font-family:inherit; color:#1a2b3c;
-                            box-sizing:border-box; transition:border-color 0.15s;
-                        " onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+                        <div style="margin-bottom:12px;">
+                            <label style="font-size:0.7rem; font-weight:700; color:#374151; display:block; margin-bottom:6px;">Confirm Password</label>
+                            <input type="password" id="loginConfirm" placeholder="••••••••" style="
+                                width:100%; padding:11px 14px; border-radius:10px;
+                                border:1.5px solid #e2e8f0; font-size:0.85rem;
+                                outline:none; font-family:inherit; color:#1a2b3c;
+                                box-sizing:border-box; transition:border-color 0.15s;
+                            " onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+                        </div>
+                        
+                        <div style="display:flex; align-items:flex-start; gap:8px; margin-top:14px; padding:8px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0;">
+                            <input type="checkbox" id="tncCheckbox" style="margin-top:2px; accent-color:#2563eb; cursor:pointer;">
+                            <label for="tncCheckbox" style="font-size:0.7rem; color:#475569; line-height:1.4; cursor:pointer;">
+                                I agree to the <span style="color:#2563eb; font-weight:600; text-decoration:underline;">Terms & Conditions</span> and <span style="color:#2563eb; font-weight:600; text-decoration:underline;">Privacy Policy</span>. I consent to the collection and use of my farm data for AI analysis.
+                            </label>
+                        </div>
                     </div>
 
-                    <!-- ERROR -->
                     <div id="loginError" style="
                         display:none; background:#fef2f2; border:1px solid #fecaca;
                         border-radius:8px; padding:10px 12px; margin-bottom:12px;
                         font-size:0.75rem; color:#dc2626;
                     "></div>
 
-                    <!-- MAIN BUTTON -->
                     <button id="loginBtn" style="
                         width:100%; padding:13px; border:none; border-radius:12px;
                         background:linear-gradient(135deg, #2563eb, #1d4ed8);
@@ -133,7 +134,12 @@ export function render() {
                         transition:opacity 0.2s; margin-bottom:12px;
                     ">Sign In →</button>
 
-                    <!-- GUEST BUTTON -->
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+                        <div style="flex:1; height:1px; background:#e2e8f0;"></div>
+                        <span style="font-size:0.7rem; color:#94a3b8;">or</span>
+                        <div style="flex:1; height:1px; background:#e2e8f0;"></div>
+                    </div>
+
                     <button id="guestBtn" style="
                         width:100%; padding:11px; border:1.5px dashed #cbd5e1;
                         border-radius:12px; background:transparent; cursor:pointer;
@@ -224,10 +230,15 @@ function _bindEvents() {
         const email    = document.getElementById('loginEmail').value.trim();
         const password = document.getElementById('loginPassword').value;
         const confirm  = document.getElementById('loginConfirm')?.value;
+        const tncCheck = document.getElementById('tncCheckbox')?.checked;
 
         if (!email || !password)               { _showError('Please fill in all fields.'); return; }
-        if (isRegister && password !== confirm) { _showError('Passwords do not match.'); return; }
-        if (password.length < 6)               { _showError('Password must be at least 6 characters.'); return; }
+        
+        if (isRegister) {
+            if (password !== confirm)          { _showError('Passwords do not match.'); return; }
+            if (password.length < 6)           { _showError('Password must be at least 6 characters.'); return; }
+            if (!tncCheck)                     { _showError('You must agree to the Terms & Conditions.'); return; }
+        }
 
         _setLoading(true);
         _clearError();
@@ -240,7 +251,7 @@ function _bindEvents() {
             } else {
                 await auth.signInWithEmailAndPassword(email, password);
             }
-            await _onLoginSuccess(selectedMode, auth.currentUser);
+            await _onLoginSuccess(selectedMode, auth.currentUser, false);
         } catch (err) {
             _showError(_friendlyError(err.code));
         } finally {
@@ -248,38 +259,68 @@ function _bindEvents() {
         }
     });
 
-    document.getElementById('guestBtn').addEventListener('click', () => {
-        AppState.mode      = selectedMode;
-        AppState.userEmail = 'guest@demo.com';
-        AppState.userName  = 'Guest';
-        AppState.isGuest   = true;
-        AppState.uid       = null;
-        showToast('info', '👀 Viewing as Guest — data is simulated');
-        showScreen('farmlist');
+    /* ── Guest — prompts for password, then silently signs into demo@seeddown.com ── */
+    document.getElementById('guestBtn').addEventListener('click', async () => {
+        _clearError();
+        
+        const guestInput = prompt('Enter Demo Access Code to continue as Guest:');
+        
+        // Check if user clicked Cancel or left it blank
+        if (guestInput === null) return; 
+        
+        if (guestInput !== GUEST_PASSWORD) {
+            _showError('Incorrect Demo Access Code.');
+            return;
+        }
+
+        _setLoading(true);
+        
+        try {
+            const auth = await _initFirebase();
+            await auth.signInWithEmailAndPassword(GUEST_EMAIL, GUEST_PASSWORD);
+            await _onLoginSuccess(selectedMode, auth.currentUser, true);
+        } catch (err) {
+            // If demo account doesn't exist yet, create it
+            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+                try {
+                    const auth2 = await _initFirebase();
+                    await auth2.createUserWithEmailAndPassword(GUEST_EMAIL, GUEST_PASSWORD);
+                    await _onLoginSuccess(selectedMode, auth2.currentUser, true);
+                } catch (createErr) {
+                    console.warn('[LoginPage] Guest account creation failed:', createErr);
+                    showToast('error', 'Demo mode unavailable. Please sign in.');
+                }
+            } else {
+                showToast('error', 'Could not load demo. Please try again.');
+                console.warn('[LoginPage] Guest login error:', err);
+            }
+        } finally {
+            _setLoading(false);
+        }
     });
 }
 
 /* ── ON LOGIN SUCCESS — load Firestore data into localStorage ── */
-async function _onLoginSuccess(mode, user) {
+async function _onLoginSuccess(mode, user, isGuest) {
     AppState.mode      = mode;
-    AppState.isGuest   = false;
+    AppState.isGuest   = isGuest;
     AppState.uid       = user.uid;
     AppState.userEmail = user.email || '';
-    AppState.userName  = user.displayName || user.email?.split('@')[0] || 'Farmer';
+    AppState.userName  = isGuest
+        ? 'Guest'
+        : (user.displayName || user.email?.split('@')[0] || 'Farmer');
 
-    // Load user data from Firestore → write into localStorage
+    // Load all user data from Firestore → write into localStorage
     try {
+        const { loadUserData } = await import('../utils/firebase.js');
         const data = await loadUserData(user.uid);
         if (data) {
-            // Restore farms
             if (data.farms?.length) {
                 localStorage.setItem('user_farms', JSON.stringify(data.farms));
             }
-            // Restore global profile
             if (data.globalProfile) {
                 localStorage.setItem('farm_profile', JSON.stringify(data.globalProfile));
             }
-            // Restore per-farm profiles
             if (data.farmProfiles) {
                 Object.entries(data.farmProfiles).forEach(([farmId, profile]) => {
                     localStorage.setItem(`farm_profile_${farmId}`, JSON.stringify(profile));
@@ -290,7 +331,8 @@ async function _onLoginSuccess(mode, user) {
         console.warn('[LoginPage] Could not load Firestore data:', e);
     }
 
-    showToast('success', `👋 Welcome, ${AppState.userName}!`);
+    const greeting = isGuest ? '👀 Welcome, Guest!' : `👋 Welcome, ${AppState.userName}!`;
+    showToast('success', greeting);
     showScreen('farmlist');
 }
 

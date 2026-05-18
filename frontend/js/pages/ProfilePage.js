@@ -1,6 +1,8 @@
 /* ============================================================
    MODULE: PROFILE PAGE
-   ProfilePage.js — User profile + interval + automation settings
+   ProfilePage.js — User profile + sensor interval + notifications
+   Automation toggles (autoWater, ecoMode) removed — set in BuildFarmPage.
+   Notifications: real browser push via Notification API.
    ============================================================ */
 
 import { showScreen } from '../utils/navigation.js';
@@ -9,15 +11,15 @@ import { AppState } from '../store.js';
 import { saveFarmsToFirestore, saveFarmProfileToFirestore, saveGlobalProfileToFirestore } from '../utils/firebase.js';
 
 const PROFILE_KEY = 'farm_profile';
-const FARMS_KEY = 'user_farms';
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+const FARMS_KEY   = 'user_farms';
+const API_BASE    = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
     : window.location.origin;
 
-function farmProfileKey(farmId) {
-    return `farm_profile_${farmId}`;
-}
+/* ── PER-FARM KEY ── */
+function farmProfileKey(farmId) { return `farm_profile_${farmId}`; }
 
+/* ── LOAD / SAVE ── */
 function loadProfile(farmId) {
     try {
         if (farmId) {
@@ -26,9 +28,7 @@ function loadProfile(farmId) {
         }
         const saved = localStorage.getItem(PROFILE_KEY);
         return saved ? JSON.parse(saved) : null;
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
 function saveProfile(data, farmId) {
@@ -40,34 +40,42 @@ function saveProfile(data, farmId) {
 
 function getDefaultProfile() {
     return {
-        name: 'UTM Farmer',
-        email: 'farmer@seeddown.com',
-        farmName: AppState.farmName || 'Farm 1 - Rack Alpha',
-        deviceId: 'farm_001',
+        name:                  'UTM Farmer',
+        email:                 'farmer@seeddown.com',
+        farmName:              AppState.farmName || 'Farm 1 - Rack Alpha',
+        deviceId:              'farm_001',
         sensorIntervalMinutes: 60,
-        soilDryThreshold: 1800,
-        phMin: 5.5,
-        phMax: 6.5,
-        lightThreshold: 1500,
-        wateringDuration: 10,
-        notifications: true,
-        autoWater: true,
-        ecoMode: false,
+        soilDryThreshold:      1800,
+        phMin:                 5.5,
+        phMax:                 6.5,
+        lightThreshold:        1500,
+        wateringDuration:      10,
+        notifications:         true,  // only toggle kept
     };
 }
 
+/* ══════════════════════════════════════════════
+   RENDER
+══════════════════════════════════════════════ */
 export function render() {
-    const container = document.getElementById('screenContainer');
+    const container  = document.getElementById('screenContainer');
     const savedFarms = loadSavedFarms();
 
     if (!AppState.currentFarmId && savedFarms.length > 0) {
         AppState.currentFarmId = savedFarms[0].id;
-        AppState.currentFarm = savedFarms[0];
-        AppState.farmName = savedFarms[0].name;
+        AppState.currentFarm   = savedFarms[0];
+        AppState.farmName      = savedFarms[0].name;
     }
 
-    const profile = { ...getDefaultProfile(), ...(loadProfile(AppState.currentFarmId) || {}) };
+    const profile      = { ...getDefaultProfile(), ...(loadProfile(AppState.currentFarmId) || {}) };
     const isCommercial = AppState.mode === 'commercial';
+
+    // Reflect real browser notification permission in the toggle
+    const notifPermission  = ('Notification' in window) ? Notification.permission : 'default';
+    const notifGranted     = notifPermission === 'granted';
+    const notifBlocked     = notifPermission === 'denied';
+    // If browser blocked, show disabled toggle regardless of saved pref
+    const notifChecked     = notifBlocked ? false : (profile.notifications && notifGranted ? true : profile.notifications);
 
     container.innerHTML = `
         <div class="screen active" id="profileScreen">
@@ -84,11 +92,12 @@ export function render() {
             </div>
 
             <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;">
-                ${farmSelectorSection(savedFarms)}
-                ${profileCard(profile, isCommercial)}
-                ${isCommercial ? farmIdentitySection(profile) : hiddenIdentityFields(profile)}
-                ${intervalSection(profile)}
-                ${automationSection(profile)}
+
+                ${_farmSelectorSection(savedFarms)}
+                ${_profileCard(profile, isCommercial)}
+                ${isCommercial ? _farmIdentitySection(profile) : _hiddenIdentityFields(profile)}
+                ${_intervalSection(profile)}
+                ${_notificationSection(notifChecked, notifBlocked)}
 
                 <button id="profileSyncBtn" style="width:100%;padding:14px;border:none;border-radius:var(--radius);background:var(--accent-l);color:var(--accent);flex-shrink:0;font-weight:700;font-size:0.9rem;cursor:pointer;transition:var(--transition);display:flex;align-items:center;justify-content:center;gap:8px;">
                     <span id="syncBtnIcon">☁️</span> Sync Profile Settings to Device
@@ -104,20 +113,69 @@ export function render() {
         </div>
     `;
 
-    bindEvents(savedFarms);
+    _bindEvents(savedFarms);
 }
 
-function bindEvents(savedFarms) {
+/* ── NOTIFICATION SECTION with real browser push UI ── */
+function _notificationSection(checked, blocked) {
+    const statusText = blocked
+        ? '⚠️ Blocked by browser — enable in site settings'
+        : checked
+            ? '✅ Active — you will receive farm alerts'
+            : '🔕 Off — enable to get anomaly & harvest alerts';
+
+    const statusColor = blocked ? '#dc2626' : checked ? '#16a34a' : '#64748b';
+
+    return `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
+            <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">🔔 NOTIFICATIONS</div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+                <div>
+                    <div style="font-size:0.85rem;font-weight:600;color:var(--text);">Farm Alerts</div>
+                    <div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">Anomaly alerts, harvest reminders, pH warnings</div>
+                    <div style="font-size:0.68rem;color:${statusColor};margin-top:4px;font-weight:600;">${statusText}</div>
+                </div>
+                <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;margin-left:12px;">
+                    <input type="checkbox" id="toggleNotifications" class="auto-toggle"
+                        ${checked ? 'checked' : ''}
+                        ${blocked ? 'disabled' : ''}
+                        style="opacity:0;width:0;height:0;">
+                    <span style="position:absolute;inset:0;background:${checked && !blocked ? 'var(--accent)' : 'var(--border)'};border-radius:100px;cursor:${blocked ? 'not-allowed' : 'pointer'};transition:background 0.2s;opacity:${blocked ? '0.5' : '1'};" id="toggleNotifications_track"></span>
+                    <span style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:transform 0.2s;transform:${checked && !blocked ? 'translateX(20px)' : 'none'};" id="toggleNotifications_thumb"></span>
+                </label>
+            </div>
+
+            ${blocked ? `
+                <div style="margin-top:12px;padding:10px;background:#fef2f2;border-radius:8px;font-size:0.75rem;color:#dc2626;line-height:1.4;">
+                    🚫 Notifications are blocked for this site. To enable:<br>
+                    Click the 🔒 icon in your browser address bar → Site settings → Notifications → Allow
+                </div>
+            ` : ''}
+
+            <button id="testNotifBtn" style="
+                margin-top:12px;width:100%;padding:9px;border:1px solid var(--border);
+                border-radius:10px;background:var(--surface2);color:var(--text);
+                font-size:0.78rem;font-weight:600;cursor:pointer;
+                ${blocked ? 'opacity:0.4;pointer-events:none;' : ''}
+            ">🔔 Send Test Notification</button>
+        </div>`;
+}
+
+/* ══════════════════════════════════════════════
+   BIND EVENTS
+══════════════════════════════════════════════ */
+function _bindEvents(savedFarms) {
     const selector = document.getElementById('farmSelector');
     if (selector) {
         selector.addEventListener('change', (e) => {
-            const selectedId = e.target.value;
+            const selectedId   = e.target.value;
             const selectedFarm = savedFarms.find(f => f.id === selectedId);
             if (!selectedFarm) return;
 
             AppState.currentFarmId = selectedId;
-            AppState.currentFarm = selectedFarm;
-            AppState.farmName = selectedFarm.name;
+            AppState.currentFarm   = selectedFarm;
+            AppState.farmName      = selectedFarm.name;
 
             const farmProfile = {
                 ...getDefaultProfile(),
@@ -125,13 +183,11 @@ function bindEvents(savedFarms) {
                 farmName: selectedFarm.name,
             };
 
-            setInputValue('profileFarmName', farmProfile.farmName);
-            setInputValue('profileDeviceId', farmProfile.deviceId);
-            setInputValue('profileInterval', farmProfile.sensorIntervalMinutes);
-            setText('intervalVal', `${farmProfile.sensorIntervalMinutes} min`);
-            _setToggle('toggleAutoWater', farmProfile.autoWater);
+            _setInputValue('profileFarmName', farmProfile.farmName);
+            _setInputValue('profileDeviceId', farmProfile.deviceId);
+            _setInputValue('profileInterval',  farmProfile.sensorIntervalMinutes);
+            _setText('intervalVal', `${farmProfile.sensorIntervalMinutes} min`);
             _setToggle('toggleNotifications', farmProfile.notifications);
-            _setToggle('toggleEcoMode', farmProfile.ecoMode);
 
             showToast('info', `Switched to ${selectedFarm.name}`);
         });
@@ -154,22 +210,100 @@ function bindEvents(savedFarms) {
 
     _slider('profileInterval', 'intervalVal', v => `${v} min`);
 
-    document.querySelectorAll('.auto-toggle').forEach(cb => {
-        cb.addEventListener('change', () => _setToggle(cb.id, cb.checked));
+    /* ── Notification toggle — requests browser permission ── */
+    const notifToggle = document.getElementById('toggleNotifications');
+    if (notifToggle) {
+        notifToggle.addEventListener('change', async () => {
+            if (notifToggle.checked) {
+                // Request browser permission
+                if ('Notification' in window) {
+                    const perm = await Notification.requestPermission();
+                    if (perm === 'granted') {
+                        _setToggle('toggleNotifications', true);
+                        showToast('success', '🔔 Notifications enabled!');
+                        _scheduleTestNotification();
+                    } else if (perm === 'denied') {
+                        _setToggle('toggleNotifications', false);
+                        showToast('error', '🚫 Notifications blocked — change in browser settings');
+                        notifToggle.disabled = true;
+                        document.getElementById('toggleNotifications_track').style.opacity = '0.5';
+                        document.getElementById('toggleNotifications_track').style.cursor  = 'not-allowed';
+                    } else {
+                        // dismissed
+                        _setToggle('toggleNotifications', false);
+                    }
+                } else {
+                    showToast('error', '⚠️ Your browser does not support notifications');
+                    _setToggle('toggleNotifications', false);
+                }
+            } else {
+                _setToggle('toggleNotifications', false);
+                showToast('info', '🔕 Notifications disabled');
+            }
+        });
+    }
+
+    /* ── Test notification button ── */
+    _on('testNotifBtn', 'click', async () => {
+        if (!('Notification' in window)) {
+            showToast('error', 'Notifications not supported'); return;
+        }
+        if (Notification.permission !== 'granted') {
+            const perm = await Notification.requestPermission();
+            if (perm !== 'granted') {
+                showToast('error', '🚫 Permission denied'); return;
+            }
+            _setToggle('toggleNotifications', true);
+        }
+        _fireNotification(
+            '🌱 SeedDown Test Alert',
+            `Farm "${AppState.farmName}" notifications are working!`,
+            '✅'
+        );
+        showToast('success', '🔔 Test notification sent!');
     });
 
     _on('profileSaveBtn', 'click', _doSave);
     _on('profileSyncBtn', 'click', _doSync);
-    _on('profileLogoutBtn', 'click', () => {
-        showToast('info', '👋 Logged out. See you next harvest!');
-        setTimeout(() => showScreen('login'), 800);
-    });
+    _on('profileLogoutBtn', 'click', _doLogout);
 }
 
+/* ── FIRE BROWSER NOTIFICATION ── */
+function _fireNotification(title, body, icon = '🌿') {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+        new Notification(title, {
+            body,
+            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">' + icon + '</text></svg>',
+            badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🌿</text></svg>',
+            tag:   'seeddown-farm-alert',
+        });
+    } catch (e) {
+        console.warn('[ProfilePage] Notification error:', e);
+    }
+}
+
+/* ── Schedule a gentle welcome notification 3 seconds after enabling ── */
+function _scheduleTestNotification() {
+    setTimeout(() => {
+        _fireNotification(
+            '🌿 SeedDown Notifications Active',
+            `You'll now receive alerts for ${AppState.farmName}. Happy farming!`,
+            '🌱'
+        );
+    }, 3000);
+}
+
+/* ── Export notification helper so other pages can fire alerts ── */
+export function sendFarmNotification(title, body) {
+    _fireNotification(title, body);
+}
+
+/* ── SAVE ── */
 function _doSave() {
-    const profile = collectProfileForm();
+    const profile   = _collectForm();
     const currentId = AppState.currentFarmId;
-    const uid = AppState.uid;
+    const uid       = AppState.uid;
 
     saveProfile(profile, currentId);
     AppState.farmName = profile.farmName;
@@ -187,68 +321,78 @@ function _doSave() {
             }
         }
     } catch (e) {
-        console.error('Error updating farm list names:', e);
+        console.error('Error updating farm list:', e);
     }
 
-    showToast('success', '✅ Profile settings saved!');
+    showToast('success', '✅ Profile saved!');
     setTimeout(() => showScreen(AppState.profileFrom || 'home'), 400);
 }
 
+/* ── SYNC TO DEVICE ── */
 async function _doSync() {
-    const profile = collectProfileForm();
+    const profile = _collectForm();
     saveProfile(profile, AppState.currentFarmId);
 
     const icon = document.getElementById('syncBtnIcon');
-    const btn = document.getElementById('profileSyncBtn');
-    btn.disabled = true;
+    const btn  = document.getElementById('profileSyncBtn');
+    btn.disabled     = true;
     icon.textContent = '⏳';
 
     const payload = {
-        deviceId: profile.deviceId || 'farm_001',
+        deviceId:              profile.deviceId || 'farm_001',
         sensorIntervalSeconds: profile.sensorIntervalMinutes * 60,
-        autoWater: profile.autoWater,
-        notifications: profile.notifications,
-        ecoMode: profile.ecoMode,
+        notifications:         profile.notifications,
     };
 
     try {
         const res = await fetch(`${API_BASE}/api/sensors/preferences`, {
-            method: 'PUT',
+            method:  'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body:    JSON.stringify(payload),
         });
-
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         icon.textContent = '✅';
-        showToast('success', '☁️ Profile settings synced to device!');
+        showToast('success', '☁️ Settings synced to device!');
     } catch (err) {
         icon.textContent = '⚠️';
         showToast('error', `Sync failed: ${err.message}. Saved locally.`);
-        console.warn('[ProfilePage] Sync error:', err);
     } finally {
-        setTimeout(() => {
-            icon.textContent = '☁️';
-            btn.disabled = false;
-        }, 2000);
+        setTimeout(() => { icon.textContent = '☁️'; btn.disabled = false; }, 2000);
     }
 }
 
-function collectProfileForm() {
+/* ── LOGOUT ── */
+function _doLogout() {
+    // Sign out of Firebase if available
+    if (window._firebaseReady && typeof firebase !== 'undefined') {
+        try { firebase.auth().signOut(); } catch (e) {}
+    }
+    AppState.uid       = null;
+    AppState.userEmail = '';
+    AppState.userName  = '';
+    AppState.isGuest   = false;
+    showToast('info', '👋 Logged out. See you next harvest!');
+    setTimeout(() => showScreen('login'), 800);
+}
+
+/* ── COLLECT FORM ── */
+function _collectForm() {
     const existing = { ...getDefaultProfile(), ...(loadProfile(AppState.currentFarmId) || {}) };
     return {
         ...existing,
-        name: _val('profileName') || existing.name,
-        email: _val('profileEmail') || existing.email,
-        farmName: _val('profileFarmName') || AppState.farmName || existing.farmName,
-        deviceId: _val('profileDeviceId') || existing.deviceId || 'farm_001',
+        name:                  _val('profileName')     || existing.name,
+        email:                 _val('profileEmail')    || existing.email,
+        farmName:              _val('profileFarmName') || AppState.farmName || existing.farmName,
+        deviceId:              _val('profileDeviceId') || existing.deviceId || 'farm_001',
         sensorIntervalMinutes: parseInt(_val('profileInterval'), 10) || existing.sensorIntervalMinutes || 60,
-        autoWater: document.getElementById('toggleAutoWater')?.checked ?? existing.autoWater ?? true,
-        notifications: document.getElementById('toggleNotifications')?.checked ?? existing.notifications ?? true,
-        ecoMode: document.getElementById('toggleEcoMode')?.checked ?? existing.ecoMode ?? false,
+        notifications:         document.getElementById('toggleNotifications')?.checked ?? existing.notifications ?? true,
     };
 }
 
-function farmSelectorSection(savedFarms) {
+/* ══════════════════════════════════════════════
+   HTML HELPERS
+══════════════════════════════════════════════ */
+function _farmSelectorSection(savedFarms) {
     return `
         <div style="background:var(--accent-l);border:1px solid var(--accent);border-radius:var(--radius);padding:14px;flex-shrink:0;">
             <label style="font-size:0.65rem;font-weight:700;color:var(--accent);display:block;margin-bottom:8px;">EDITING FARM</label>
@@ -259,7 +403,7 @@ function farmSelectorSection(savedFarms) {
         </div>`;
 }
 
-function profileCard(profile, isCommercial) {
+function _profileCard(profile, isCommercial) {
     return `
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px 20px;display:flex;align-items:center;gap:16px;box-shadow:var(--shadow-sm);position:relative;overflow:hidden;flex-shrink:0;">
             <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:var(--accent-s);border-radius:50%;"></div>
@@ -272,48 +416,36 @@ function profileCard(profile, isCommercial) {
         </div>`;
 }
 
-function farmIdentitySection(profile) {
+function _farmIdentitySection(profile) {
     return `
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
             <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">🌿 FARM IDENTITY</div>
-            ${settingInput('Farm Name', 'profileFarmName', profile.farmName, 'text', 'e.g. Rack Alpha - Level 3')}
-            ${settingInput('Device ID', 'profileDeviceId', profile.deviceId, 'text', 'e.g. farm_001')}
+            ${_settingInput('Farm Name', 'profileFarmName', profile.farmName, 'text', 'e.g. Rack Alpha - Level 3')}
+            ${_settingInput('Device ID',  'profileDeviceId',  profile.deviceId,  'text', 'e.g. farm_001')}
         </div>`;
 }
 
-function hiddenIdentityFields(profile) {
+function _hiddenIdentityFields(profile) {
     return `
         <input type="hidden" id="profileFarmName" value="${_escAttr(profile.farmName)}">
-        <input type="hidden" id="profileDeviceId" value="${_escAttr(profile.deviceId)}">
+        <input type="hidden" id="profileDeviceId"  value="${_escAttr(profile.deviceId)}">
     `;
 }
 
-function intervalSection(profile) {
-    return `
-        <div id="profileIntervalCard" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
-            <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">📡 SENSOR INTERVAL</div>
-            <div style="margin-bottom:4px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-                    <label style="font-size:0.8rem;font-weight:600;color:var(--text);">ESP32 report interval</label>
-                    <span id="intervalVal" style="font-size:0.8rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${profile.sensorIntervalMinutes} min</span>
-                </div>
-                <input type="range" id="profileInterval" min="5" max="120" step="5" value="${profile.sensorIntervalMinutes}" style="width:100%;accent-color:var(--accent);">
-                <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--muted);margin-top:2px;"><span>5 min</span><span>120 min</span></div>
-            </div>
-        </div>`;
-}
-
-function automationSection(profile) {
+function _intervalSection(profile) {
     return `
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
-            <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">🤖 AUTOMATION</div>
-            ${toggle('Auto Watering', 'toggleAutoWater', 'Automatically allow pump decisions from IoT thresholds', profile.autoWater)}
-            ${toggle('AI Notifications', 'toggleNotifications', 'Get alerts for anomalies and harvest reminders', profile.notifications)}
-            ${toggle('Eco Mode', 'toggleEcoMode', 'Prioritise energy saving over performance', profile.ecoMode)}
+            <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">📡 SENSOR INTERVAL</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <label style="font-size:0.8rem;font-weight:600;color:var(--text);">ESP32 report interval</label>
+                <span id="intervalVal" style="font-size:0.8rem;font-weight:700;color:var(--accent);font-family:'DM Mono',monospace;">${profile.sensorIntervalMinutes} min</span>
+            </div>
+            <input type="range" id="profileInterval" min="5" max="120" step="5" value="${profile.sensorIntervalMinutes}" style="width:100%;accent-color:var(--accent);">
+            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--muted);margin-top:2px;"><span>5 min</span><span>120 min</span></div>
         </div>`;
 }
 
-function settingInput(label, id, value, type = 'text', placeholder = '') {
+function _settingInput(label, id, value, type = 'text', placeholder = '') {
     return `
         <div style="margin-bottom:14px;">
             <label style="font-size:0.75rem;font-weight:600;color:var(--sub);display:block;margin-bottom:6px;">${label}</label>
@@ -321,61 +453,33 @@ function settingInput(label, id, value, type = 'text', placeholder = '') {
         </div>`;
 }
 
-function toggle(label, id, desc, checked) {
-    return `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
-            <div><div style="font-size:0.85rem;font-weight:600;color:var(--text);">${label}</div><div style="font-size:0.7rem;color:var(--muted);margin-top:2px;">${desc}</div></div>
-            <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;margin-left:12px;">
-                <input type="checkbox" id="${id}" class="auto-toggle" ${checked ? 'checked' : ''} style="opacity:0;width:0;height:0;">
-                <span style="position:absolute;inset:0;background:${checked ? 'var(--accent)' : 'var(--border)'};border-radius:100px;cursor:pointer;transition:background 0.2s;" id="${id}_track"></span>
-                <span style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:transform 0.2s;transform:${checked ? 'translateX(20px)' : 'none'};" id="${id}_thumb"></span>
-            </label>
-        </div>`;
-}
-
+/* ── MICRO HELPERS ── */
 function loadSavedFarms() {
-    try {
-        return JSON.parse(localStorage.getItem(FARMS_KEY)) || [];
-    } catch {
-        return [];
-    }
-}
-
-function setInputValue(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.value = value;
-}
-
-function setText(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
+    try { return JSON.parse(localStorage.getItem(FARMS_KEY)) || []; }
+    catch { return []; }
 }
 
 function _on(id, evt, fn) { document.getElementById(id)?.addEventListener(evt, fn); }
-function _val(id) { return document.getElementById(id)?.value ?? ''; }
-function _esc(s) {
-    return String(s ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-function _escAttr(s) {
-    return _esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-}
+function _val(id)         { return document.getElementById(id)?.value ?? ''; }
+function _esc(s)          { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _escAttr(s)      { return _esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+
+function _setInputValue(id, value) { const el = document.getElementById(id); if (el) el.value = value; }
+function _setText(id, value)       { const el = document.getElementById(id); if (el) el.textContent = value; }
 
 function _slider(sliderId, labelId, fmt) {
     const slider = document.getElementById(sliderId);
-    const label = document.getElementById(labelId);
+    const label  = document.getElementById(labelId);
     if (!slider || !label) return;
     slider.addEventListener('input', () => { label.textContent = fmt(slider.value); });
 }
 
 function _setToggle(id, checked) {
-    const cb = document.getElementById(id);
+    const cb    = document.getElementById(id);
     const track = document.getElementById(`${id}_track`);
     const thumb = document.getElementById(`${id}_thumb`);
     if (!cb || !track || !thumb) return;
-    cb.checked = checked;
+    cb.checked             = checked;
     track.style.background = checked ? 'var(--accent)' : 'var(--border)';
-    thumb.style.transform = checked ? 'translateX(20px)' : 'none';
+    thumb.style.transform  = checked ? 'translateX(20px)' : 'none';
 }
