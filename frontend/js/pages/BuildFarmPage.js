@@ -26,6 +26,7 @@ let generatedThresholds = null;
 let fieldInfo = {
     name: '',
     location: '',
+    description: '',
     targetPlant: '',
     analysisGoal: 'yield',
     rackType: '3-tier',
@@ -56,6 +57,14 @@ const GOAL_OPTIONS = [
     { id: 'fast_harvest', label: 'Fast Harvest' },
     { id: 'cost_efficient', label: 'Cost Efficient' },
     { id: 'beginner_safe', label: 'Beginner Safe' },
+];
+const PACKAGE_QR_OPTIONS = [
+    { id: 'beginner_starter', label: 'Beginner Starter', serial: 'SD-BGN-STR-00101', accountType: 'beginner_starter', packageLevel: 'starter', deviceType: 'beginner', desc: 'basic home sensor kit' },
+    { id: 'beginner_standard', label: 'Beginner Standard', serial: 'SD-BGN-STD-00456', accountType: 'beginner_standard', packageLevel: 'standard', deviceType: 'beginner', desc: 'balanced home vertical farm kit' },
+    { id: 'beginner_pro', label: 'Beginner Pro', serial: 'SD-BGN-PRO-00901', accountType: 'beginner_pro', packageLevel: 'pro', deviceType: 'beginner', desc: 'advanced home kit with more automation' },
+    { id: 'commercial_zone_basic', label: 'Commercial Zone Basic', serial: 'SD-COM-ZNB-01001', accountType: 'commercial_zone_basic', packageLevel: 'zone_basic', deviceType: 'commercial', desc: 'zone sensor node for one grow area' },
+    { id: 'commercial_zone_pro', label: 'Commercial Zone Pro', serial: 'SD-COM-ZNP-02001', accountType: 'commercial_zone_pro', packageLevel: 'zone_pro', deviceType: 'commercial', desc: 'zone node with expanded monitoring' },
+    { id: 'commercial_master', label: 'Commercial Farm Master', serial: 'SD-COM-MST-03001', accountType: 'commercial_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'master node for multi-zone farms' },
 ];
 
 const EMOJI_MAP = {
@@ -93,6 +102,7 @@ export function render() {
     fieldInfo = {
         name: '',
         location: '',
+        description: '',
         targetPlant: '',
         analysisGoal: 'yield',
         rackType: '3-tier',
@@ -198,72 +208,89 @@ function renderDeviceStep(content) {
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
             <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">DEVICE REGISTRY</div>
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">SCAN DEVICE QR</div>
                 <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px;">
-                    Enter the SeedDown device serial. QR scanning can be added later; this uses the same backend device-token flow.
+                    Choose a SeedDown package QR. This simulates scanning the QR code on the physical device box.
                 </div>
-                ${fieldInput('deviceSerialInput', 'Device serial', 'SD-BGN-STD-00456', deviceSetup.serial)}
+                <div id="qrPackageGrid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
+                    ${packageQrCardsHtml()}
+                </div>
+                <div id="deviceStatus" style="margin-top:12px;font-size:12px;color:${registeredDevice ? 'var(--accent)' : 'var(--muted)'};line-height:1.45;">
+                    ${registeredDevice ? `Linked ${escapeHTML(registeredDevice.deviceId)} · ${escapeHTML(registeredDevice.packageLevel)} · ${escapeHTML(registeredDevice.serial || deviceSetup.serial)}` : 'No QR scanned yet.'}
+                </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">WIFI SETUP</div>
                 ${fieldInput('wifiSsidInput', 'WiFi SSID', 'Your WiFi name', deviceSetup.wifiSsid)}
                 <label style="display:block;margin-bottom:10px;">
                     <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">WiFi password</span>
                     <input id="wifiPasswordInput" type="password" value="${escapeHTML(deviceSetup.wifiPassword)}" placeholder="stored only for setup simulation"
                         style="width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;">
                 </label>
-                <label style="display:block;margin-bottom:10px;">
-                    <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">Account package</span>
-                    <select id="accountTypeInput" style="width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;">
-                        ${['beginner_starter','beginner_standard','beginner_pro'].map(type => `<option value="${type}" ${deviceSetup.accountType === type ? 'selected' : ''}>${type.replace(/_/g, ' ')}</option>`).join('')}
-                    </select>
-                </label>
-                <button id="registerDeviceBtn" style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--accent);color:white;font-weight:900;cursor:pointer;">
-                    ${registeredDevice ? 'Device Registered' : 'Register Device'}
-                </button>
-                <div id="deviceStatus" style="margin-top:10px;font-size:12px;color:${registeredDevice ? 'var(--accent)' : 'var(--muted)'};line-height:1.45;">
-                    ${registeredDevice ? `Linked ${escapeHTML(registeredDevice.deviceId)} · ${escapeHTML(registeredDevice.packageLevel)}` : 'Device token will be generated by backend and hidden from normal UI.'}
-                </div>
             </section>
         </div>
     `;
 
-    bindTextInput('deviceSerialInput', value => { deviceSetup.serial = value; registeredDevice = null; });
     bindTextInput('wifiSsidInput', value => { deviceSetup.wifiSsid = value; registeredDevice = null; });
     bindTextInput('wifiPasswordInput', value => { deviceSetup.wifiPassword = value; registeredDevice = null; });
-    document.getElementById('accountTypeInput').addEventListener('change', event => {
-        deviceSetup.accountType = event.target.value;
-        registeredDevice = null;
+    document.querySelectorAll('.qr-package-card').forEach(button => {
+        button.addEventListener('click', () => scanPackageQr(button.dataset.packageId));
     });
-    document.getElementById('registerDeviceBtn').addEventListener('click', registerDeviceFromStep);
+}
+
+function packageQrCardsHtml() {
+    return PACKAGE_QR_OPTIONS.map(option => {
+        const selected = deviceSetup.serial === option.serial || registeredDevice?.serial === option.serial;
+        return `
+            <button class="qr-package-card" data-package-id="${option.id}" type="button"
+                style="border:1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'};background:${selected ? 'var(--accent-l)' : 'var(--surface2)'};border-radius:14px;padding:10px;text-align:left;cursor:pointer;color:var(--text);display:grid;grid-template-columns:74px 1fr;gap:10px;align-items:center;min-height:96px;">
+                <span aria-hidden="true" style="width:72px;height:72px;border-radius:10px;background:#fff;border:1px solid var(--border);padding:6px;display:grid;grid-template-columns:repeat(7,1fr);gap:2px;box-sizing:border-box;">
+                    ${fakeQrGrid(option.serial)}
+                </span>
+                <span style="min-width:0;display:block;">
+                    <strong style="display:block;font-size:12px;line-height:1.2;color:${selected ? 'var(--accent)' : 'var(--text)'};">${escapeHTML(option.label)}</strong>
+                    <span style="display:block;font-size:10px;color:var(--muted);margin-top:4px;line-height:1.25;">${escapeHTML(option.desc)}</span>
+                    <span style="display:block;font-size:9px;color:var(--sub);font-weight:800;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(option.serial)}</span>
+                </span>
+            </button>
+        `;
+    }).join('');
+}
+
+function fakeQrGrid(serial) {
+    const seed = String(serial).split('').reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 3), 0);
+    return Array.from({ length: 49 }, (_, index) => {
+        const row = Math.floor(index / 7);
+        const col = index % 7;
+        const isFinder = (row < 2 && col < 2) || (row < 2 && col > 4) || (row > 4 && col < 2);
+        const filled = isFinder || ((seed + index * 17 + row * 11 + col * 7) % 5 < 2);
+        return `<i style="display:block;border-radius:1px;background:${filled ? '#111827' : '#ffffff'};"></i>`;
+    }).join('');
+}
+
+async function scanPackageQr(packageId) {
+    const option = PACKAGE_QR_OPTIONS.find(item => item.id === packageId) || PACKAGE_QR_OPTIONS[1];
+    deviceSetup.serial = option.serial;
+    deviceSetup.accountType = option.accountType;
+    registeredDevice = null;
+    showToast('info', `Scanned ${option.label} QR`);
+    await registerDeviceFromStep(option);
 }
 function renderStep1(content) {
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
             <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">FIELD SETUP</div>
-                ${fieldInput('fieldNameInput', 'Field name', 'e.g. Balcony Mint Trial', fieldInfo.name)}
-                ${fieldInput('fieldLocationInput', 'Location / zone', 'e.g. Rack A, balcony, lab corner', fieldInfo.location)}
-                ${fieldInput('targetPlantInput', 'Plants for analysis', 'e.g. basil, lettuce, tomato', fieldInfo.targetPlant)}
-                ${plantTargetSummary()}
-            </section>
-
-            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">ANALYSIS GOAL</div>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-                    ${ANALYSIS_GOALS.map(goal => `
-                        <button class="analysis-goal" data-id="${goal.id}"
-                            style="padding:10px 8px;border-radius:10px;border:1.5px solid ${fieldInfo.analysisGoal === goal.id ? 'var(--accent)' : 'var(--border)'};
-                                   background:${fieldInfo.analysisGoal === goal.id ? 'var(--accent-l)' : 'var(--surface2)'};
-                                   color:${fieldInfo.analysisGoal === goal.id ? 'var(--accent)' : 'var(--text)'};
-                                   font-size:12px;font-weight:800;cursor:pointer;">
-                            ${goal.label}
-                        </button>
-                    `).join('')}
-                </div>
-            </section>
-
-            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">VERTICAL STRUCTURE</div>
-                <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${RACK_OPTIONS.map(rack => rackOption(rack)).join('')}
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">FIELD INFO</div>
+                ${fieldInput('fieldNameInput', 'Field name', 'e.g. Balcony Trial A', fieldInfo.name)}
+                ${fieldInput('fieldLocationInput', 'Location / zone', 'e.g. Balcony, Lab Corner, Zone A', fieldInfo.location)}
+                <label style="display:block;margin-bottom:10px;">
+                    <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">Description</span>
+                    <textarea id="fieldDescriptionInput" placeholder="Optional notes about this field"
+                        style="width:100%;min-height:92px;resize:vertical;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;line-height:1.4;">${escapeHTML(fieldInfo.description)}</textarea>
+                </label>
+                <div style="font-size:12px;color:var(--muted);line-height:1.45;">
+                    Plant analysis, crop goals, and device thresholds are handled in the next steps after photo scanning.
                 </div>
             </section>
         </div>
@@ -271,27 +298,8 @@ function renderStep1(content) {
 
     bindTextInput('fieldNameInput', value => { fieldInfo.name = value; });
     bindTextInput('fieldLocationInput', value => { fieldInfo.location = value; });
-    bindTextInput('targetPlantInput', value => {
-        fieldInfo.targetPlant = value;
-        syncTargetPlants(value);
-        renderTargetPlantChips();
-    });
-
-    document.querySelectorAll('.analysis-goal').forEach(button => {
-        button.addEventListener('click', () => {
-            fieldInfo.analysisGoal = button.dataset.id;
-            renderStep1(content);
-        });
-    });
-
-    document.querySelectorAll('.rack-opt').forEach(option => {
-        option.addEventListener('click', () => {
-            fieldInfo.rackType = option.dataset.id;
-            renderStep1(content);
-        });
-    });
+    bindTextInput('fieldDescriptionInput', value => { fieldInfo.description = value; });
 }
-
 function fieldInput(id, label, placeholder, value) {
     return `
         <label style="display:block;margin-bottom:10px;">
@@ -540,7 +548,7 @@ async function scanPlantsFromPhoto() {
 function renderStep3(content) {
     const rack = currentRack();
     const totalUsed = totalSlotsUsed();
-    const targetPlant = fieldInfo.targetPlant.trim() || detectedPlants[0]?.name || 'Plant';
+    const targetPlant = detectedPlants[0]?.name || 'Field';
 
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
@@ -1001,7 +1009,7 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 function renderThresholdStep(content) {
-    const plants = detectedPlants.length ? detectedPlants : parseTargetPlants(fieldInfo.targetPlant).map(name => plantFromName(name, 3, 0, 'target'));
+    const plants = detectedPlants.length ? detectedPlants : [];
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
             <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
@@ -1077,7 +1085,7 @@ function bindThresholdInputs() {
     });
 }
 
-async function registerDeviceFromStep() {
+async function registerDeviceFromStep(scannedPackage = null) {
     if (!deviceSetup.serial.trim()) {
         showToast('warning', 'Enter device serial');
         return null;
@@ -1116,6 +1124,28 @@ async function registerDeviceFromStep() {
     }
 }
 
+function buildLocalDemoDevice(option = null) {
+    const selected = option || PACKAGE_QR_OPTIONS.find(item => item.serial === deviceSetup.serial) || PACKAGE_QR_OPTIONS[1];
+    const suffix = selected.serial.split('-').pop() || String(Date.now()).slice(-5);
+    return {
+        deviceId: `dev_${selected.deviceType}_${selected.packageLevel}_${suffix}`.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+        deviceToken: `demo_token_${suffix}`,
+        serial: selected.serial,
+        deviceType: selected.deviceType,
+        packageLevel: selected.packageLevel,
+        fieldId: `field_${Date.now()}`,
+        farmId: AppState.currentFarmId || 'farm_001',
+        isDemoFallback: true,
+    };
+}
+
+async function safeJson(response) {
+    try {
+        return await response.json();
+    } catch (error) {
+        return {};
+    }
+}
 async function generateThresholdsForField() {
     const button = document.getElementById('generateThresholdsBtn') || document.getElementById('bfNext');
     if (button) {
@@ -1123,7 +1153,7 @@ async function generateThresholdsForField() {
         button.textContent = 'Generating...';
     }
 
-    const plants = (detectedPlants.length ? detectedPlants : parseTargetPlants(fieldInfo.targetPlant).map(name => plantFromName(name, 3, 0, 'target')))
+    const plants = (detectedPlants.length ? detectedPlants : [])
         .map((plant, index) => ({ tier: Math.floor(index / (currentRack().slotsPerTier || 3)) + 1, plant_type: plant.species || plant.name }));
 
     try {
@@ -1165,11 +1195,6 @@ async function handleNext() {
             showToast('warning', 'Enter a field name');
             return;
         }
-        if (parseTargetPlants(fieldInfo.targetPlant).length === 0) {
-            showToast('warning', 'Enter at least one plant for analysis');
-            return;
-        }
-        syncTargetPlants(fieldInfo.targetPlant);
         step = 3;
         drawStep();
         return;
@@ -1179,9 +1204,6 @@ async function handleNext() {
         if (!photoData) {
             showToast('warning', 'Add a field photo before generating 3D');
             return;
-        }
-        if (detectedPlants.length === 0) {
-            syncTargetPlants(fieldInfo.targetPlant || 'Plant');
         }
         step = 4;
         drawStep();
@@ -1236,14 +1258,15 @@ async function createField() {
     }
 
     const rack = currentRack();
-    const fieldId = registeredDevice?.fieldId || ield_;
+    const fieldId = registeredDevice?.fieldId || `field_${Date.now()}`;
     const thresholds = generatedThresholds?.thresholds || {};
     const payload = {
         name: fieldInfo.name.trim(),
         location: fieldInfo.location.trim(),
+        description: fieldInfo.description.trim(),
         rackType: fieldInfo.rackType,
-        targetPlant: fieldInfo.targetPlant.trim(),
-        analysisGoal: fieldInfo.analysisGoal,
+        targetPlant: detectedPlants.map(plant => plant.name).join(', '),
+        analysisGoal: goalPriority.join(','),
         viewMode,
         photoPreview: photoData?.dataUrl || null,
         plants: detectedPlants,
@@ -1282,6 +1305,7 @@ async function createField() {
         id: fieldId,
         name: payload.name,
         location: payload.location,
+        description: payload.description,
         zone: fieldInfo.location.trim() || String.fromCharCode(65 + (saved.length % 26)),
         rackTypeId: fieldInfo.rackType,
         rackType: rack.label,
@@ -1452,6 +1476,10 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+
+
+
 
 
 
