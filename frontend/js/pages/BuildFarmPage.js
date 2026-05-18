@@ -6,7 +6,7 @@
 import { AppState } from '../store.js';
 import { saveFarmsToFirestore } from '../utils/firebase.js';
 import { showToast } from '../utils/toast.js';
-import { scanPlantsWithFirebaseAI } from '../services/firebaseAiLogic.js';
+import jsQR from 'jsqr';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
@@ -20,14 +20,39 @@ let photoData = null;
 let viewMode = 'realistic';
 let threeCleanup = null;
 let scanStarted = false;
+let deviceSetup = { serial: 'SD-BGN-STD-00456', wifiSsid: '', wifiPassword: '', accountType: 'beginner_standard' };
+let registeredDevice = null;
+let goalPriority = ['beginner_safe'];
+let generatedThresholds = null;
 let fieldInfo = {
     name: '',
     location: '',
+    description: '',
     targetPlant: '',
     analysisGoal: 'yield',
     rackType: '3-tier',
 };
 let detectedPlants = [];
+let commercialStructure = null;
+let commercialGoals = ['maximum_yield'];
+let commercialZoneThresholds = {};
+let commercialDeviceAssignments = [];
+let commercialPendingDevice = null;
+
+const COMMERCIAL_GOAL_OPTIONS = [
+    { id: 'maximum_yield', label: 'Maximum Yield' },
+    { id: 'profit_optimisation', label: 'Profit Optimisation' },
+    { id: 'crop_safety_first', label: 'Crop Safety First' },
+    { id: 'research_testing', label: 'Research & Testing' },
+    { id: 'automation_first', label: 'Automation First' },
+    { id: 'compliance_audit', label: 'Compliance & Audit' },
+];
+
+const DEFAULT_COMMERCIAL_ZONES = [
+    { zone_id: 'zone_A', name: 'Zone A', recommended_type: 'zone_pro', crop: 'Tomato / Chili / Basil', plants: ['tomato', 'chili', 'basil'], confidence: 0.88, notes: 'High-value crop area detected' },
+    { zone_id: 'zone_B', name: 'Zone B', recommended_type: 'zone_basic', crop: 'Lettuce', plants: ['lettuce'], confidence: 0.82, notes: 'Leafy green rack area detected' },
+    { zone_id: 'zone_C', name: 'Zone C', recommended_type: 'zone_basic', crop: 'Spinach', plants: ['spinach'], confidence: 0.79, notes: 'Standard greens area detected' },
+];
 
 const RACK_OPTIONS = [
     { id: '2-tier', label: '2-Tier Starter Rack', icon: 'II', tiers: 2, slotsPerTier: 3, total: 6, shape: 'rack', desc: 'compact shelf for desk or balcony trials' },
@@ -44,6 +69,23 @@ const ANALYSIS_GOALS = [
     { id: 'yield', label: 'Yield' },
     { id: 'health', label: 'Health' },
     { id: 'space', label: 'Space fit' },
+];
+
+const GOAL_OPTIONS = [
+    { id: 'healthy_growth', label: 'Healthy Growth' },
+    { id: 'eco_save', label: 'Eco Save' },
+    { id: 'low_maintenance', label: 'Low Maintenance' },
+    { id: 'fast_harvest', label: 'Fast Harvest' },
+    { id: 'cost_efficient', label: 'Cost Efficient' },
+    { id: 'beginner_safe', label: 'Beginner Safe' },
+];
+const PACKAGE_QR_OPTIONS = [
+    { id: 'beginner_starter', label: 'Beginner Starter', serial: 'SD-BGN-STR-00101', accountType: 'beginner_starter', packageLevel: 'starter', deviceType: 'beginner', desc: 'basic home sensor kit' },
+    { id: 'beginner_standard', label: 'Beginner Standard', serial: 'SD-BGN-STD-00456', accountType: 'beginner_standard', packageLevel: 'standard', deviceType: 'beginner', desc: 'balanced home vertical farm kit' },
+    { id: 'beginner_pro', label: 'Beginner Pro', serial: 'SD-BGN-PRO-00901', accountType: 'beginner_pro', packageLevel: 'pro', deviceType: 'beginner', desc: 'advanced home kit with more automation' },
+    { id: 'commercial_zone_basic', label: 'Commercial Zone Basic', serial: 'SD-COM-ZNB-01001', accountType: 'commercial_zone_basic', packageLevel: 'zone_basic', deviceType: 'commercial', desc: 'zone sensor node for one grow area' },
+    { id: 'commercial_zone_pro', label: 'Commercial Zone Pro', serial: 'SD-COM-ZNP-02001', accountType: 'commercial_zone_pro', packageLevel: 'zone_pro', deviceType: 'commercial', desc: 'zone node with expanded monitoring' },
+    { id: 'commercial_master', label: 'Commercial Farm Master', serial: 'SD-COM-MST-03001', accountType: 'commercial_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'master node for multi-zone farms' },
 ];
 
 const EMOJI_MAP = {
@@ -74,14 +116,26 @@ export function render() {
     photoData = null;
     viewMode = 'realistic';
     scanStarted = false;
+    deviceSetup = isCommercialFlow()
+        ? { serial: 'SD-COM-MST-03001', wifiSsid: '', wifiPassword: '', accountType: 'commercial_master' }
+        : { serial: 'SD-BGN-STD-00456', wifiSsid: '', wifiPassword: '', accountType: 'beginner_standard' };
+    registeredDevice = null;
+    goalPriority = isCommercialFlow() ? ['maximum_yield'] : ['beginner_safe'];
+    generatedThresholds = null;
     fieldInfo = {
         name: '',
         location: '',
+        description: '',
         targetPlant: '',
         analysisGoal: 'yield',
         rackType: '3-tier',
     };
     detectedPlants = [];
+    commercialStructure = null;
+    commercialGoals = ['maximum_yield'];
+    commercialZoneThresholds = {};
+    commercialDeviceAssignments = [];
+    commercialPendingDevice = null;
     dispose3D();
 
     const container = document.getElementById('screenContainer');
@@ -92,8 +146,8 @@ export function render() {
                 <button id="bfBack" aria-label="Back"
                     style="background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;color:var(--text);line-height:1;">←</button>
                 <div>
-                    <div style="font-weight:800;font-size:16px;">New Field</div>
-                    <div style="font-size:11px;color:var(--muted);margin-top:1px;">analysis photo to 3D vertical preview</div>
+                    <div style="font-weight:800;font-size:16px;">${isCommercialFlow() ? 'New Commercial Farm' : 'New Field'}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:1px;">${isCommercialFlow() ? 'AI zoning to device assignment and launch' : 'device setup to AI thresholds and 3D preview'}</div>
                 </div>
                 <div style="width:40px;"></div>
             </div>
@@ -120,6 +174,11 @@ export function render() {
 }
 
 function drawStep() {
+    if (isCommercialFlow()) {
+        drawCommercialStep();
+        return;
+    }
+
     renderStepDots();
     const content = document.getElementById('bfContent');
     const cancelBtn = document.getElementById('bfCancel');
@@ -129,36 +188,90 @@ function drawStep() {
     dispose3D();
 
     if (step === 1) {
-        renderStep1(content);
+        renderDeviceStep(content);
         cancelBtn.textContent = 'Cancel';
-        btn.textContent = 'Next: Add Photo';
+        btn.textContent = registeredDevice ? 'Next: Field Info' : 'Scan QR';
     }
     if (step === 2) {
-        renderStep2(content);
-        cancelBtn.textContent = 'Exit';
-        btn.textContent = 'Generate 3D Preview';
+        renderStep1(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = 'Next: Add Photo';
     }
     if (step === 3) {
+        renderStep2(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = 'Next: AI Thresholds';
+    }
+    if (step === 4) {
+        renderThresholdStep(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = generatedThresholds ? 'Next: 3D Preview' : 'Generate Thresholds';
+    }
+    if (step === 5) {
         renderStep3(content);
         cancelBtn.textContent = 'Preview Only';
         btn.textContent = 'Create Field';
     }
 }
+
+function drawCommercialStep() {
+    renderStepDots();
+    const content = document.getElementById('bfContent');
+    const cancelBtn = document.getElementById('bfCancel');
+    const btn = document.getElementById('bfNext');
+
+    content.innerHTML = '';
+    dispose3D();
+
+    if (step === 1) {
+        renderCommercialFarmInfoStep(content);
+        cancelBtn.textContent = 'Cancel';
+        btn.textContent = 'Next: Analyze Farm';
+    }
+    if (step === 2) {
+        renderCommercialPhotoZoneStep(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = commercialStructure ? 'Confirm Structure' : 'Analyze Zones';
+    }
+    if (step === 3) {
+        renderCommercialGoalStep(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = 'Next: Zone Thresholds';
+    }
+    if (step === 4) {
+        renderCommercialZoneThresholdStep(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = commercialThresholdsReady() ? 'Next: Assign Devices' : 'Generate Zone Thresholds';
+    }
+    if (step === 5) {
+        renderCommercialDeviceStep(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = commercialDevicesReady() ? 'Next: Farm Overview' : 'Scan Device QR';
+    }
+    if (step === 6) {
+        renderCommercialOverviewStep(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = 'Launch Farm';
+    }
+}
+
 function renderStepDots() {
-    const labels = ['Plant', 'Photo', '3D'];
+    const labels = isCommercialFlow()
+        ? ['Farm', 'Zones', 'Goals', 'Thresholds', 'Devices', 'Launch']
+        : ['Device', 'Field', 'Photo', 'Goals', '3D'];
     document.getElementById('bfSteps').innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-bottom:10px;">
+        <div style="display:grid;grid-template-columns:repeat(${labels.length},1fr);gap:6px;padding-bottom:10px;">
             ${labels.map((label, index) => {
                 const active = index + 1 <= step;
                 return `
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+                    <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+                        <div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
                                     background:${active ? 'var(--accent)' : 'var(--border)'};
                                     color:${active ? '#fff' : 'var(--muted)'};
-                                    font-size:11px;font-weight:800;flex-shrink:0;">
+                                    font-size:10px;font-weight:800;flex-shrink:0;">
                             ${index + 1 < step ? '✓' : index + 1}
                         </div>
-                        <div style="font-size:11px;font-weight:800;color:${index + 1 === step ? 'var(--accent)' : 'var(--muted)'};">
+                        <div style="font-size:10px;font-weight:800;color:${index + 1 === step ? 'var(--accent)' : 'var(--muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                             ${label}
                         </div>
                     </div>
@@ -168,36 +281,27 @@ function renderStepDots() {
     `;
 }
 
-function renderStep1(content) {
+function renderCommercialFarmInfoStep(content) {
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
             <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">FIELD SETUP</div>
-                ${fieldInput('fieldNameInput', 'Field name', 'e.g. Balcony Mint Trial', fieldInfo.name)}
-                ${fieldInput('fieldLocationInput', 'Location / zone', 'e.g. Rack A, balcony, lab corner', fieldInfo.location)}
-                ${fieldInput('targetPlantInput', 'Plants for analysis', 'e.g. basil, lettuce, tomato', fieldInfo.targetPlant)}
-                ${plantTargetSummary()}
-            </section>
-
-            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">ANALYSIS GOAL</div>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
-                    ${ANALYSIS_GOALS.map(goal => `
-                        <button class="analysis-goal" data-id="${goal.id}"
-                            style="padding:10px 8px;border-radius:10px;border:1.5px solid ${fieldInfo.analysisGoal === goal.id ? 'var(--accent)' : 'var(--border)'};
-                                   background:${fieldInfo.analysisGoal === goal.id ? 'var(--accent-l)' : 'var(--surface2)'};
-                                   color:${fieldInfo.analysisGoal === goal.id ? 'var(--accent)' : 'var(--text)'};
-                                   font-size:12px;font-weight:800;cursor:pointer;">
-                            ${goal.label}
-                        </button>
-                    `).join('')}
-                </div>
-            </section>
-
-            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
-                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">VERTICAL STRUCTURE</div>
-                <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${RACK_OPTIONS.map(rack => rackOption(rack)).join('')}
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">COMMERCIAL FARM INFO</div>
+                ${fieldInput('fieldNameInput', 'Farm name', 'e.g. SeedDown Commercial Farm 1', fieldInfo.name)}
+                ${fieldInput('fieldLocationInput', 'Location', 'e.g. Johor Bahru Industrial Park', fieldInfo.location)}
+                <label style="display:block;margin-bottom:10px;">
+                    <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">Farm size</span>
+                    <select id="commercialSizeInput"
+                        style="width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;">
+                        ${['Small', 'Medium', 'Large'].map(size => `<option value="${size.toLowerCase()}" ${fieldInfo.rackType === size.toLowerCase() ? 'selected' : ''}>${size}</option>`).join('')}
+                    </select>
+                </label>
+                <label style="display:block;margin-bottom:10px;">
+                    <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">Description</span>
+                    <textarea id="fieldDescriptionInput" placeholder="Optional notes about this commercial farm"
+                        style="width:100%;min-height:92px;resize:vertical;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;line-height:1.4;">${escapeHTML(fieldInfo.description)}</textarea>
+                </label>
+                <div style="font-size:12px;color:var(--muted);line-height:1.45;">
+                    Commercial setup analyzes the farm space first, then assigns QR devices to the right zones.
                 </div>
             </section>
         </div>
@@ -205,27 +309,734 @@ function renderStep1(content) {
 
     bindTextInput('fieldNameInput', value => { fieldInfo.name = value; });
     bindTextInput('fieldLocationInput', value => { fieldInfo.location = value; });
-    bindTextInput('targetPlantInput', value => {
-        fieldInfo.targetPlant = value;
-        syncTargetPlants(value);
-        renderTargetPlantChips();
+    bindTextInput('fieldDescriptionInput', value => { fieldInfo.description = value; });
+    document.getElementById('commercialSizeInput')?.addEventListener('change', event => {
+        fieldInfo.rackType = event.target.value;
+        commercialStructure = null;
     });
+}
 
-    document.querySelectorAll('.analysis-goal').forEach(button => {
-        button.addEventListener('click', () => {
-            fieldInfo.analysisGoal = button.dataset.id;
-            renderStep1(content);
+function renderCommercialPhotoZoneStep(content) {
+    const zones = commercialStructure?.zones || [];
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">FULL FARM PHOTO</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;">Capture all racks or visible production areas before QR assignment.</div>
+                    </div>
+                    <div style="font-size:11px;font-weight:800;color:var(--accent);white-space:nowrap;">${photoData ? 'READY' : 'NEEDED'}</div>
+                </div>
+                <div id="photoPreview"
+                     style="width:100%;height:220px;border-radius:12px;border:2px dashed ${photoData ? 'var(--accent)' : 'var(--border)'};
+                            background:${photoData ? `url(${photoData.dataUrl}) center/cover` : 'var(--surface2)'};
+                            display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;">
+                    ${photoData ? '<div style="position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.58);color:white;padding:6px 10px;border-radius:8px;font-size:11px;font-weight:800;">Farm photo loaded</div>' : `
+                        <div style="text-align:center;color:var(--muted);">
+                            <div style="font-size:36px;margin-bottom:8px;">▣</div>
+                            <div style="font-size:13px;font-weight:800;">Tap to add commercial farm photo</div>
+                            <div style="font-size:11px;margin-top:4px;">wide photo works best</div>
+                        </div>
+                    `}
+                </div>
+                <input type="file" id="photoInput" accept="image/*" style="display:none;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+                    <button id="cameraBtn" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);font-weight:800;color:var(--text);cursor:pointer;">Camera</button>
+                    <button id="galleryBtn" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);font-weight:800;color:var(--text);cursor:pointer;">Gallery</button>
+                </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">AI ZONE STRUCTURE</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;">AI recommends zones, node type, and device count before QR scanning.</div>
+                    </div>
+                    <button id="analyzeCommercialZonesBtn" ${!photoData ? 'disabled' : ''}
+                        style="padding:8px 10px;border-radius:999px;border:1px solid ${photoData ? 'var(--accent)' : 'var(--border)'};background:${photoData ? 'var(--accent-l)' : 'var(--surface2)'};color:${photoData ? 'var(--accent)' : 'var(--muted)'};font-size:11px;font-weight:900;cursor:${photoData ? 'pointer' : 'not-allowed'};">Analyze</button>
+                </div>
+                <div id="commercialZoneSummary">${commercialStructureHtml()}</div>
+                ${zones.length ? `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
+                        <button id="addCommercialZoneBtn" style="padding:11px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-weight:800;cursor:pointer;">Add Zone</button>
+                        <button id="removeCommercialZoneBtn" style="padding:11px;border:1px solid rgba(220,38,38,.24);border-radius:10px;background:rgba(220,38,38,.08);color:var(--danger);font-weight:800;cursor:pointer;">Remove Last</button>
+                    </div>
+                ` : ''}
+            </section>
+        </div>
+    `;
+
+    bindPhotoInput(content);
+    document.getElementById('analyzeCommercialZonesBtn')?.addEventListener('click', analyzeCommercialZones);
+    document.getElementById('addCommercialZoneBtn')?.addEventListener('click', () => {
+        ensureCommercialStructure();
+        const nextIndex = commercialStructure.zones.length;
+        commercialStructure.zones.push({
+            zone_id: `zone_${String.fromCharCode(65 + nextIndex)}`,
+            name: `Zone ${String.fromCharCode(65 + nextIndex)}`,
+            recommended_type: nextIndex % 2 ? 'zone_basic' : 'zone_pro',
+            crop: 'Mixed Crops',
+            plants: ['lettuce'],
+            confidence: 0.7,
+            notes: 'Manually added zone',
         });
+        commercialStructure.total_devices_needed = commercialStructure.farm_master_count + commercialStructure.zones.length;
+        drawStep();
     });
+    document.getElementById('removeCommercialZoneBtn')?.addEventListener('click', () => {
+        if (commercialStructure?.zones?.length > 1) {
+            commercialStructure.zones.pop();
+            commercialStructure.total_devices_needed = commercialStructure.farm_master_count + commercialStructure.zones.length;
+            drawStep();
+        }
+    });
+}
 
-    document.querySelectorAll('.rack-opt').forEach(option => {
-        option.addEventListener('click', () => {
-            fieldInfo.rackType = option.dataset.id;
-            renderStep1(content);
+function renderCommercialGoalStep(content) {
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">COMMERCIAL FARM GOALS</div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px;">Select up to three commercial priorities. These are applied per zone when generating thresholds.</div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                    ${COMMERCIAL_GOAL_OPTIONS.map(goal => {
+                        const selected = commercialGoals.includes(goal.id);
+                        return `<button class="commercial-goal-priority" data-id="${goal.id}"
+                            style="padding:12px 8px;border-radius:12px;border:1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'};background:${selected ? 'var(--accent-l)' : 'var(--surface2)'};color:${selected ? 'var(--accent)' : 'var(--text)'};font-weight:900;font-size:12px;cursor:pointer;">${goal.label}</button>`;
+                    }).join('')}
+                </div>
+            </section>
+        </div>
+    `;
+
+    document.querySelectorAll('.commercial-goal-priority').forEach(button => {
+        button.addEventListener('click', () => {
+            const id = button.dataset.id;
+            if (commercialGoals.includes(id)) commercialGoals = commercialGoals.filter(item => item !== id);
+            else if (commercialGoals.length < 3) commercialGoals = [...commercialGoals, id];
+            else showToast('warning', 'Choose up to 3 commercial goals');
+            commercialZoneThresholds = {};
+            renderCommercialGoalStep(content);
         });
     });
 }
 
+function renderCommercialZoneThresholdStep(content) {
+    ensureCommercialStructure();
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">ZONE PLANTS + THRESHOLDS</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;">Each zone gets its own plant list and AI threshold recipe.</div>
+                    </div>
+                    <button id="generateCommercialThresholdsBtn" style="padding:8px 10px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-l);color:var(--accent);font-size:11px;font-weight:900;cursor:pointer;">Generate All</button>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                    ${commercialStructure.zones.map(zoneThresholdCardHtml).join('')}
+                </div>
+            </section>
+        </div>
+    `;
+
+    document.querySelectorAll('.zone-plant-input').forEach(input => {
+        input.addEventListener('change', event => {
+            const zone = commercialStructure.zones.find(item => item.zone_id === event.target.dataset.zone);
+            if (!zone) return;
+            zone.plants = parseTargetPlants(event.target.value).map(name => name.toLowerCase());
+            zone.crop = parseTargetPlants(event.target.value).join(', ') || zone.crop;
+            delete commercialZoneThresholds[zone.zone_id];
+        });
+    });
+    document.getElementById('generateCommercialThresholdsBtn')?.addEventListener('click', generateCommercialZoneThresholds);
+}
+
+function renderCommercialDeviceStep(content) {
+    ensureCommercialStructure();
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">ASSIGN QR DEVICES</div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px;">
+                    Scan one package QR at a time. The app will only enable compatible assignment targets.
+                </div>
+                <button id="commercialScanQrBtn" type="button" style="width:100%;padding:13px;border:none;border-radius:14px;background:var(--accent);color:white;font-size:14px;font-weight:900;cursor:pointer;">
+                    Scan Commercial Device QR
+                </button>
+                <input id="commercialDeviceQrInput" type="file" accept="image/*" capture="environment" style="display:none;">
+                <div id="commercialPendingDevice" style="margin-top:12px;">${commercialPendingDeviceHtml()}</div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">ASSIGNMENT PROGRESS</div>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    ${commercialAssignmentProgressHtml()}
+                </div>
+            </section>
+        </div>
+    `;
+
+    const input = document.getElementById('commercialDeviceQrInput');
+    document.getElementById('commercialScanQrBtn')?.addEventListener('click', () => input?.click());
+    input?.addEventListener('change', event => {
+        const file = event.target.files?.[0];
+        if (file) handleCommercialDeviceQrFile(file);
+        event.target.value = '';
+    });
+    document.querySelectorAll('.commercial-assign-target').forEach(button => {
+        button.addEventListener('click', () => assignPendingCommercialDevice(button.dataset.target));
+    });
+}
+
+function renderCommercialOverviewStep(content) {
+    ensureCommercialStructure();
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm);">
+                <div style="padding:12px 14px;border-bottom:1px solid var(--border);">
+                    <div style="font-size:14px;font-weight:900;">Commercial Farm Overview</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:2px;">Farm Master + Zone nodes ready for launch</div>
+                </div>
+                <div style="height:280px;background:linear-gradient(135deg,#f8fafc,#ecfdf5);display:grid;place-items:center;padding:18px;">
+                    <div style="width:min(520px,100%);display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        ${commercialOverviewTilesHtml()}
+                    </div>
+                </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">LAUNCH SUMMARY</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    ${metricBlock('Farm', fieldInfo.name || 'Commercial Farm')}
+                    ${metricBlock('Zones', `${commercialStructure.zones.length}`)}
+                    ${metricBlock('Devices', `${commercialDeviceAssignments.length}/${commercialStructure.total_devices_needed}`)}
+                    ${metricBlock('Goals', commercialGoals.map(labelCommercialGoal).join(', '))}
+                </div>
+            </section>
+        </div>
+    `;
+}
+
+function commercialStructureHtml() {
+    if (!commercialStructure) {
+        return `
+            <div style="padding:22px;border:1px dashed var(--border);border-radius:12px;background:var(--surface2);text-align:center;color:var(--muted);font-size:13px;line-height:1.45;">
+                Add a farm photo, then run AI zone analysis. If AI is unavailable, SeedDown will use a safe commercial fallback.
+            </div>
+        `;
+    }
+
+    return `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            ${metricBlock('Farm Master', commercialStructure.farm_master_count)}
+            ${metricBlock('ESP32 Needed', commercialStructure.total_devices_needed)}
+            ${metricBlock('Zones', commercialStructure.zones.length)}
+            ${metricBlock('Confidence', `${Math.round((commercialStructure.confidence || 0.82) * 100)}%`)}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+            ${commercialStructure.zones.map(zone => `
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px;">
+                    <div style="min-width:0;">
+                        <div style="font-size:13px;font-weight:900;">${escapeHTML(zone.name)} · ${escapeHTML(zone.crop || 'Mixed Crops')}</div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${escapeHTML(zone.notes || '')}</div>
+                    </div>
+                    <span style="padding:5px 8px;border-radius:999px;background:var(--accent-l);color:var(--accent);font-size:10px;font-weight:900;white-space:nowrap;">${zone.recommended_type === 'zone_pro' ? 'Zone Pro' : 'Zone Basic'}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function zoneThresholdCardHtml(zone) {
+    const threshold = commercialZoneThresholds[zone.zone_id];
+    const plants = (zone.plants || []).join(', ');
+    return `
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:12px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px;">
+                <div>
+                    <div style="font-size:13px;font-weight:900;">${escapeHTML(zone.name)}</div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:3px;">${zone.recommended_type === 'zone_pro' ? 'Zone Pro' : 'Zone Basic'} · independent threshold recipe</div>
+                </div>
+                <span style="font-size:10px;font-weight:900;color:${threshold ? 'var(--accent)' : 'var(--muted)'};">${threshold ? 'READY' : 'PENDING'}</span>
+            </div>
+            <input class="zone-plant-input" data-zone="${zone.zone_id}" value="${escapeHTML(plants)}" placeholder="plants in this zone"
+                style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font-size:13px;outline:none;margin-bottom:10px;">
+            <div style="font-size:11px;color:var(--muted);line-height:1.4;">
+                ${threshold ? escapeHTML(threshold.notes || 'Thresholds ready') : 'Enter plants, then generate thresholds.'}
+            </div>
+            ${threshold ? `<div style="margin-top:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+                ${miniThreshold('Temp', `${threshold.thresholds.tempMin}-${threshold.thresholds.tempMax}C`)}
+                ${miniThreshold('pH', `${threshold.thresholds.phMin}-${threshold.thresholds.phMax}`)}
+                ${miniThreshold('Light', threshold.thresholds.darkThreshold)}
+            </div>` : ''}
+        </div>
+    `;
+}
+
+function miniThreshold(label, value) {
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px;">
+        <div style="font-size:9px;font-weight:900;color:var(--sub);text-transform:uppercase;">${escapeHTML(label)}</div>
+        <div style="font-size:12px;font-weight:900;color:var(--text);margin-top:3px;">${escapeHTML(value)}</div>
+    </div>`;
+}
+
+function commercialPendingDeviceHtml() {
+    if (!commercialPendingDevice) {
+        return '<div style="font-size:12px;color:var(--muted);line-height:1.45;">No commercial QR scanned yet.</div>';
+    }
+
+    const targetOptions = commercialAssignmentTargets(commercialPendingDevice);
+    return `
+        <div style="border:1px solid var(--border);border-radius:14px;background:var(--surface2);padding:12px;">
+            <div style="font-size:12px;font-weight:900;color:var(--text);">${escapeHTML(commercialPendingDevice.label || commercialPendingDevice.serial)}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px;">${escapeHTML(commercialPendingDevice.serial)} · choose assignment target</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">
+                ${targetOptions.map(target => `
+                    <button class="commercial-assign-target" data-target="${target.id}" ${target.disabled ? 'disabled' : ''}
+                        style="padding:10px;border-radius:10px;border:1px solid ${target.disabled ? 'var(--border)' : 'var(--accent)'};background:${target.disabled ? 'var(--surface)' : 'var(--accent-l)'};color:${target.disabled ? 'var(--muted)' : 'var(--accent)'};font-weight:900;cursor:${target.disabled ? 'not-allowed' : 'pointer'};opacity:${target.disabled ? '.55' : '1'};">
+                        ${escapeHTML(target.label)}
+                    </button>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function commercialAssignmentProgressHtml() {
+    ensureCommercialStructure();
+    const targets = [
+        { id: 'farm_master', label: 'Farm Master', required: 'farm_master' },
+        ...commercialStructure.zones.map(zone => ({ id: zone.zone_id, label: zone.name, required: zone.recommended_type })),
+    ];
+
+    return targets.map(target => {
+        const assigned = commercialDeviceAssignments.find(item => item.targetId === target.id);
+        return `
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px;">
+                <div>
+                    <div style="font-size:13px;font-weight:900;">${escapeHTML(target.label)}</div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:3px;">Needs ${target.required === 'farm_master' ? 'Farm Master Node' : target.required === 'zone_pro' ? 'Zone Pro Node' : 'Zone Basic or Pro Node'}</div>
+                </div>
+                <span style="font-size:10px;font-weight:900;color:${assigned ? 'var(--accent)' : 'var(--muted)'};">${assigned ? escapeHTML(assigned.serial) : 'UNASSIGNED'}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function commercialOverviewTilesHtml() {
+    const tiles = [
+        { label: 'Farm Master', id: 'farm_master', crop: 'Online Control Node' },
+        ...commercialStructure.zones.map(zone => ({ label: zone.name, id: zone.zone_id, crop: zone.crop })),
+    ];
+
+    return tiles.map(tile => {
+        const assigned = commercialDeviceAssignments.find(item => item.targetId === tile.id);
+        return `
+            <div style="background:#fff;border:1px solid #dbe7dc;border-radius:16px;padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.08);">
+                <div style="font-size:10px;font-weight:900;color:#047857;text-transform:uppercase;letter-spacing:.08em;">${escapeHTML(tile.label)}</div>
+                <div style="font-size:14px;font-weight:950;color:#17231b;margin-top:6px;">${escapeHTML(tile.crop)}</div>
+                <div style="font-size:11px;color:#64748b;margin-top:5px;">${assigned ? `Device ${assigned.deviceId}` : 'Device pending'}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function analyzeCommercialZones() {
+    if (!photoData) {
+        showToast('warning', 'Add a commercial farm photo first');
+        return null;
+    }
+
+    const button = document.getElementById('analyzeCommercialZonesBtn');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Analyzing...';
+    }
+
+    try {
+        await scanPlantsFromPhoto();
+    } catch {
+        // scanPlantsFromPhoto already falls back visually.
+    }
+
+    commercialStructure = buildCommercialStructureFromPhoto();
+    showToast('success', `${commercialStructure.zones.length} commercial zones recommended`);
+    drawStep();
+    return commercialStructure;
+}
+
+function buildCommercialStructureFromPhoto() {
+    const size = fieldInfo.rackType || 'medium';
+    const zoneCount = size === 'large' ? 4 : size === 'small' ? 2 : 3;
+    const detectedNames = detectedPlants.length
+        ? detectedPlants.map(plant => plant.name || plant.species || 'lettuce')
+        : ['tomato', 'lettuce', 'spinach', 'strawberry'];
+
+    const zones = Array.from({ length: zoneCount }, (_, index) => {
+        const base = DEFAULT_COMMERCIAL_ZONES[index] || {
+            zone_id: `zone_${String.fromCharCode(65 + index)}`,
+            name: `Zone ${String.fromCharCode(65 + index)}`,
+            recommended_type: index % 2 ? 'zone_basic' : 'zone_pro',
+            crop: detectedNames[index % detectedNames.length],
+            plants: [detectedNames[index % detectedNames.length]],
+            confidence: 0.78,
+            notes: 'AI fallback zone recommendation',
+        };
+        const plantName = detectedNames[index % detectedNames.length];
+        return {
+            ...base,
+            zone_id: `zone_${String.fromCharCode(65 + index)}`,
+            name: `Zone ${String.fromCharCode(65 + index)}`,
+            crop: plantName,
+            plants: [plantName.toLowerCase()],
+        };
+    });
+
+    return {
+        farm_master_count: 1,
+        zones,
+        total_devices_needed: zones.length + 1,
+        confidence: 0.84,
+        rack_count: zoneCount * 2,
+        scale: size,
+    };
+}
+
+function ensureCommercialStructure() {
+    if (!commercialStructure) commercialStructure = buildCommercialStructureFromPhoto();
+}
+
+async function generateCommercialZoneThresholds() {
+    ensureCommercialStructure();
+    const button = document.getElementById('generateCommercialThresholdsBtn') || document.getElementById('bfNext');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Generating...';
+    }
+
+    try {
+        for (const zone of commercialStructure.zones) {
+            const plants = (zone.plants?.length ? zone.plants : ['lettuce'])
+                .map((plant, index) => ({ tier: index + 1, plant_type: plant }));
+            const response = await fetch(`${API_BASE}/api/ai/generate-thresholds`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    plants,
+                    goal_priority: commercialGoals,
+                    packageLevel: zone.recommended_type,
+                }),
+            });
+            const data = await safeJson(response);
+            if (!response.ok || !data.ok) throw new Error(data.error || `Threshold generation failed for ${zone.name}`);
+            commercialZoneThresholds[zone.zone_id] = {
+                thresholds: data.thresholds,
+                notes: data.notes,
+                source: data.source,
+            };
+        }
+        showToast('success', 'Zone thresholds generated');
+        drawStep();
+        return commercialZoneThresholds;
+    } catch (error) {
+        showToast('error', error.message);
+        return null;
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+function handleCommercialDeviceQrFile(file) {
+    const reader = new FileReader();
+    reader.onload = async event => {
+        try {
+            const payload = await decodeDeviceQr(event.target.result);
+            const option = PACKAGE_QR_OPTIONS.find(item => item.serial === payload.serial) || payload;
+            if (option.deviceType !== 'commercial') {
+                throw new Error('This QR is for Beginner. Commercial setup requires COM device QR.');
+            }
+            commercialPendingDevice = option;
+            showToast('info', `Scanned ${option.label || option.serial}`);
+            drawStep();
+        } catch (error) {
+            showToast('error', error.message || 'Could not read QR code');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function commercialAssignmentTargets(device) {
+    ensureCommercialStructure();
+    const assignedTargets = new Set(commercialDeviceAssignments.map(item => item.targetId));
+    const targets = [
+        { id: 'farm_master', label: 'Farm Master', required: 'farm_master' },
+        ...commercialStructure.zones.map(zone => ({
+            id: zone.zone_id,
+            label: zone.name,
+            required: zone.recommended_type,
+        })),
+    ];
+
+    return targets.map(target => {
+        const compatible = commercialDeviceCompatible(device, target.required);
+        const alreadyAssigned = assignedTargets.has(target.id);
+        return {
+            ...target,
+            disabled: !compatible || alreadyAssigned,
+        };
+    });
+}
+
+function commercialDeviceCompatible(device, required) {
+    const level = device.packageLevel || device.id || '';
+    if (required === 'farm_master') return level === 'farm_master' || String(device.serial || '').includes('MST');
+    if (required === 'zone_pro') return level === 'zone_pro' || String(device.serial || '').includes('ZNP');
+    if (required === 'zone_basic') {
+        return level === 'zone_basic' || level === 'zone_pro' || String(device.serial || '').includes('ZNB') || String(device.serial || '').includes('ZNP');
+    }
+    return false;
+}
+
+async function assignPendingCommercialDevice(targetId) {
+    if (!commercialPendingDevice) return;
+    ensureCommercialStructure();
+
+    const target = targetId === 'farm_master'
+        ? { id: 'farm_master', required: 'farm_master', zoneId: null }
+        : commercialStructure.zones.find(zone => zone.zone_id === targetId);
+    if (!target) return;
+
+    const required = target.required || target.recommended_type;
+    if (!commercialDeviceCompatible(commercialPendingDevice, required)) {
+        showToast('error', 'Device type does not match this target');
+        return;
+    }
+
+    const farmId = AppState.currentFarmId || `farm_com_${Date.now()}`;
+    const accountType = commercialPendingDevice.accountType || (
+        commercialPendingDevice.packageLevel === 'farm_master' ? 'commercial_master'
+            : commercialPendingDevice.packageLevel === 'zone_pro' ? 'commercial_zone_pro'
+                : 'commercial_zone_basic'
+    );
+
+    try {
+        const response = await fetch(`${API_BASE}/api/devices/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                serial: commercialPendingDevice.serial,
+                wifi_ssid: deviceSetup.wifiSsid.trim(),
+                wifi_password: deviceSetup.wifiPassword,
+                accountType,
+                farmId,
+                zoneId: targetId === 'farm_master' ? null : targetId,
+            }),
+        });
+        const data = await safeJson(response);
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Device assignment failed');
+        commercialDeviceAssignments = [
+            ...commercialDeviceAssignments.filter(item => item.targetId !== targetId && item.deviceId !== data.device.deviceId),
+            {
+                ...data.device,
+                targetId,
+                zoneId: targetId === 'farm_master' ? null : targetId,
+                role: targetId === 'farm_master' ? 'farm_master' : 'zone_node',
+            },
+        ];
+        commercialPendingDevice = null;
+        showToast('success', 'Device assigned');
+        drawStep();
+    } catch (error) {
+        showToast('error', error.message);
+    }
+}
+
+function commercialThresholdsReady() {
+    ensureCommercialStructure();
+    return commercialStructure.zones.every(zone => Boolean(commercialZoneThresholds[zone.zone_id]));
+}
+
+function commercialDevicesReady() {
+    ensureCommercialStructure();
+    const requiredTargets = ['farm_master', ...commercialStructure.zones.map(zone => zone.zone_id)];
+    return requiredTargets.every(targetId => commercialDeviceAssignments.some(item => item.targetId === targetId));
+}
+
+function labelCommercialGoal(id) {
+    return COMMERCIAL_GOAL_OPTIONS.find(goal => goal.id === id)?.label || String(id).replace(/_/g, ' ');
+}
+
+function renderDeviceStep(content) {
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">SCAN DEVICE QR</div>
+                <div style="border:1.5px dashed var(--border);border-radius:18px;background:var(--surface2);padding:22px;text-align:center;">
+                    <div style="width:92px;height:92px;border-radius:22px;margin:0 auto 14px;background:#fff;border:1px solid var(--border);display:grid;place-items:center;box-shadow:var(--shadow-sm);">
+                        <span style="font-size:42px;line-height:1;">▦</span>
+                    </div>
+                    <div style="font-size:15px;font-weight:900;color:var(--text);">Scan SeedDown Device QR</div>
+                    <div style="font-size:12px;color:var(--muted);line-height:1.45;margin:7px auto 16px;max-width:280px;">
+                        Use the QR png from the device package. The QR contains the serial, package tier, and account type.
+                    </div>
+                    <button id="scanQrBtn" type="button" style="width:100%;max-width:260px;padding:13px;border:none;border-radius:14px;background:var(--accent);color:white;font-size:14px;font-weight:900;cursor:pointer;">
+                        Scan QR
+                    </button>
+                    <input id="deviceQrInput" type="file" accept="image/*" capture="environment" style="display:none;">
+                </div>
+                <div id="deviceStatus" style="margin-top:12px;font-size:12px;color:${registeredDevice ? 'var(--accent)' : 'var(--muted)'};line-height:1.45;">
+                    ${registeredDevice ? `Linked ${escapeHTML(registeredDevice.deviceId)} · ${escapeHTML(registeredDevice.packageLevel)} · ${escapeHTML(registeredDevice.serial || deviceSetup.serial)}` : 'No QR scanned yet.'}
+                </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">WIFI SETUP</div>
+                ${fieldInput('wifiSsidInput', 'WiFi SSID', 'Your WiFi name', deviceSetup.wifiSsid)}
+                <label style="display:block;margin-bottom:10px;">
+                    <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">WiFi password</span>
+                    <input id="wifiPasswordInput" type="password" value="${escapeHTML(deviceSetup.wifiPassword)}" placeholder="stored only for setup simulation"
+                        style="width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;">
+                </label>
+            </section>
+        </div>
+    `;
+
+    bindTextInput('wifiSsidInput', value => { deviceSetup.wifiSsid = value; registeredDevice = null; });
+    bindTextInput('wifiPasswordInput', value => { deviceSetup.wifiPassword = value; registeredDevice = null; });
+
+    const input = document.getElementById('deviceQrInput');
+    document.getElementById('scanQrBtn')?.addEventListener('click', () => input?.click());
+    input?.addEventListener('change', event => {
+        const file = event.target.files?.[0];
+        if (file) handleDeviceQrFile(file);
+        event.target.value = '';
+    });
+}
+function packageQrCardsHtml() {
+    return PACKAGE_QR_OPTIONS.map(option => {
+        const selected = deviceSetup.serial === option.serial || registeredDevice?.serial === option.serial;
+        return `
+            <button class="qr-package-card" data-package-id="${option.id}" type="button"
+                style="border:1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'};background:${selected ? 'var(--accent-l)' : 'var(--surface2)'};border-radius:14px;padding:10px;text-align:left;cursor:pointer;color:var(--text);display:grid;grid-template-columns:74px 1fr;gap:10px;align-items:center;min-height:96px;">
+                <span aria-hidden="true" style="width:72px;height:72px;border-radius:10px;background:#fff;border:1px solid var(--border);padding:6px;display:grid;grid-template-columns:repeat(7,1fr);gap:2px;box-sizing:border-box;">
+                    ${fakeQrGrid(option.serial)}
+                </span>
+                <span style="min-width:0;display:block;">
+                    <strong style="display:block;font-size:12px;line-height:1.2;color:${selected ? 'var(--accent)' : 'var(--text)'};">${escapeHTML(option.label)}</strong>
+                    <span style="display:block;font-size:10px;color:var(--muted);margin-top:4px;line-height:1.25;">${escapeHTML(option.desc)}</span>
+                    <span style="display:block;font-size:9px;color:var(--sub);font-weight:800;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(option.serial)}</span>
+                </span>
+            </button>
+        `;
+    }).join('');
+}
+
+function fakeQrGrid(serial) {
+    const seed = String(serial).split('').reduce((sum, char, index) => sum + char.charCodeAt(0) * (index + 3), 0);
+    return Array.from({ length: 49 }, (_, index) => {
+        const row = Math.floor(index / 7);
+        const col = index % 7;
+        const isFinder = (row < 2 && col < 2) || (row < 2 && col > 4) || (row > 4 && col < 2);
+        const filled = isFinder || ((seed + index * 17 + row * 11 + col * 7) % 5 < 2);
+        return `<i style="display:block;border-radius:1px;background:${filled ? '#111827' : '#ffffff'};"></i>`;
+    }).join('');
+}
+
+async function scanPackageQr(packageId) {
+    const option = PACKAGE_QR_OPTIONS.find(item => item.id === packageId) || PACKAGE_QR_OPTIONS[1];
+    await applyScannedDevicePayload(option);
+}
+
+function handleDeviceQrFile(file) {
+    const reader = new FileReader();
+    reader.onload = async event => {
+        try {
+            const payload = await decodeDeviceQr(event.target.result);
+            await applyScannedDevicePayload(payload);
+        } catch (error) {
+            showToast('error', error.message || 'Could not read QR code');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function decodeDeviceQr(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth || image.width;
+            canvas.height = image.naturalHeight || image.height;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (!code?.data) {
+                reject(new Error('QR not detected. Try the generated SeedDown QR png.'));
+                return;
+            }
+            try {
+                resolve(parseDeviceQrPayload(code.data));
+            } catch (error) {
+                reject(error);
+            }
+        };
+        image.onerror = () => reject(new Error('Unable to load QR image'));
+        image.src = dataUrl;
+    });
+}
+
+function parseDeviceQrPayload(raw) {
+    const text = String(raw || '').trim();
+    let payload;
+    try {
+        payload = JSON.parse(text);
+    } catch {
+        payload = { serial: text };
+    }
+
+    if (payload.type && payload.type !== 'seeddown_device_qr') {
+        throw new Error('This is not a SeedDown device QR');
+    }
+
+    if (!payload.serial) throw new Error('QR does not contain a device serial');
+    const known = PACKAGE_QR_OPTIONS.find(option => option.serial === payload.serial);
+    return { ...(known || {}), ...payload };
+}
+
+async function applyScannedDevicePayload(payload) {
+    const option = PACKAGE_QR_OPTIONS.find(item => item.serial === payload.serial) || payload;
+    deviceSetup.serial = option.serial;
+    deviceSetup.accountType = option.accountType;
+    registeredDevice = null;
+    showToast('info', `Scanned ${option.label || option.serial}`);
+    await registerDeviceFromStep(option);
+}
+function renderStep1(content) {
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">FIELD INFO</div>
+                ${fieldInput('fieldNameInput', 'Field name', 'e.g. Balcony Trial A', fieldInfo.name)}
+                ${fieldInput('fieldLocationInput', 'Location / zone', 'e.g. Balcony, Lab Corner, Zone A', fieldInfo.location)}
+                <label style="display:block;margin-bottom:10px;">
+                    <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">Description</span>
+                    <textarea id="fieldDescriptionInput" placeholder="Optional notes about this field"
+                        style="width:100%;min-height:92px;resize:vertical;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;line-height:1.4;">${escapeHTML(fieldInfo.description)}</textarea>
+                </label>
+                <div style="font-size:12px;color:var(--muted);line-height:1.45;">
+                    Plant analysis, crop goals, and device thresholds are handled in the next steps after photo scanning.
+                </div>
+            </section>
+        </div>
+    `;
+
+    bindTextInput('fieldNameInput', value => { fieldInfo.name = value; });
+    bindTextInput('fieldLocationInput', value => { fieldInfo.location = value; });
+    bindTextInput('fieldDescriptionInput', value => { fieldInfo.description = value; });
+}
 function fieldInput(id, label, placeholder, value) {
     return `
         <label style="display:block;margin-bottom:10px;">
@@ -375,7 +1186,8 @@ function bindPhotoInput(content) {
             const mediaType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
             photoData = { base64, mediaType, dataUrl };
             scanStarted = false;
-            renderStep2(content);
+            if (isCommercialFlow()) drawStep();
+            else renderStep2(content);
         };
         reader.readAsDataURL(file);
     });
@@ -440,28 +1252,16 @@ async function scanPlantsFromPhoto() {
     if (status) status.textContent = 'AI is checking the field photo...';
 
     try {
-        let data = null;
-        try {
-            data = await scanPlantsWithFirebaseAI({
+        const res = await fetch(`${API_BASE}/api/farms/scan-plants`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
                 image: photoData.base64,
                 mediaType: photoData.mediaType,
                 targetPlant: fieldInfo.targetPlant,
-            });
-            if (data?.plants?.length) {
-                console.log('[BuildFarm] Firebase AI Logic recognized plants');
-            }
-        } catch (firebaseError) {
-            console.warn('[BuildFarm] Firebase AI Logic unavailable:', firebaseError.message);
-        }
-
-        if (!data) {
-            const res = await fetch(`${API_BASE}/api/farms/scan-plants`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: photoData.base64, mediaType: photoData.mediaType, targetPlant: fieldInfo.targetPlant }),
-            });
-            data = await res.json();
-        }
+            }),
+        });
+        const data = await res.json();
         const plants = Array.isArray(data.plants) ? data.plants : [];
         if (plants.length) {
             mergePlants(plants);
@@ -486,7 +1286,7 @@ async function scanPlantsFromPhoto() {
 function renderStep3(content) {
     const rack = currentRack();
     const totalUsed = totalSlotsUsed();
-    const targetPlant = fieldInfo.targetPlant.trim() || detectedPlants[0]?.name || 'Plant';
+    const targetPlant = detectedPlants[0]?.name || 'Field';
 
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
@@ -946,30 +1746,199 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
 }
+function renderThresholdStep(content) {
+    const plants = detectedPlants.length ? detectedPlants : [];
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">GOAL PRIORITY</div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px;">Choose up to two goals. SeedDown will generate thresholds for this device and crop mix.</div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                    ${GOAL_OPTIONS.map(goal => {
+                        const selected = goalPriority.includes(goal.id);
+                        return `<button class="goal-priority" data-id="${goal.id}"
+                            style="padding:11px 8px;border-radius:12px;border:1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'};background:${selected ? 'var(--accent-l)' : 'var(--surface2)'};color:${selected ? 'var(--accent)' : 'var(--text)'};font-weight:900;font-size:12px;cursor:pointer;">
+                            ${goal.label}
+                        </button>`;
+                    }).join('')}
+                </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">AI THRESHOLDS</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45;">Plants: ${plants.map(p => escapeHTML(p.name)).join(', ') || 'mixed greens'}</div>
+                    </div>
+                    <button id="generateThresholdsBtn" style="padding:8px 10px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-l);color:var(--accent);font-size:11px;font-weight:900;cursor:pointer;">Generate</button>
+                </div>
+                <div id="thresholdStatus" style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.45;">
+                    ${generatedThresholds ? escapeHTML(generatedThresholds.notes || 'Thresholds ready') : 'No thresholds generated yet.'}
+                </div>
+                <div id="thresholdGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                    ${thresholdInputsHtml(generatedThresholds?.thresholds || {})}
+                </div>
+            </section>
+        </div>
+    `;
+
+    document.querySelectorAll('.goal-priority').forEach(button => {
+        button.addEventListener('click', () => {
+            const id = button.dataset.id;
+            if (goalPriority.includes(id)) goalPriority = goalPriority.filter(item => item !== id);
+            else if (goalPriority.length < 2) goalPriority = [...goalPriority, id];
+            else showToast('warning', 'Choose up to 2 goals');
+            generatedThresholds = null;
+            renderThresholdStep(content);
+        });
+    });
+
+    document.getElementById('generateThresholdsBtn').addEventListener('click', generateThresholdsForField);
+    bindThresholdInputs();
+}
+
+function thresholdInputsHtml(thresholds = {}) {
+    const items = [
+        ['tempMin', 'Temp min'], ['tempMax', 'Temp max'], ['humidityMin', 'Humid min'], ['humidityMax', 'Humid max'],
+        ['soilDryThreshold', 'Soil dry'], ['darkThreshold', 'Light dark'], ['phMin', 'pH min'], ['phMax', 'pH max'],
+        ['ecMin', 'EC min'], ['ecMax', 'EC max'], ['co2MinPpm', 'CO2 min'], ['wateringDurationSeconds', 'Water sec'],
+        ['fanDurationSeconds', 'Fan sec'], ['sensorIntervalSeconds', 'Interval sec'],
+    ];
+    return items.map(([key, label]) => `
+        <label style="display:block;">
+            <span style="display:block;font-size:10px;font-weight:900;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">${label}</span>
+            <input class="threshold-input" data-key="${key}" type="number" value="${thresholds[key] ?? ''}" placeholder="auto"
+                style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);font-size:13px;font-weight:800;color:var(--text);outline:none;">
+        </label>
+    `).join('');
+}
+
+function bindThresholdInputs() {
+    document.querySelectorAll('.threshold-input').forEach(input => {
+        input.addEventListener('input', event => {
+            if (!generatedThresholds) generatedThresholds = { thresholds: {}, notes: 'Manual thresholds', source: 'manual' };
+            const value = event.target.value === '' ? undefined : Number(event.target.value);
+            if (Number.isFinite(value)) generatedThresholds.thresholds[event.target.dataset.key] = value;
+        });
+    });
+}
+
+async function registerDeviceFromStep(scannedPackage = null) {
+    if (!deviceSetup.serial.trim()) {
+        showToast('warning', 'Enter device serial');
+        return null;
+    }
+
+    const button = document.getElementById('registerDeviceBtn') || document.getElementById('bfNext');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Registering...';
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/devices/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                serial: deviceSetup.serial.trim(),
+                wifi_ssid: deviceSetup.wifiSsid.trim(),
+                wifi_password: deviceSetup.wifiPassword,
+                accountType: deviceSetup.accountType,
+                farmId: AppState.currentFarmId || 'farm_001',
+                fieldId: `field_${Date.now()}`,
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Device registration failed');
+        registeredDevice = data.device;
+        showToast('success', 'Device registered');
+        drawStep();
+        return registeredDevice;
+    } catch (error) {
+        showToast('error', error.message);
+        return null;
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+function buildLocalDemoDevice(option = null) {
+    const selected = option || PACKAGE_QR_OPTIONS.find(item => item.serial === deviceSetup.serial) || PACKAGE_QR_OPTIONS[1];
+    const suffix = selected.serial.split('-').pop() || String(Date.now()).slice(-5);
+    return {
+        deviceId: `dev_${selected.deviceType}_${selected.packageLevel}_${suffix}`.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+        deviceToken: `demo_token_${suffix}`,
+        serial: selected.serial,
+        deviceType: selected.deviceType,
+        packageLevel: selected.packageLevel,
+        fieldId: `field_${Date.now()}`,
+        farmId: AppState.currentFarmId || 'farm_001',
+        isDemoFallback: true,
+    };
+}
+
+async function safeJson(response) {
+    try {
+        return await response.json();
+    } catch (error) {
+        return {};
+    }
+}
+async function generateThresholdsForField() {
+    const button = document.getElementById('generateThresholdsBtn') || document.getElementById('bfNext');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Generating...';
+    }
+
+    const plants = (detectedPlants.length ? detectedPlants : [])
+        .map((plant, index) => ({ tier: Math.floor(index / (currentRack().slotsPerTier || 3)) + 1, plant_type: plant.species || plant.name }));
+
+    try {
+        const response = await fetch(`${API_BASE}/api/ai/generate-thresholds`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                plants,
+                goal_priority: goalPriority,
+                packageLevel: registeredDevice?.packageLevel || 'standard',
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Threshold generation failed');
+        generatedThresholds = { thresholds: data.thresholds, notes: data.notes, source: data.source };
+        showToast('success', data.source === 'ai' ? 'AI thresholds generated' : 'Fallback thresholds generated');
+        drawStep();
+        return generatedThresholds;
+    } catch (error) {
+        showToast('error', error.message);
+        return null;
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
 
 async function handleNext() {
+    if (isCommercialFlow()) {
+        await handleCommercialNext();
+        return;
+    }
+
     if (step === 1) {
-        if (!fieldInfo.name.trim()) {
-            showToast('warning', 'Enter a field name');
+        if (!registeredDevice) {
+            document.getElementById('deviceQrInput')?.click();
+            showToast('info', 'Scan the SeedDown package QR first');
             return;
         }
-        if (parseTargetPlants(fieldInfo.targetPlant).length === 0) {
-            showToast('warning', 'Enter at least one plant for analysis');
-            return;
-        }
-        syncTargetPlants(fieldInfo.targetPlant);
         step = 2;
         drawStep();
         return;
     }
 
     if (step === 2) {
-        if (!photoData) {
-            showToast('warning', 'Add a field photo before generating 3D');
+        if (!fieldInfo.name.trim()) {
+            showToast('warning', 'Enter a field name');
             return;
-        }
-        if (detectedPlants.length === 0) {
-            syncTargetPlants(fieldInfo.targetPlant || 'Plant');
         }
         step = 3;
         drawStep();
@@ -977,7 +1946,88 @@ async function handleNext() {
     }
 
     if (step === 3) {
+        if (!photoData) {
+            showToast('warning', 'Add a field photo before generating 3D');
+            return;
+        }
+        step = 4;
+        drawStep();
+        return;
+    }
+
+    if (step === 4) {
+        if (!generatedThresholds) {
+            const thresholds = await generateThresholdsForField();
+            if (!thresholds) return;
+        }
+        step = 5;
+        drawStep();
+        return;
+    }
+
+    if (step === 5) {
         await createField();
+    }
+}
+
+async function handleCommercialNext() {
+    if (step === 1) {
+        if (!fieldInfo.name.trim()) {
+            showToast('warning', 'Enter a commercial farm name');
+            return;
+        }
+        step = 2;
+        drawStep();
+        return;
+    }
+
+    if (step === 2) {
+        if (!photoData) {
+            showToast('warning', 'Add a full farm photo first');
+            return;
+        }
+        if (!commercialStructure) {
+            const structure = await analyzeCommercialZones();
+            if (!structure) return;
+        }
+        step = 3;
+        drawStep();
+        return;
+    }
+
+    if (step === 3) {
+        if (!commercialGoals.length) {
+            showToast('warning', 'Choose at least one commercial goal');
+            return;
+        }
+        step = 4;
+        drawStep();
+        return;
+    }
+
+    if (step === 4) {
+        if (!commercialThresholdsReady()) {
+            const thresholds = await generateCommercialZoneThresholds();
+            if (!thresholds) return;
+        }
+        step = 5;
+        drawStep();
+        return;
+    }
+
+    if (step === 5) {
+        if (!commercialDevicesReady()) {
+            document.getElementById('commercialDeviceQrInput')?.click();
+            showToast('info', 'Scan and assign all required commercial nodes');
+            return;
+        }
+        step = 6;
+        drawStep();
+        return;
+    }
+
+    if (step === 6) {
+        await createCommercialFarm();
     }
 }
 
@@ -1007,6 +2057,39 @@ function handleCancel() {
     goToFarmList('New field creation cancelled');
 }
 
+async function syncDevicePreferences(thresholds = {}) {
+    if (!registeredDevice?.deviceId) return { synced: false, reason: 'No registered device' };
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (registeredDevice.deviceToken && !registeredDevice.isDemoFallback) {
+        headers['x-device-token'] = registeredDevice.deviceToken;
+    }
+
+    const response = await fetch(`${API_BASE}/api/sensors/preferences`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+            deviceId: registeredDevice.deviceId,
+            fieldId: registeredDevice.fieldId || null,
+            farmId: registeredDevice.farmId || AppState.currentFarmId || null,
+            zoneId: registeredDevice.zoneId || fieldInfo.location.trim() || null,
+            packageLevel: registeredDevice.packageLevel,
+            goalPriority,
+            thresholdSource: generatedThresholds?.source || 'manual',
+            thresholdNotes: generatedThresholds?.notes || '',
+            ...thresholds,
+        }),
+    });
+
+    const data = await safeJson(response);
+    if (!response.ok || data.ok === false) {
+        throw new Error(data.error || 'Preference sync failed');
+    }
+
+    return { synced: true, preferences: data.preferences || data };
+}
+
+
 async function createField() {
     const button = document.getElementById('bfNext');
     if (button) {
@@ -1015,38 +2098,77 @@ async function createField() {
     }
 
     const rack = currentRack();
+    const fieldId = registeredDevice?.fieldId || `field_${Date.now()}`;
+    const thresholds = generatedThresholds?.thresholds || {};
     const payload = {
         name: fieldInfo.name.trim(),
         location: fieldInfo.location.trim(),
+        description: fieldInfo.description.trim(),
         rackType: fieldInfo.rackType,
-        targetPlant: fieldInfo.targetPlant.trim(),
-        analysisGoal: fieldInfo.analysisGoal,
+        targetPlant: detectedPlants.map(plant => plant.name).join(', '),
+        analysisGoal: goalPriority.join(','),
         viewMode,
         photoPreview: photoData?.dataUrl || null,
         plants: detectedPlants,
+        deviceId: registeredDevice?.deviceId || 'farm_001',
+        serial: registeredDevice?.serial || deviceSetup.serial,
+        packageLevel: registeredDevice?.packageLevel || 'standard',
+        goalPriority,
+        thresholds,
     };
 
+    let backendFarmId = null;
     try {
-        await fetch(`${API_BASE}/api/farms/create`, {
+        const response = await fetch(`${API_BASE}/api/farms/create`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+            body: JSON.stringify({
+                ...payload,
+                fieldId,
+                zoneId: fieldInfo.location.trim() || null,
+                thresholdSource: generatedThresholds?.source || 'manual',
+                thresholdNotes: generatedThresholds?.notes || '',
+            }),
         });
+        const data = await safeJson(response);
+        if (response.ok && data?.farmId) backendFarmId = data.farmId;
     } catch (error) {
         console.warn('[BuildFarm] create field API unavailable:', error.message);
     }
 
+    let preferenceSync = { synced: false };
+    if (registeredDevice?.deviceId) {
+        try {
+            preferenceSync = await syncDevicePreferences(thresholds);
+            showToast('success', 'Device thresholds synced');
+        } catch (error) {
+            console.warn('[BuildFarm] preference sync skipped:', error.message);
+            showToast('warning', `Field saved, but thresholds not synced: ${error.message}`);
+        }
+    }
+
     const saved = loadSavedFarms();
     const farm = {
-        id: `field_${Date.now()}`,
+        id: fieldId,
+        backendFarmId,
         name: payload.name,
         location: payload.location,
+        description: payload.description,
         zone: fieldInfo.location.trim() || String.fromCharCode(65 + (saved.length % 26)),
         rackTypeId: fieldInfo.rackType,
         rackType: rack.label,
         rackLabel: rack.label,
         targetPlant: payload.targetPlant,
         analysisGoal: payload.analysisGoal,
+        deviceId: registeredDevice?.deviceId || 'farm_001',
+        deviceToken: registeredDevice?.deviceToken || null,
+        serial: registeredDevice?.serial || deviceSetup.serial,
+        packageLevel: registeredDevice?.packageLevel || 'standard',
+        goalPriority: [...goalPriority],
+        thresholds: { ...thresholds },
+        thresholdSource: generatedThresholds?.source || 'manual',
+        thresholdNotes: generatedThresholds?.notes || '',
+        preferenceSynced: Boolean(preferenceSync.synced),
         viewMode,
         photoPreview: payload.photoPreview,
         plants: detectedPlants.map(plant => ({ ...plant })),
@@ -1073,7 +2195,153 @@ async function createField() {
     AppState.farmName = farm.name;
     showToast('success', `"${farm.name}" field created`);
     dispose3D();
+
+    // ── Close-loop: register this farm so it appears in Community Farm Visits ──
+    // Build a 9-tile emoji layout from detectedPlants for the 2D grid preview
+    const EMOJI_FALLBACK = { tomato:'🍅', mint:'🌿', basil:'🌿', chili:'🌶️', lettuce:'🥬', spinach:'🌿', carrot:'🥕', cucumber:'🥒', pepper:'🌶️', strawberry:'🍓', default:'🌱' };
+    const farmLayout = Array(9).fill(null);
+    detectedPlants.slice(0, 9).forEach((p, i) => {
+        const key = (p.name || '').toLowerCase();
+        farmLayout[i] = EMOJI_FALLBACK[key] || EMOJI_FALLBACK.default;
+    });
+    fetch(`${API_BASE}/api/community/visits/register-farm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ farmLayout, displayName: farm.name, avatar: '🧑‍🌾' }),
+    }).catch(() => {}); // fire-and-forget
+
     setTimeout(() => goToFarmList(), 500);
+}
+
+async function createCommercialFarm() {
+    ensureCommercialStructure();
+    const button = document.getElementById('bfNext');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Launching...';
+    }
+
+    const farmId = AppState.currentFarmId || `farm_com_${Date.now()}`;
+    const zones = commercialStructure.zones.map(zone => {
+        const assignment = commercialDeviceAssignments.find(item => item.targetId === zone.zone_id);
+        const threshold = commercialZoneThresholds[zone.zone_id] || {};
+        return {
+            ...zone,
+            deviceId: assignment?.deviceId || null,
+            deviceToken: assignment?.deviceToken || null,
+            serial: assignment?.serial || null,
+            packageLevel: assignment?.packageLevel || zone.recommended_type,
+            thresholds: threshold.thresholds || {},
+            thresholdNotes: threshold.notes || '',
+            thresholdSource: threshold.source || 'manual',
+        };
+    });
+    const masterDevice = commercialDeviceAssignments.find(item => item.targetId === 'farm_master') || null;
+
+    const payload = {
+        name: fieldInfo.name.trim(),
+        location: fieldInfo.location.trim(),
+        description: fieldInfo.description.trim(),
+        farmSize: fieldInfo.rackType || 'medium',
+        accountMode: 'commercial',
+        farmId,
+        zones,
+        commercialDevices: commercialDeviceAssignments,
+        farmMaster: masterDevice,
+        commercialStructure,
+        goalPriority: commercialGoals,
+        targetPlant: zones.map(zone => zone.crop).join(', '),
+        analysisGoal: commercialGoals.join(','),
+        photoPreview: photoData?.dataUrl || null,
+        plants: zones.flatMap(zone => (zone.plants || []).map((plant, index) => ({
+            name: plant,
+            species: String(plant).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+            emoji: emojiForName(plant),
+            zoneId: zone.zone_id,
+            tier: index + 1,
+            slots: 1,
+        }))),
+        rackType: 'commercial-multi-zone',
+        viewMode: 'commercial',
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/api/farms/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await safeJson(response);
+        if (response.ok && data?.farmId) payload.backendFarmId = data.farmId;
+    } catch (error) {
+        console.warn('[BuildFarm] commercial farm API unavailable:', error.message);
+    }
+
+    await syncCommercialZonePreferences(farmId, zones);
+
+    const saved = loadSavedFarms();
+    const farm = {
+        id: farmId,
+        backendFarmId: payload.backendFarmId || null,
+        name: payload.name,
+        location: payload.location,
+        description: payload.description,
+        accountMode: 'commercial',
+        farmSize: payload.farmSize,
+        zones,
+        commercialDevices: commercialDeviceAssignments.map(device => ({ ...device })),
+        farmMaster: masterDevice,
+        commercialStructure,
+        goalPriority: [...commercialGoals],
+        analysisGoal: payload.analysisGoal,
+        targetPlant: payload.targetPlant,
+        rackTypeId: 'commercial-multi-zone',
+        rackType: 'Commercial Multi-Zone Farm',
+        rackLabel: `${zones.length}-Zone Commercial Layout`,
+        plantSlots: zones.length * 12,
+        plants: payload.plants,
+        photoPreview: payload.photoPreview,
+        createdAt: new Date().toISOString(),
+    };
+
+    saved.push(farm);
+    localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
+
+    AppState.currentFarm = farm;
+    AppState.currentFarmId = farm.id;
+    AppState.farmName = farm.name;
+    AppState.mode = 'commercial';
+    showToast('success', `"${farm.name}" commercial farm launched`);
+    dispose3D();
+    setTimeout(() => goToFarmList(), 500);
+}
+
+async function syncCommercialZonePreferences(farmId, zones) {
+    for (const zone of zones) {
+        if (!zone.deviceId) continue;
+        const headers = { 'Content-Type': 'application/json' };
+        if (zone.deviceToken) headers['x-device-token'] = zone.deviceToken;
+        try {
+            const response = await fetch(`${API_BASE}/api/sensors/preferences`, {
+                method: 'PUT',
+                headers,
+                body: JSON.stringify({
+                    deviceId: zone.deviceId,
+                    farmId,
+                    zoneId: zone.zone_id,
+                    packageLevel: zone.packageLevel,
+                    goalPriority: commercialGoals,
+                    thresholdSource: zone.thresholdSource,
+                    thresholdNotes: zone.thresholdNotes,
+                    ...zone.thresholds,
+                }),
+            });
+            const data = await safeJson(response);
+            if (!response.ok || data.ok === false) throw new Error(data.error || 'Preference sync failed');
+        } catch (error) {
+            console.warn(`[BuildFarm] commercial preference sync skipped for ${zone.zone_id}:`, error.message);
+        }
+    }
 }
 
 function handleManualAdd() {
@@ -1170,6 +2438,10 @@ function goalLabel(id) {
     return ANALYSIS_GOALS.find(goal => goal.id === id)?.label || id;
 }
 
+function isCommercialFlow() {
+    return AppState.mode === 'commercial';
+}
+
 function bindTextInput(id, onInput) {
     const input = document.getElementById(id);
     if (!input) return;
@@ -1201,3 +2473,14 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+
+
+
+
+
+
+
+
+
+

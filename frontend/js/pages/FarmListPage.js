@@ -52,7 +52,7 @@ export function render() {
             <div style="padding:16px; flex:1; overflow-y:auto;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                     <div style="font-size:0.7rem; font-weight:700; color:var(--sub);">SELECT FIELD (${savedFarms.length})</div>
-                    <button id="buildFarmBtn" class="btn-outline" style="padding:6px 12px;">+ New Field</button>
+                    <button id="buildFarmBtn" class="btn-outline" style="padding:6px 12px;">${isCommercial ? '+ New Farm' : '+ New Field'}</button>
                 </div>
 
                 <div id="farmList" style="display:flex; flex-direction:column; gap:10px;">

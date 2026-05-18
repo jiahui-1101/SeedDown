@@ -1,56 +1,198 @@
-// GROQ
-const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.ANTHROPIC_API_KEY;
-const headers = {
-  'Content-Type': 'application/json',
-  'Authorization': `Bearer ${GROQ_API_KEY}`
-};
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GROQ_TEXT_MODEL = process.env.GROQ_TEXT_MODEL || 'llama-3.1-8b-instant';
+const GROQ_VISION_MODEL = process.env.GROQ_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
 
-async function askClaude(system, userMsg, maxTokens = 1024) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
-      max_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: system || 'You are a helpful agricultural AI.' },
-        { role: 'user', content: userMsg }
-      ]
-    })
-  });
-  const data = await res.json();
-  if (!data.choices?.[0]) {
-    console.log('Groq empty response:', JSON.stringify(data));
-    return 'AI insight unavailable.';
+function providerOrder() {
+  return [
+    { name: 'groq', key: process.env.GROQ_API_KEY },
+    { name: 'gemini', key: process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY },
+  ].filter(provider => Boolean(provider.key));
+}
+
+function hasAIKey() {
+  return providerOrder().length > 0;
+}
+
+async function askText(system, userMsg, maxTokens = 1024) {
+  const messages = [
+    { role: 'system', content: system || 'You are a helpful agricultural AI for SeedDown.' },
+    { role: 'user', content: userMsg },
+  ];
+  return runTextMessages(messages, maxTokens);
+}
+
+async function runTextMessages(messages, maxTokens = 1024) {
+  const providers = providerOrder();
+  if (!providers.length) throw new Error('No GROQ_API_KEY, GEMINI_API_KEY_2, or GEMINI_API_KEY configured');
+
+  const errors = [];
+  for (const provider of providers) {
+    try {
+      if (provider.name === 'groq') return await groqText(provider.key, messages, maxTokens);
+      if (provider.name === 'gemini') return await geminiText(provider.key, messages, maxTokens);
+    } catch (error) {
+      errors.push(`${provider.name}: ${error.message}`);
+    }
   }
-  return data.choices[0].message.content;
+  throw new Error(`All AI providers failed: ${errors.join(' | ')}`);
+}
+
+async function runVisionPrompt({ image, mediaType = 'image/jpeg', prompt, maxTokens = 1024 }) {
+  const providers = providerOrder();
+  if (!providers.length) throw new Error('No GROQ_API_KEY, GEMINI_API_KEY_2, or GEMINI_API_KEY configured');
+
+  const errors = [];
+  for (const provider of providers) {
+    try {
+      if (provider.name === 'groq') return await groqVision(provider.key, { image, mediaType, prompt, maxTokens });
+      if (provider.name === 'gemini') return await geminiVision(provider.key, { image, mediaType, prompt, maxTokens });
+    } catch (error) {
+      errors.push(`${provider.name}: ${error.message}`);
+    }
+  }
+  throw new Error(`All vision providers failed: ${errors.join(' | ')}`);
+}
+
+async function groqText(apiKey, messages, maxTokens) {
+  const response = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_TEXT_MODEL,
+      max_tokens: maxTokens,
+      temperature: 0.35,
+      messages,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error?.message || `Groq API error ${response.status}`);
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('No text from Groq');
+  return text;
+}
+
+async function groqVision(apiKey, { image, mediaType, prompt, maxTokens }) {
+  const response = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_VISION_MODEL,
+      max_tokens: maxTokens,
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:${mediaType || 'image/jpeg'};base64,${image}` } },
+          ],
+        },
+      ],
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error?.message || `Groq vision API error ${response.status}`);
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error('No vision text from Groq');
+  return text;
+}
+
+async function geminiText(apiKey, messages, maxTokens) {
+  const url = geminiUrl(apiKey);
+  const text = messages.map(message => `${message.role.toUpperCase()}: ${message.content}`).join('\n\n');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text }] }],
+      generationConfig: { temperature: 0.35, maxOutputTokens: maxTokens },
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error?.message || `Gemini API error ${response.status}`);
+  const output = safeGeminiText(data);
+  if (!output) throw new Error('No text from Gemini');
+  return output;
+}
+
+async function geminiVision(apiKey, { image, mediaType, prompt, maxTokens }) {
+  const response = await fetch(geminiUrl(apiKey), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inline_data: { mime_type: mediaType || 'image/jpeg', data: image } },
+            { text: prompt },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: maxTokens,
+        responseMimeType: 'application/json',
+      },
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error?.message || `Gemini vision API error ${response.status}`);
+  const output = safeGeminiText(data);
+  if (!output) throw new Error('No vision text from Gemini');
+  return output;
+}
+
+function geminiUrl(apiKey) {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+}
+
+function safeGeminiText(data) {
+  return data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('\n').trim();
+}
+
+async function analyzePlantImage({ image, mediaType, targetPlant }) {
+  const rawText = await runVisionPrompt({
+    image,
+    mediaType,
+    prompt: plantRecognitionPrompt(targetPlant),
+    maxTokens: 900,
+  });
+  return parsePlantRecognition(rawText);
+}
+
+async function analyzePlantDisease({ image, mediaType, plantName, plantSpecies, farmContext = {}, answers = {} }) {
+  const rawText = await runVisionPrompt({
+    image,
+    mediaType,
+    prompt: plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }),
+    maxTokens: 1200,
+  });
+  return parseDiseaseAnalysis(rawText, plantName);
 }
 
 async function chatWithAdvisor(messages, gardenState) {
-  const system = `You are Sprout 🌱, the AI garden advisor for SeedDown.
-Help with crop care, harvest timing, recipes, sensor readings.
-Be friendly, concise (2-3 sentences). Use plant emojis.
+  const system = `You are Sprout, the AI garden advisor for SeedDown.
+Help with crop care, harvest timing, recipes, sensor readings, and vertical farming.
+Be friendly, concise, and practical. Use 2-3 sentences.
 Current garden: ${JSON.stringify(gardenState)}`;
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
-      max_tokens: 512,
-      messages: [
-        { role: 'system', content: system },
-        ...messages.map(m => ({
-          role: m.role === 'assistant' ? 'assistant' : 'user',
-          content: m.content
-        }))
-      ]
-    })
-  });
-  const data = await res.json();
-  if (!data.choices?.[0]) throw new Error('No response from Groq');
-  return data.choices[0].message.content;
+  const normalized = [
+    { role: 'system', content: system },
+    ...messages.map(message => ({
+      role: message.role === 'assistant' ? 'assistant' : 'user',
+      content: message.content || message.message || '',
+    })),
+  ];
+
+  return runTextMessages(normalized, 512);
 }
 
 async function forecastYieldAndRecipes(plantedCrop, cropSpec, recipes, days) {
@@ -63,125 +205,154 @@ Forecast harvest:
 - Forecast: ${days} days
 - Growth cycle: ${cropSpec.requirements?.growthDays} days
 - Yield per plant: ${cropSpec.yield?.avgGramsPerPlant}g
-- Matched recipes: ${recipes.slice(0,3).map(r => r.name).join(', ')}
+- Matched recipes: ${recipes.slice(0, 3).map(recipe => recipe.name).join(', ')}
 
 Return exactly:
 {"summary":"2 sentences","estimatedYieldGrams":0,"harvestDate":"YYYY-MM-DD","confidence":"medium","tips":["tip1","tip2"]}`;
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
-      max_tokens: 512,
-      messages: [
-        { role: 'system', content: 'Respond only with valid JSON, no markdown.' },
-        { role: 'user', content: prompt }
-      ]
-    })
-  });
-  const data = await res.json();
-  if (!data.choices?.[0]) return { error: 'No AI response' };
-  const text = data.choices[0].message.content;
+  const text = await askText('Respond only with valid JSON, no markdown.', prompt, 512);
   try {
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
+    return JSON.parse(stripJson(text));
   } catch {
     return { error: 'Parse failed', raw: text };
   }
 }
 
-module.exports = { askClaude, forecastYieldAndRecipes, chatWithAdvisor };
+function plantRecognitionPrompt(targetPlant) {
+  const hint = targetPlant
+    ? `\nUser says the intended plant is: ${targetPlant}. Use this as a hint, but only return it if it matches the photo or the photo is unclear.`
+    : '';
 
-// GEMINI
-/* 
+  return `You are a vertical farm expert. Analyse this indoor or vertical farm photo.${hint}
 
-const fetch = require('node-fetch');
-require('dotenv').config();
+Identify every plant species you can see and estimate how many slots or pots each occupies.
 
-const GEMINI_API_KEY = process.env.ANTHROPIC_API_KEY;
-// const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-function safeText(data) {
-  if (!data.candidates || !data.candidates[0]) {
-    console.log('Gemini empty response:', JSON.stringify(data));
-    return null;
-  }
-  return data.candidates[0].content.parts[0].text;
+Return ONLY valid JSON, no markdown fences, no preamble:
+
+{
+  "plants": [
+    {
+      "name": "Common Name",
+      "emoji": "plant emoji",
+      "species": "species_slug",
+      "confidence": 0.92,
+      "slots": 4
+    }
+  ]
 }
 
-async function askClaude(system, userMsg, maxTokens = 2048) {
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: (system ? system + '\n\n' : '') + userMsg }] }],
-      generationConfig: { maxOutputTokens: maxTokens }
-    })
-  });
-  const data = await res.json();
-  return safeText(data) ?? 'AI insight unavailable.';
+Rules:
+- confidence: 0.0-1.0
+- slots: integer, estimated pot or slot count for this species visible
+- species: lowercase, underscores for spaces
+- use realistic vegetable or herb emojis
+- if photo is unclear but the target plant hint is useful, return one plant using the hint with lower confidence
+- if no plants are visible and no hint is useful, return {"plants":[]}
+- return raw JSON only`;
 }
 
-async function chatWithAdvisor(messages, gardenState) {
-  const system = `You are Sprout 🌱, the AI garden advisor for SeedDown.
-Help with crop care, harvest timing, recipes, sensor readings.
-Be friendly, concise (2-3 sentences). Use plant emojis.
-Current garden: ${JSON.stringify(gardenState)}`;
+function plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }) {
+  const context = JSON.stringify({ plantName, plantSpecies, farmContext, answers }, null, 2);
+  return `You are SeedDown's commercial vertical farming plant health analyst.
+Analyse the uploaded plant photo using the known plant context below.
 
-  const contents = [
-    { role: 'user',  parts: [{ text: system }] },
-    { role: 'model', parts: [{ text: 'Understood! I am Sprout 🌱, ready to help.' }] },
-    ...messages.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
-    }))
-  ];
+Known context:
+${context}
 
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents })
-  });
-  const data = await res.json();
-  const text = safeText(data);
-  if (!text) throw new Error(data.error?.message || 'No response from Gemini');
-  return text;
+Return ONLY valid JSON, no markdown fences, no preamble:
+
+{
+  "plant": "Plant name",
+  "condition": "Most likely disease or stress condition",
+  "severity": "low | medium | high | unknown",
+  "confidence": 0.78,
+  "confidenceExplanation": "Short explanation of why this confidence was selected",
+  "evidence": ["visible symptom or contextual clue"],
+  "likelyCauses": ["cause 1", "cause 2"],
+  "solutions": ["specific action 1", "specific action 2", "specific action 3"],
+  "prevention": ["future prevention step 1", "future prevention step 2"],
+  "needsMoreInfo": false,
+  "followUpQuestions": []
 }
 
-async function forecastYieldAndRecipes(plantedCrop, cropSpec, recipes, days) {
-  const prompt = `You are an agricultural AI for SeedDown indoor garden.
-Respond ONLY with valid JSON, no markdown.
-
-Forecast harvest for this crop:
-- Species: ${plantedCrop.species}
-- Plants: ${plantedCrop.quantity}
-- Forecast window: ${days} days
-- Growth cycle: ${cropSpec.requirements?.growthDays} days
-- Yield per plant: ${cropSpec.yield?.avgGramsPerPlant}g
-
-Matched recipes: ${recipes.slice(0, 3).map(r => r.name).join(', ')}
-
-Return exactly:
-{"summary":"2 sentences","estimatedYieldGrams":0,"harvestDate":"YYYY-MM-DD","confidence":"medium","tips":["tip1","tip2"]}`;
-
-  const res = await fetch(GEMINI_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 512 }
-    })
-  });
-  const data = await res.json();
-  const text = safeText(data);
-  if (!text) return { error: 'No AI response' };
-  try {
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
-  } catch {
-    return { error: 'Parse failed', raw: text };
-  }
+Rules:
+- Use the known plant species strongly, because recognition happened earlier.
+- If the photo is unclear, symptoms are not visible, or multiple diseases look similar, set confidence below 0.55, needsMoreInfo true, and ask 3 concise follow-up questions.
+- If it looks like environmental stress instead of infection, say so clearly.
+- Do not claim certainty. Keep recommendations practical for indoor vertical farming.
+- confidence must be from 0.0 to 1.0.
+- return raw JSON only.`;
 }
 
-module.exports = { askClaude, forecastYieldAndRecipes, chatWithAdvisor };
+function parsePlantRecognition(rawText) {
+  const parsed = JSON.parse(stripJson(rawText, '{"plants":[]}'));
+  parsed.plants = sanitizePlants(parsed.plants || []);
+  return parsed;
+}
 
-*/
+function parseDiseaseAnalysis(rawText, fallbackPlant = 'Plant') {
+  const parsed = JSON.parse(stripJson(rawText, '{}'));
+  const confidence = Math.min(1, Math.max(0, parseFloat(parsed.confidence) || 0));
+  return {
+    plant: parsed.plant || fallbackPlant || 'Plant',
+    condition: parsed.condition || 'Unable to confirm plant disease from this image',
+    severity: ['low', 'medium', 'high', 'unknown'].includes(parsed.severity) ? parsed.severity : 'unknown',
+    confidence,
+    confidenceExplanation: parsed.confidenceExplanation || 'Confidence is based on image clarity, visible symptoms, and match with the known plant profile.',
+    evidence: sanitizeStringList(parsed.evidence),
+    likelyCauses: sanitizeStringList(parsed.likelyCauses),
+    solutions: sanitizeStringList(parsed.solutions),
+    prevention: sanitizeStringList(parsed.prevention),
+    needsMoreInfo: Boolean(parsed.needsMoreInfo) || confidence < 0.55,
+    followUpQuestions: sanitizeStringList(parsed.followUpQuestions).slice(0, 4),
+  };
+}
+
+function stripJson(rawText, fallback = '{}') {
+  const cleaned = String(rawText || fallback).replace(/```json/g, '').replace(/```/g, '').trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  return start >= 0 && end >= start ? cleaned.slice(start, end + 1) : fallback;
+}
+
+function sanitizePlants(plants) {
+  return plants.map(plant => ({
+    name: plant.name || 'Unknown Plant',
+    emoji: plant.emoji || emojiForPlant(plant.name),
+    species: (plant.species || plant.name || 'unknown')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, ''),
+    confidence: Math.min(1, Math.max(0, parseFloat(plant.confidence) || 0)),
+    slots: Math.max(1, Math.min(50, parseInt(plant.slots, 10) || 3)),
+  }));
+}
+
+function sanitizeStringList(list) {
+  return Array.isArray(list)
+    ? list.map(item => String(item || '').trim()).filter(Boolean).slice(0, 6)
+    : [];
+}
+
+function emojiForPlant(name = '') {
+  const key = String(name).toLowerCase();
+  if (key.includes('lettuce') || key.includes('cabbage') || key.includes('kale')) return '🥬';
+  if (key.includes('tomato')) return '🍅';
+  if (key.includes('chili') || key.includes('pepper')) return '🌶️';
+  if (key.includes('strawberry')) return '🍓';
+  if (key.includes('cucumber')) return '🥒';
+  if (key.includes('carrot')) return '🥕';
+  if (key.includes('bean')) return '🫘';
+  if (key.includes('pea')) return '🟢';
+  if (key.includes('basil') || key.includes('mint') || key.includes('spinach') || key.includes('cilantro') || key.includes('parsley')) return '🌿';
+  return '🌱';
+}
+
+module.exports = {
+  hasAIKey,
+  askText,
+  chatWithAdvisor,
+  forecastYieldAndRecipes,
+  analyzePlantImage,
+  analyzePlantDisease,
+};

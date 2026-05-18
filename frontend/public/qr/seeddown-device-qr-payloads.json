@@ -1,0 +1,50 @@
+[
+  {
+    "id": "beginner_starter",
+    "label": "Beginner Starter",
+    "serial": "SD-BGN-STR-00101",
+    "accountType": "beginner_starter",
+    "packageLevel": "starter",
+    "deviceType": "beginner"
+  },
+  {
+    "id": "beginner_standard",
+    "label": "Beginner Standard",
+    "serial": "SD-BGN-STD-00456",
+    "accountType": "beginner_standard",
+    "packageLevel": "standard",
+    "deviceType": "beginner"
+  },
+  {
+    "id": "beginner_pro",
+    "label": "Beginner Pro",
+    "serial": "SD-BGN-PRO-00901",
+    "accountType": "beginner_pro",
+    "packageLevel": "pro",
+    "deviceType": "beginner"
+  },
+  {
+    "id": "commercial_zone_basic",
+    "label": "Commercial Zone Basic",
+    "serial": "SD-COM-ZNB-01001",
+    "accountType": "commercial_zone_basic",
+    "packageLevel": "zone_basic",
+    "deviceType": "commercial"
+  },
+  {
+    "id": "commercial_zone_pro",
+    "label": "Commercial Zone Pro",
+    "serial": "SD-COM-ZNP-02001",
+    "accountType": "commercial_zone_pro",
+    "packageLevel": "zone_pro",
+    "deviceType": "commercial"
+  },
+  {
+    "id": "commercial_master",
+    "label": "Commercial Farm Master",
+    "serial": "SD-COM-MST-03001",
+    "accountType": "commercial_master",
+    "packageLevel": "farm_master",
+    "deviceType": "commercial"
+  }
+]
