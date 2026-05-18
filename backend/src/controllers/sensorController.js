@@ -67,7 +67,8 @@ exports.getDeviceCommand = async (req, res) => {
     if (req.query.format === 'text') {
       const preferences = await sensorService.getPreferences(command.deviceId || req.query.deviceId || 'farm_001');
       const intervalSeconds = preferences.sensorIntervalSeconds || 3600;
-      return res.type('text/plain').send(`${command.command}|${intervalSeconds}`);
+      const commandId = command._id || command.id || '';
+      return res.type('text/plain').send(`${command.command}|${intervalSeconds}|${commandId}`);
     }
 
     res.json(command);

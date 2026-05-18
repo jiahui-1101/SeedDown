@@ -240,9 +240,11 @@ async function saveReadingAndCreateCommand(body = {}, options = {}) {
     fieldId: reading.fieldId,
     zoneId: reading.zoneId,
     packageLevel: reading.packageLevel,
+    readingId: savedReading._id || savedReading.id || null,
     command: decision.command,
     reason: decision.reason,
     durationSeconds: decision.durationSeconds,
+    source: 'auto',
   };
 
   const command = await DeviceCommandModel.create(commandPayload);

@@ -19,6 +19,14 @@ const RACK_OPTIONS = {
 };
 
 let chatMessages = [];
+let selectedZoneId = null;
+let zoneSnapshots = {};
+
+const COMMERCIAL_ZONES = [
+    { id: 'zone_A', label: 'Zone A', crop: 'Leafy Greens' },
+    { id: 'zone_B', label: 'Zone B', crop: 'Fruit Crops' },
+    { id: 'zone_C', label: 'Zone C', crop: 'Herbs' },
+];
 
 export function render() {
     const container = document.getElementById('screenContainer');
@@ -26,6 +34,7 @@ export function render() {
     const rack = resolveRack(farm);
     const plantTotal = plantCount(farm);
     const occupancy = rack.total ? Math.min(100, Math.round((plantTotal / rack.total) * 100)) : 0;
+    if (!selectedZoneId) selectedZoneId = resolveDefaultZone(farm);
 
     container.innerHTML = `
         <div class="screen active commercial-command-screen" id="commercialScreen">
@@ -61,7 +70,14 @@ export function render() {
                     </section>
 
                     <section class="ops-section">
-                        <div class="ops-section-title">Live Sensors</div>
+                        <div class="ops-section-title">Farm Master / Zones</div>
+                        <div class="zone-overview-grid">
+                            ${zoneOverviewCards(farm, rack)}
+                        </div>
+                    </section>
+
+                    <section class="ops-section">
+                        <div class="ops-section-title" id="liveSensorTitle">Live Sensors · ${zoneLabel(selectedZoneId)}</div>
                         <div class="ops-sensor-grid">
                             ${sensorCard('Temp', 'pro-temp', '--', 'temp')}
                             ${sensorCard('Humid', 'pro-humid', '--', 'humid')}
@@ -162,7 +178,17 @@ function bindEvents() {
                 key: card.getAttribute('data-key'),
                 name: card.getAttribute('data-label'),
                 from: 'dash-c',
+                zoneId: selectedZoneId,
             });
+        });
+    });
+
+    document.querySelectorAll('.commercial-zone-card').forEach(card => {
+        card.addEventListener('click', () => {
+            selectedZoneId = card.getAttribute('data-zone');
+            AppState.currentZoneId = selectedZoneId;
+            updateZoneSelectionUI();
+            syncSelectedZoneData();
         });
     });
 }
@@ -241,6 +267,7 @@ function initProDashboard() {
 
     const syncData = async () => {
         try {
+            await updateZoneOverview();
             const res = await fetch(`${API_BASE}/api/sensors/latest?${buildSensorQuery().toString()}`);
             const data = await res.json();
             if (!data || !data.reading) return;
@@ -286,11 +313,74 @@ function initProDashboard() {
 function buildSensorQuery() {
     const farm = getCurrentFarm();
     const query = new URLSearchParams();
-    if (farm?.deviceId) query.set('deviceId', farm.deviceId);
+    const zoneDevice = findDeviceForZone(farm, selectedZoneId);
+    if (zoneDevice?.deviceId) query.set('deviceId', zoneDevice.deviceId);
+    else if (selectedZoneId) query.set('zoneId', selectedZoneId);
+    else if (farm?.deviceId) query.set('deviceId', farm.deviceId);
     else if (farm?.zoneId) query.set('zoneId', farm.zoneId);
     else if (farm?.id) query.set('fieldId', farm.id);
     else query.set('deviceId', 'farm_001');
     return query;
+}
+
+async function updateZoneOverview() {
+    const farm = getCurrentFarm();
+    const zones = buildCommercialZones(farm, resolveRack(farm));
+    const entries = await Promise.all(zones.map(async zone => {
+        const query = new URLSearchParams();
+        const device = findDeviceForZone(farm, zone.id);
+        if (device?.deviceId) query.set('deviceId', device.deviceId);
+        else query.set('zoneId', zone.id);
+
+        try {
+            const response = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
+            const data = await response.json();
+            return [zone.id, data.reading || null];
+        } catch (error) {
+            return [zone.id, null];
+        }
+    }));
+
+    zoneSnapshots = Object.fromEntries(entries);
+    renderZoneOverview();
+}
+
+async function syncSelectedZoneData() {
+    try {
+        const res = await fetch(`${API_BASE}/api/sensors/latest?${buildSensorQuery().toString()}`);
+        const data = await res.json();
+        if (data?.reading) {
+            applySensorReading(data.reading);
+            fetchAIGlobalAdvice(data.reading);
+        }
+    } catch (error) {
+        setText('ai-overview-text', `${zoneLabel(selectedZoneId)} is waiting for live data.`);
+    }
+}
+
+function applySensorReading(r) {
+    const temp = Number(r.temperature || 0);
+    const humid = Number(r.humidity || 0);
+    const light = Number(r.lightRaw || 0);
+    const ph = Number(r.ph || 0);
+    const water = Number(r.waterDistanceCm || 0);
+    const gas = Number(r.gasRaw || 0);
+    const ec = Number(r.ec || 0);
+    const co2 = Number(r.co2Ppm || 0);
+    const plantTotal = plantCount(getCurrentFarm());
+    const estProfit = Math.max(0, plantTotal * 1.35 + light * 0.012).toFixed(2);
+    const energyCost = Math.max(0, temp * 0.65 + plantTotal * 0.18).toFixed(1);
+
+    setText('pro-profit', `RM ${estProfit}`);
+    setText('pro-energy', `${energyCost} kWh`);
+    setText('pro-temp', `${temp.toFixed(1)}°C`);
+    setText('pro-humid', `${humid}%`);
+    setText('pro-light', light);
+    setText('pro-ph', ph || '--');
+    setText('pro-water', `${water}cm`);
+    setText('pro-gas', gas);
+    setText('pro-ec', ec ? ec.toFixed(2) + ' mS' : '--');
+    setText('pro-co2', co2 ? co2 + ' ppm' : '--');
 }
 async function fetchAIGlobalAdvice(currentData) {
     const prompt = `You are SeedDown's commercial farm AI. Current sensor data: ${JSON.stringify(currentData)}. Give one concise operations insight about risk, yield, energy, or automation.`;
@@ -412,8 +502,14 @@ async function assignCommercialDevice() {
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'Device assignment failed');
         const farm = getCurrentFarm() || {};
-        farm.commercialDevices = [...(farm.commercialDevices || []), data.device];
+        farm.commercialDevices = upsertCommercialDevice(farm.commercialDevices || [], data.device);
+        farm.zoneId = zoneId;
         AppState.currentFarm = farm;
+        persistCurrentFarm(farm);
+        selectedZoneId = zoneId;
+        AppState.currentZoneId = selectedZoneId;
+        renderZoneOverview();
+        updateZoneSelectionUI();
         status.style.color = '#047857';
         status.textContent = `Assigned ${data.device.deviceId} to ${zoneId}`;
     } catch (error) {
@@ -424,12 +520,174 @@ async function assignCommercialDevice() {
         button.textContent = 'Register and Assign';
     }
 }
+
+function upsertCommercialDevice(devices, nextDevice) {
+    return [
+        ...devices.filter(device =>
+            device.deviceId !== nextDevice.deviceId &&
+            normalizeZoneId(device.zoneId || device.zone) !== normalizeZoneId(nextDevice.zoneId || nextDevice.zone)
+        ),
+        nextDevice,
+    ];
+}
+
+function persistCurrentFarm(farm) {
+    const saved = loadSavedFarms();
+    const index = saved.findIndex(item => item.id === farm.id);
+    if (index >= 0) saved[index] = { ...saved[index], ...farm };
+    else saved.push(farm);
+    localStorage.setItem('user_farms', JSON.stringify(saved));
+}
 function sensorCard(label, id, value, key) {
     return `
         <button class="pro-sensor-card" data-key="${key}" data-label="${label}" type="button">
             <span>${label}</span>
             <strong id="${id}">${value}</strong>
         </button>`;
+}
+
+function zoneOverviewCards(farm, rack) {
+    return buildCommercialZones(farm, rack).map(zone => zoneCardHtml(zone)).join('');
+}
+
+function zoneCardHtml(zone) {
+    const reading = zoneSnapshots[zone.id];
+    const health = zoneHealth(reading, getCurrentFarm()?.thresholds || {});
+    const selected = zone.id === selectedZoneId ? 'selected' : '';
+    const deviceLabel = zone.deviceId ? zone.deviceId.replace(/^dev_/, '') : 'unassigned';
+    const latest = reading
+        ? `${formatSensorMini(reading.temperature, '°C')} · ${formatSensorMini(reading.humidity, '%')} · gas ${reading.gasRaw ?? '--'}`
+        : 'waiting for first reading';
+
+    return `
+        <button class="commercial-zone-card ${selected} ${health.level}" data-zone="${zone.id}" type="button">
+            <div class="zone-card-head">
+                <span>${escapeHTML(zone.label)}</span>
+                <b>${health.label}</b>
+            </div>
+            <strong>${escapeHTML(zone.crop)}</strong>
+            <div class="zone-card-meta">${zone.planted}/${zone.capacity} slots · ${escapeHTML(deviceLabel)}</div>
+            <div class="zone-meter"><i style="width:${zone.occupied}%"></i></div>
+            <small>${escapeHTML(latest)}</small>
+        </button>
+    `;
+}
+
+function renderZoneOverview() {
+    const grid = document.querySelector('.zone-overview-grid');
+    if (!grid) return;
+    grid.innerHTML = zoneOverviewCards(getCurrentFarm(), resolveRack(getCurrentFarm()));
+    bindZoneCards();
+}
+
+function bindZoneCards() {
+    document.querySelectorAll('.commercial-zone-card').forEach(card => {
+        card.addEventListener('click', () => {
+            selectedZoneId = card.getAttribute('data-zone');
+            AppState.currentZoneId = selectedZoneId;
+            updateZoneSelectionUI();
+            syncSelectedZoneData();
+        });
+    });
+}
+
+function updateZoneSelectionUI() {
+    document.querySelectorAll('.commercial-zone-card').forEach(card => {
+        card.classList.toggle('selected', card.getAttribute('data-zone') === selectedZoneId);
+    });
+    setText('liveSensorTitle', `Live Sensors · ${zoneLabel(selectedZoneId)}`);
+}
+
+function buildCommercialZones(farm, rack) {
+    const plants = Array.isArray(farm?.plants) ? farm.plants : [];
+    const capacity = Math.max(1, Math.ceil((rack?.total || 9) / COMMERCIAL_ZONES.length));
+    const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
+
+    return COMMERCIAL_ZONES.map((base, index) => {
+        const zonePlants = plants.filter((plant, plantIndex) => {
+            const explicitZone = normalizeZoneId(plant.zoneId || plant.zone || plant.area);
+            if (explicitZone) return explicitZone === base.id;
+            return plantIndex % COMMERCIAL_ZONES.length === index;
+        });
+        const device = devices.find(item => normalizeZoneId(item.zoneId || item.zone) === base.id);
+        const crop = dominantCrop(zonePlants) || base.crop;
+        const planted = zonePlants.length;
+
+        return {
+            ...base,
+            crop,
+            planted,
+            capacity,
+            occupied: Math.min(100, Math.round((planted / capacity) * 100)),
+            deviceId: device?.deviceId || (farm?.zoneId === base.id ? farm.deviceId : null),
+        };
+    });
+}
+
+function dominantCrop(plants) {
+    if (!plants.length) return '';
+    const counts = plants.reduce((acc, plant) => {
+        const name = plant.name || plant.species || 'Mixed Crops';
+        acc[name] = (acc[name] || 0) + 1;
+        return acc;
+    }, {});
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
+
+function findDeviceForZone(farm, zoneId) {
+    if (!zoneId) return null;
+    const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
+    return devices.find(item => normalizeZoneId(item.zoneId || item.zone) === zoneId)
+        || (normalizeZoneId(farm?.zoneId) === zoneId ? farm : null);
+}
+
+function normalizeZoneId(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    if (raw === 'a' || raw === 'zone a' || raw === 'zone_a') return 'zone_A';
+    if (raw === 'b' || raw === 'zone b' || raw === 'zone_b') return 'zone_B';
+    if (raw === 'c' || raw === 'zone c' || raw === 'zone_c') return 'zone_C';
+    return raw.startsWith('zone_') ? `zone_${raw.slice(5).toUpperCase()}` : raw;
+}
+
+function resolveDefaultZone(farm) {
+    return normalizeZoneId(AppState.currentZoneId || farm?.zoneId) || 'zone_A';
+}
+
+function zoneLabel(zoneId) {
+    return COMMERCIAL_ZONES.find(zone => zone.id === zoneId)?.label || 'Farm';
+}
+
+function zoneHealth(reading, thresholds = {}) {
+    if (!reading) return { level: 'idle', label: 'No Data' };
+    const gasLimit = Number(thresholds.gasDangerThreshold ?? 3000);
+    const tempMin = Number(thresholds.tempMin ?? 18);
+    const tempMax = Number(thresholds.tempMax ?? 35);
+    const phMin = Number(thresholds.phMin ?? 5.5);
+    const phMax = Number(thresholds.phMax ?? 6.8);
+    const dark = Number(thresholds.darkThreshold ?? 1500);
+    const waterLow = Number(thresholds.waterLowCm ?? 20);
+
+    if (Number(reading.gasRaw) > gasLimit || Number(reading.temperature) > tempMax + 3) {
+        return { level: 'critical', label: 'Critical' };
+    }
+    if (
+        Number(reading.temperature) < tempMin ||
+        Number(reading.temperature) > tempMax ||
+        Number(reading.ph) < phMin ||
+        Number(reading.ph) > phMax ||
+        Number(reading.lightRaw) < dark ||
+        Number(reading.waterDistanceCm) > waterLow
+    ) {
+        return { level: 'warning', label: 'Warning' };
+    }
+    return { level: 'healthy', label: 'Healthy' };
+}
+
+function formatSensorMini(value, suffix = '') {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return `--${suffix}`;
+    return `${number.toFixed(number % 1 ? 1 : 0)}${suffix}`;
 }
 
 function featureButton(feature, icon, label) {
@@ -647,6 +905,88 @@ function ensureCommercialCommandStyles() {
         }
         .advisor-section { border-left: 4px solid #22c55e; }
         .advisor-text { color: #334155; font-size: 13px; line-height: 1.45; }
+        .zone-overview-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+        .commercial-zone-card {
+            width: 100%;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            background: #f8fafc;
+            color: #17231b;
+            padding: 11px;
+            text-align: left;
+            cursor: pointer;
+            transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+        }
+        .commercial-zone-card:hover,
+        .commercial-zone-card.selected {
+            border-color: #22c55e;
+            box-shadow: 0 10px 24px rgba(34, 197, 94, .12);
+            transform: translateY(-1px);
+        }
+        .zone-card-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 7px;
+        }
+        .zone-card-head span {
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+        .zone-card-head b {
+            border-radius: 999px;
+            padding: 4px 8px;
+            background: #eef2f7;
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 950;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .commercial-zone-card.healthy .zone-card-head b { background: #dcfce7; color: #047857; }
+        .commercial-zone-card.warning .zone-card-head b { background: #fef3c7; color: #b45309; }
+        .commercial-zone-card.critical .zone-card-head b { background: #fee2e2; color: #b91c1c; }
+        .commercial-zone-card strong {
+            display: block;
+            font-size: 14px;
+            font-weight: 950;
+        }
+        .zone-card-meta {
+            margin-top: 4px;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 750;
+        }
+        .zone-meter {
+            height: 7px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: #e5e7eb;
+            margin: 9px 0 7px;
+        }
+        .zone-meter i {
+            display: block;
+            height: 100%;
+            min-width: 8px;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #22c55e, #84cc16);
+        }
+        .commercial-zone-card.warning .zone-meter i { background: linear-gradient(90deg, #f59e0b, #facc15); }
+        .commercial-zone-card.critical .zone-meter i { background: linear-gradient(90deg, #ef4444, #fb7185); }
+        .commercial-zone-card small {
+            display: block;
+            color: #64748b;
+            font-size: 11px;
+            line-height: 1.35;
+        }
         .ops-sensor-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
         .pro-sensor-card {
             min-height: 74px;

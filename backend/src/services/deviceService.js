@@ -113,16 +113,28 @@ async function getDeviceByTokenOrThrow(token) {
   return device;
 }
 
-async function heartbeat(input = {}) {
-  const token = input.deviceToken || input.token;
-  const device = await getDeviceByTokenOrThrow(token);
+async function heartbeat(input = {}, patch = {}) {
+  const byDeviceId = typeof input === 'string';
+  const token = byDeviceId ? null : input.deviceToken || input.token;
+  const device = byDeviceId
+    ? await getDevice(input)
+    : await getDeviceByTokenOrThrow(token);
+
+  if (!device) throw new Error('Device not found');
+  const next = byDeviceId ? patch : input;
+
   const updated = await DeviceModel.findOneAndUpdate(
     { deviceId: device.deviceId },
     { $set: {
       isOnline: true,
       lastSeen: new Date(),
-      firmwareVersion: input.firmwareVersion || device.firmwareVersion || null,
-      ipAddress: input.ipAddress || device.ipAddress || null,
+      firmwareVersion: next.firmwareVersion || device.firmwareVersion || null,
+      ipAddress: next.ipAddress || device.ipAddress || null,
+      farmId: next.farmId || device.farmId || null,
+      fieldId: next.fieldId || device.fieldId || null,
+      zoneId: next.zoneId || device.zoneId || null,
+      packageLevel: next.packageLevel || device.packageLevel || null,
+      lastReadingAt: next.lastReadingAt || device.lastReadingAt || null,
       updatedAt: new Date(),
     }},
     { new: true, upsert: true }

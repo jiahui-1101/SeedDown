@@ -2,6 +2,8 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <FS.h>
+#include <LittleFS.h>
 #include "DHTesp.h"
 
 const bool MOCK_BACKEND = false;
@@ -14,9 +16,13 @@ const char *RENDER_BACKEND_URL = "https://nextlevelfarm.onrender.com";
 const char *DEVICE_ID = "dev_demo_001";
 // Paste the token returned by POST /api/devices/register. Leave empty to keep legacy demo mode.
 const char *DEVICE_TOKEN = "";
+const char *OFFLINE_QUEUE_PATH = "/offline_readings.ndjson";
+const char *OFFLINE_QUEUE_TMP_PATH = "/offline_readings.tmp";
+const int MAX_OFFLINE_RECORDS = 120;
 
 String sensorApiUrl = String(RENDER_BACKEND_URL) + "/api/sensors";
 String commandApiUrl = String(RENDER_BACKEND_URL) + "/api/sensors/command?deviceId=" + String(DEVICE_ID) + "&format=text";
+String commandResultApiUrl = String(RENDER_BACKEND_URL) + "/api/sensors/command-result";
 
 const int DHT_PIN = 15;
 const int MQ2_PIN = 34;
@@ -55,6 +61,7 @@ const float EC_HIGH = 2.0;
 
 unsigned long sampleIntervalMs = DEMO_MODE ? 5000 : 3600000;
 unsigned long lastSampleTime = 0;
+String lastCommandId = "";
 
 DHTesp dht;
 
@@ -107,14 +114,113 @@ void connectWiFi() {
   Serial.print("Connecting to WiFi");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 6);
 
-  while (WiFi.status() != WL_CONNECTED) {
+  unsigned long startedAt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 10000) {
     delay(250);
     Serial.print(".");
   }
 
-  Serial.println(" connected");
-  Serial.print("ESP32 IP: ");
-  Serial.println(WiFi.localIP());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println(" connected");
+    Serial.print("ESP32 IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println(" offline");
+    Serial.println("[Offline Buffer] WiFi not available, sensor data will be queued");
+  }
+}
+
+bool ensureWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return true;
+
+  Serial.println("[WiFi] Reconnecting...");
+  WiFi.disconnect();
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 6);
+
+  unsigned long startedAt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startedAt < 5000) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("[WiFi] Reconnected: ");
+    Serial.println(WiFi.localIP());
+    return true;
+  }
+
+  Serial.println("[WiFi] Still offline");
+  return false;
+}
+
+void initOfflineStorage() {
+  if (LittleFS.begin(true)) {
+    Serial.println("[Offline Buffer] LittleFS ready");
+  } else {
+    Serial.println("[Offline Buffer] LittleFS failed; offline queue disabled");
+  }
+}
+
+int countOfflineRecords() {
+  if (!LittleFS.exists(OFFLINE_QUEUE_PATH)) return 0;
+
+  File file = LittleFS.open(OFFLINE_QUEUE_PATH, "r");
+  if (!file) return 0;
+
+  int count = 0;
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length() > 0) count++;
+  }
+  file.close();
+  return count;
+}
+
+void trimOfflineQueueIfNeeded() {
+  int count = countOfflineRecords();
+  if (count <= MAX_OFFLINE_RECORDS) return;
+
+  int skip = count - MAX_OFFLINE_RECORDS;
+  File source = LittleFS.open(OFFLINE_QUEUE_PATH, "r");
+  File temp = LittleFS.open(OFFLINE_QUEUE_TMP_PATH, "w");
+  if (!source || !temp) {
+    if (source) source.close();
+    if (temp) temp.close();
+    return;
+  }
+
+  int index = 0;
+  while (source.available()) {
+    String line = source.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+    if (index++ >= skip) temp.println(line);
+  }
+
+  source.close();
+  temp.close();
+  LittleFS.remove(OFFLINE_QUEUE_PATH);
+  LittleFS.rename(OFFLINE_QUEUE_TMP_PATH, OFFLINE_QUEUE_PATH);
+  Serial.print("[Offline Buffer] Trimmed oldest records. Kept ");
+  Serial.print(MAX_OFFLINE_RECORDS);
+  Serial.println(" readings");
+}
+
+void queueSensorPayload(String jsonPayload) {
+  File file = LittleFS.open(OFFLINE_QUEUE_PATH, "a");
+  if (!file) {
+    Serial.println("[Offline Buffer] Unable to queue reading");
+    return;
+  }
+
+  file.println(jsonPayload);
+  file.close();
+  trimOfflineQueueIfNeeded();
+
+  Serial.print("[Offline Buffer] Queued reading. Pending: ");
+  Serial.println(countOfflineRecords());
 }
 
 SensorData readSensors() {
@@ -164,18 +270,15 @@ void addDeviceHeaders(HTTPClient &http) {
   }
 }
 
-void uploadSensorData(String jsonPayload) {
-  Serial.println("[Backend API] POST /api/sensors");
-  Serial.println(jsonPayload);
-
+bool postSensorPayload(String jsonPayload, bool verbose = true) {
   if (MOCK_BACKEND) {
-    Serial.println("[Backend API] MOCK response: 201 Created");
-    return;
+    if (verbose) Serial.println("[Backend API] MOCK response: 201 Created");
+    return true;
   }
 
-  if (WiFi.status() != WL_CONNECTED) {
+  if (!ensureWiFi()) {
     Serial.println("[Backend API] WiFi not connected");
-    return;
+    return false;
   }
 
   WiFiClientSecure client;
@@ -186,10 +289,83 @@ void uploadSensorData(String jsonPayload) {
   addDeviceHeaders(http);
 
   int httpCode = http.POST(jsonPayload);
-  Serial.print("[Backend API] HTTP status: ");
-  Serial.println(httpCode);
-  Serial.println(http.getString());
+  String response = http.getString();
+  if (verbose) {
+    Serial.print("[Backend API] HTTP status: ");
+    Serial.println(httpCode);
+    Serial.println(response);
+  }
   http.end();
+
+  if (httpCode >= 200 && httpCode < 300) return true;
+
+  if (httpCode >= 400 && httpCode < 500) {
+    Serial.println("[Offline Buffer] Not queued because backend rejected the payload; check device token/config");
+    return true;
+  }
+
+  return false;
+}
+
+bool uploadSensorData(String jsonPayload) {
+  Serial.println("[Backend API] POST /api/sensors");
+  Serial.println(jsonPayload);
+
+  bool ok = postSensorPayload(jsonPayload);
+  if (!ok) queueSensorPayload(jsonPayload);
+  return ok;
+}
+
+void flushOfflineQueue() {
+  if (MOCK_BACKEND || !LittleFS.exists(OFFLINE_QUEUE_PATH)) return;
+  if (!ensureWiFi()) return;
+
+  File source = LittleFS.open(OFFLINE_QUEUE_PATH, "r");
+  File temp = LittleFS.open(OFFLINE_QUEUE_TMP_PATH, "w");
+  if (!source || !temp) {
+    if (source) source.close();
+    if (temp) temp.close();
+    Serial.println("[Offline Buffer] Unable to flush queue");
+    return;
+  }
+
+  int uploaded = 0;
+  int kept = 0;
+
+  while (source.available()) {
+    String line = source.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) continue;
+
+    if (postSensorPayload(line, false)) {
+      uploaded++;
+    } else {
+      temp.println(line);
+      kept++;
+      while (source.available()) {
+        String remaining = source.readStringUntil('\n');
+        remaining.trim();
+        if (remaining.length() > 0) {
+          temp.println(remaining);
+          kept++;
+        }
+      }
+      break;
+    }
+  }
+
+  source.close();
+  temp.close();
+  LittleFS.remove(OFFLINE_QUEUE_PATH);
+  if (kept > 0) LittleFS.rename(OFFLINE_QUEUE_TMP_PATH, OFFLINE_QUEUE_PATH);
+  else LittleFS.remove(OFFLINE_QUEUE_TMP_PATH);
+
+  if (uploaded > 0 || kept > 0) {
+    Serial.print("[Offline Buffer] Flush uploaded: ");
+    Serial.print(uploaded);
+    Serial.print(" | pending: ");
+    Serial.println(kept);
+  }
 }
 
 void appendCommand(String &command, const char *next) {
@@ -253,9 +429,13 @@ String getCommandFromBackend(SensorData data) {
 
   if (response.length() == 0) return "NO_ACTION";
 
-  int separatorIndex = response.indexOf('|');
-  if (separatorIndex != -1) {
-    String intervalStr = response.substring(separatorIndex + 1);
+  lastCommandId = "";
+  int firstSeparator = response.indexOf('|');
+  if (firstSeparator != -1) {
+    int secondSeparator = response.indexOf('|', firstSeparator + 1);
+    String intervalStr = secondSeparator == -1
+      ? response.substring(firstSeparator + 1)
+      : response.substring(firstSeparator + 1, secondSeparator);
     unsigned long newInterval = intervalStr.toInt();
     if (newInterval > 0) {
       sampleIntervalMs = newInterval * 1000UL;
@@ -263,10 +443,48 @@ String getCommandFromBackend(SensorData data) {
       Serial.print(newInterval);
       Serial.println(" seconds");
     }
-    return response.substring(0, separatorIndex);
+
+    if (secondSeparator != -1) {
+      lastCommandId = response.substring(secondSeparator + 1);
+      lastCommandId.trim();
+    }
+
+    return response.substring(0, firstSeparator);
   }
 
   return response;
+}
+
+void reportCommandResult(String commandId, String command) {
+  commandId.trim();
+  if (MOCK_BACKEND || commandId.length() == 0 || command == "NO_ACTION") return;
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[Backend API] WiFi not connected, command result not reported");
+    return;
+  }
+
+  String payload = "{";
+  payload += "\"commandId\":\"" + commandId + "\",";
+  payload += "\"deviceId\":\"" + String(DEVICE_ID) + "\",";
+  payload += "\"command\":\"" + command + "\",";
+  payload += "\"status\":\"executed\"";
+  payload += "}";
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.begin(client, commandResultApiUrl);
+  addDeviceHeaders(http);
+
+  Serial.println("[Backend API] POST /api/sensors/command-result");
+  Serial.println(payload);
+  int httpCode = http.POST(payload);
+  Serial.print("[Backend API] HTTP status: ");
+  Serial.println(httpCode);
+  Serial.println(http.getString());
+  http.end();
 }
 
 void executeSingleCommand(String command) {
@@ -382,11 +600,14 @@ void runIoTCycle() {
   SensorData data = readSensors();
   printRealtimeMonitor(data);
 
+  flushOfflineQueue();
+
   String payload = buildSensorJson(data);
   uploadSensorData(payload);
 
   String command = getCommandFromBackend(data);
   executeCommand(command);
+  reportCommandResult(lastCommandId, command);
 
   Serial.println("===== IoT Cycle Completed =====");
   Serial.println();
@@ -395,6 +616,8 @@ void runIoTCycle() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
+
+  initOfflineStorage();
 
   dht.setup(DHT_PIN, DHTesp::DHT22);
   analogReadResolution(12);
