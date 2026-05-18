@@ -54,9 +54,14 @@ export async function renderSosTab(containerId) {
 
     area.innerHTML = `
         <!-- view toggle -->
-        <div style="display:flex;gap:10px;margin-top:15px;margin-bottom:15px;background:white;padding:5px;border-radius:12px;box-shadow:0 2px 5px rgba(0,0,0,.06);">
-            <button id="btnViewAll"  style="flex:1;padding:10px;border-radius:8px;border:none;background:#E0F2FE;color:#0369A1;font-weight:700;cursor:pointer;">🌍 Community</button>
-            <button id="btnViewMine" style="flex:1;padding:10px;border-radius:8px;border:none;background:transparent;color:gray;font-weight:700;cursor:pointer;">👤 My Beacons</button>
+       <div style="position: sticky; top: -1px; z-index: 100; background: #f4f6f8; padding: 15px 0 15px 0; margin-top: -15px; margin-bottom: 15px;">
+            
+            <div class="view-toggle" style="display: flex; gap: 8px; background: white; padding: 6px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin: 0;">
+                <button id="btnViewAll" class="view-pill" style="flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 700; font-size: 0.9rem; cursor: pointer; background: #FEE2E2; color: #991B1B; transition: all 0.2s;">🚨 Neighborhood SOS</button>
+                
+                <button id="btnViewMine" class="view-pill" style="flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 700; font-size: 0.9rem; cursor: pointer; background: transparent; color: gray; transition: all 0.2s;">🙋‍♂️ My Beacons</button>
+            </div>
+            
         </div>
 
         <div id="sosFeedList" class="sos-grid"></div>
@@ -127,14 +132,23 @@ function bindSosLogic() {
     // View toggle
     document.getElementById('btnViewAll').addEventListener('click', e => {
         currentView = 'all';
-        e.target.style.background = '#E0F2FE'; e.target.style.color = '#0369A1';
-        document.getElementById('btnViewMine').style.background = 'transparent'; document.getElementById('btnViewMine').style.color = 'gray';
+        // 变成紧急红色 (SOS 风格)
+        e.target.style.background = '#FEE2E2'; 
+        e.target.style.color = '#991B1B';
+        
+        document.getElementById('btnViewMine').style.background = 'transparent'; 
+        document.getElementById('btnViewMine').style.color = 'gray';
         renderList();
     });
+
     document.getElementById('btnViewMine').addEventListener('click', e => {
         currentView = 'mine';
-        e.target.style.background = '#FEE2E2'; e.target.style.color = '#DC2626';
-        document.getElementById('btnViewAll').style.background = 'transparent'; document.getElementById('btnViewAll').style.color = 'gray';
+        // 变成个人蓝色 (My 风格)
+        e.target.style.background = '#E0F2FE'; 
+        e.target.style.color = '#0369A1';
+        
+        document.getElementById('btnViewAll').style.background = 'transparent'; 
+        document.getElementById('btnViewAll').style.color = 'gray';
         renderList();
     });
 
@@ -179,33 +193,49 @@ function bindSosLogic() {
     });
 }
 
+// ==================================================
+// 🌟 替换：完整的加载与渲染逻辑 (修复过滤与 UI)
+// ==================================================
+
 async function loadFeed() {
-    document.getElementById('sosFeedList').innerHTML =
-        `<div style="grid-column:1/-1;text-align:center;padding:28px;color:gray;">Loading beacons…</div>`;
+    const list = document.getElementById('sosFeedList');
+    list.innerHTML = '<div style="text-align:center;padding:30px;color:gray;">Loading beacons...</div>';
+    
     try {
+        // 向后端拿最新数据
         const res = await fetch(`${API}/api/community/posts`);
-        allPosts  = await res.json();
+        allPosts = await res.json();
+        // 拿到数据后，交给 renderList 去画卡片
         renderList();
     } catch (_) {
-        document.getElementById('sosFeedList').innerHTML =
-            `<div style="grid-column:1/-1;color:#DC2626;text-align:center;padding:20px;">Failed to load posts.</div>`;
+        list.innerHTML = '<div style="text-align:center;padding:30px;color:#DC2626;">Failed to load beacons</div>';
     }
 }
 
 function renderList() {
-    const list        = document.getElementById('sosFeedList');
+    const list = document.getElementById('sosFeedList');
     const currentUser = 'MyFarm';
-    const displayPosts = currentView === 'all' ? allPosts : allPosts.filter(p => p.author === currentUser);
 
+    let displayPosts = [];
+
+    // 🌟 1. 精准过滤逻辑：Neighborhood 不看自己，My Beacons 只看自己
+   if (currentView === 'all') {
+    displayPosts = allPosts.filter(p => p.author !== currentUser);
+} else {
+    displayPosts = allPosts.filter(p => p.author === currentUser);
+}
+
+    // 🌟 处理空状态 (如果过滤后没数据了)
     if (!displayPosts.length) {
         list.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:gray;padding:48px 20px;">
-            <div style="font-size:40px;margin-bottom:10px;">🍃</div>
+            <div style="font-size:42px;margin-bottom:10px;">📭</div>
             <div style="font-weight:700;">No beacons found.</div>
-            <div style="font-size:.82rem;margin-top:4px;">Everything looks green!</div>
+            <div style="font-size:.82rem;margin-top:4px;">${currentView === 'mine' ? 'You have no active SOS.' : 'Everything is peaceful!'}</div>
         </div>`;
         return;
     }
 
+    // 🌟 2. 渲染卡片 (包含全新的 💡 Helpful 和 悬赏 Bounty UI)
     list.innerHTML = displayPosts.map(post => {
         const isMine = post.author === currentUser;
         return `
@@ -218,24 +248,49 @@ function renderList() {
             <h4 class="sos-title">${post.title}</h4>
             <p class="sos-body">${post.content}</p>
             ${post.image ? `<img src="${post.image}" class="sos-image">` : ''}
-            <div class="sos-actions">
-                <button class="sos-action-btn btn-like" onclick="window.likePost('${post.id}')">
-                    🍃 <span>${post.likes || 0}</span>
+            
+            <div style="display: flex; gap: 10px; margin: 12px 0; align-items: center;">
+                <button onclick="window.likePost('${post.id}')" 
+        style="padding: 6px 14px; border-radius: 20px; border: 1px solid #E5E7EB; background: white; color: #4B5563; font-weight: 600; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: 0.2s;">
+    💡 Helpful <span id="likeCount_${post.id}" style="background: #F3F4F6; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem;">${post.likes || 0}</span>
+</button>
+                
+                ${isMine ? `
+                <button onclick="window.deletePost('${post.id}')" 
+                        style="padding: 6px 14px; border-radius: 20px; border: 1px solid #FECACA; background: #FEF2F2; color: #DC2626; font-weight: 600; font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s;">
+                    🗑️ Delete
                 </button>
-                ${isMine ? `<button class="sos-action-btn btn-delete" onclick="window.deletePost('${post.id}')">🗑️ Delete</button>` : ''}
+                ` : ''}
+                
+                ${post.bounty && post.bounty > 0 ? `
+                <div style="margin-left: auto; padding: 6px 12px; background: #ECFDF5; color: #059669; border-radius: 20px; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;">
+                    Bounty: 🍃 ${post.bounty}
+                </div>
+                ` : ''}
             </div>
-            <div class="sos-comments-box">
-                <div class="sos-comment-label">SUGGESTIONS (${(post.comments||[]).length})</div>
-                ${(post.comments||[]).map(c => `
-                    <div class="sos-comment-item">
-                        <div style="line-height:1.4;"><b style="color:#374151;">${c.author}:</b> <span style="color:#4B5563;">${c.text}</span></div>
-                        ${isMine && c.author !== currentUser ? `<button class="tip-btn" onclick="window.rewardComment('${post.id}','${c.author}')">🎁 Tip</button>` : ''}
-                    </div>`).join('')}
+           <div class="sos-comments-box">
+                <div class="sos-comment-label" id="commentLabel_${post.id}">SUGGESTIONS (${(post.comments||[]).length})</div>
+                
+                <div id="commentList_${post.id}">
+                    ${(post.comments||[]).map(c => `
+                        <div class="sos-comment-item">
+                            <div style="line-height:1.4;"><b style="color:#374151;">${c.author}:</b> <span style="color:#4B5563;">${c.text}</span></div>
+                            ${isMine && c.author !== currentUser ? `<button class="tip-btn" onclick="window.rewardComment('${post.id}','${c.author}')">🎁 Tip</button>` : ''}
+                        </div>`).join('')}
+                </div>
             </div>
+            
+            ${!isMine ? `
             <div class="sos-comment-input-row">
                 <input type="text" id="commentInput_${post.id}" class="sos-comment-input" placeholder="Type your suggestion…">
                 <button class="sos-send-btn" onclick="window.submitComment('${post.id}')">Send</button>
             </div>
+            ` : `
+            <div style="text-align: center; padding: 8px; font-size: 0.78rem; color: #9CA3AF; background: #F9FAFB; border-radius: 20px; border: 1px dashed #E5E7EB; margin-top: 5px;">
+                📢 Waiting for neighbors to provide suggestions...
+            </div>
+            `}
+            
         </div>`;
     }).join('');
 }
@@ -243,36 +298,134 @@ function renderList() {
 // ── Global Actions ──────────────────────────────────────
 window.submitComment = async function(postId) {
     const input = document.getElementById(`commentInput_${postId}`);
-    if (!input?.value) return showToast('warning', 'Comment cannot be empty!');
+    const text = input?.value?.trim();
+    if (!text) return showToast('warning', 'Comment cannot be empty!');
+
+    const currentUser = 'MyFarm'; // 当前登录用户
+    const authorName = 'HelpfulNeighbor'; // 模拟评论者名字
+
+    // 🌟 1. 默默在后台把数据发送给后端，不惊动用户
     try {
-        await fetch(`${API}/api/community/posts/${postId}/comments`, {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ text:input.value, author:'HelpfulNeighbor' }),
+        // 先不清空输入框，等请求成功或者直接做乐观更新
+        const response = await fetch(`${API}/api/community/posts/${postId}/comments`, {
+            method:'POST', 
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ text: text, author: authorName }),
         });
-        showToast('success', 'Suggestion added!');
-        loadFeed();
-    } catch (_) { showToast('error', 'Failed to send'); }
+
+        if (response.ok) {
+            // 🌟 2. 本地内存同步更新 (防止切 Tab 时数据回滚)
+            const post = allPosts.find(p => p.id === postId);
+            if (post) {
+                if (!post.comments) post.comments = [];
+                post.comments.push({ author: authorName, text: text });
+            }
+
+            // 🌟 3. 前端瞬间“手写”插入一条新评论，爽快感拉满！
+            const listContainer = document.getElementById(`commentList_${postId}`);
+            if (listContainer) {
+                const newCommentHtml = `
+                    <div class="sos-comment-item" style="animation: fadeIn 0.3s ease;">
+                        <div style="line-height:1.4;"><b style="color:#374151;">${authorName}:</b> <span style="color:#4B5563;">${text}</span></div>
+                    </div>
+                `;
+                // 如果原本没有评论，直接清空“暂无”，否则追加
+                listContainer.insertAdjacentHTML('beforeend', newCommentHtml);
+            }
+
+            // 🌟 4. 更新评论总数（SUGGESTIONS 数量 + 1）
+            const label = document.getElementById(`commentLabel_${postId}`);
+            if (label && post) {
+                label.innerText = `SUGGESTIONS (${post.comments.length})`;
+            }
+
+            // 🌟 5. 瞬间清空输入框
+            input.value = '';
+            showToast('success', 'Suggestion added!');
+        }
+    } catch (_) { 
+        showToast('error', 'Failed to send'); 
+    }
 };
 
 window.deletePost = function(postId) {
     const modal = document.getElementById('customConfirmModal');
     modal.style.display = 'flex';
+    
+    // 取消删除
     document.getElementById('btnConfirmCancel').onclick = () => modal.style.display = 'none';
+    
+    // 确认删除
     document.getElementById('btnConfirmOk').onclick = async () => {
-        modal.style.display = 'none';
+        modal.style.display = 'none'; // 先关掉确认弹窗
+        
+        // 🌟 1. 先在本地全局内存数组里把这条帖子删掉
+        allPosts = allPosts.filter(p => p.id !== postId);
+
+        // 🌟 2. 核心修正：使用百分之百存在的 likeCount 作为靶子，揪出整张卡片
+        const likeSpan = document.getElementById(`likeCount_${postId}`);
+        const card = likeSpan ? likeSpan.closest('.sos-card') : null;
+        
+        if (card) {
+            // 加上淡出缩小动画
+            card.style.transition = 'all 0.35s ease';
+            card.style.transform = 'scale(0.85)';
+            card.style.opacity = '0';
+            
+            // 350毫秒动画结束后，彻底从网页 DOM 中移除
+            setTimeout(() => {
+                card.remove();
+                
+                // 检查是否需要显示空状态
+                const list = document.getElementById('sosFeedList');
+                if (list && list.children.length === 0) {
+                    list.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:gray;padding:48px 20px;">
+                        <div style="font-size:42px;margin-bottom:10px;">📭</div>
+                        <div style="font-weight:700;">No beacons found.</div>
+                        <div style="font-size:.82rem;margin-top:4px;">${currentView === 'mine' ? 'You have no active SOS.' : 'Everything is peaceful!'}</div>
+                    </div>`;
+                }
+            }, 350);
+        }
+
+        showToast('success', 'Beacon removed.');
+
         try {
+            // 🌟 3. 默默在后台向服务器发送真正的删除指令
             await fetch(`${API}/api/community/posts/${postId}`, { method:'DELETE' });
-            showToast('success', 'Beacon removed.');
-            loadFeed();
-        } catch (_) { showToast('error', 'Error deleting'); }
+        } catch (_) { 
+            showToast('error', 'Error deleting from server'); 
+        }
     };
 };
 
 window.likePost = async function(postId) {
+    // 🌟 1. 先在本地内存中把数据改了 (防止切 Tab 时数据回滚)
+    const post = allPosts.find(p => p.id === postId);
+    if (post) post.likes = (post.likes || 0) + 1;
+
+    // 🌟 2. 纯前端直接修改 DOM 数字，并且加上炫酷的放大动画！
+    const countSpan = document.getElementById(`likeCount_${postId}`);
+    if (countSpan) {
+        countSpan.innerText = post ? post.likes : parseInt(countSpan.innerText) + 1;
+        
+        // 顺手做一个小动画，让点赞的人爽一下
+        countSpan.style.transition = 'transform 0.15s ease';
+        countSpan.style.transform = 'scale(1.3)';
+        countSpan.style.color = '#EF4444'; // 瞬间变红
+        
+        setTimeout(() => {
+            countSpan.style.transform = 'scale(1)';
+            countSpan.style.color = '';
+        }, 150);
+    }
+
     try {
+        // 🌟 3. 默默在后台把数据发送给后端，不调用 loadFeed()，不惊动用户！
         await fetch(`${API}/api/community/posts/${postId}/like`, { method:'POST' });
-        loadFeed();
-    } catch (_) { showToast('error', 'Network error'); }
+    } catch (_) { 
+        showToast('error', 'Network error'); 
+    }
 };
 
 window.rewardComment = function(postId, receiverName) {
