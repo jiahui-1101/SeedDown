@@ -19,6 +19,10 @@ let photoData = null;
 let viewMode = 'realistic';
 let threeCleanup = null;
 let scanStarted = false;
+let deviceSetup = { serial: 'SD-BGN-STD-00456', wifiSsid: '', wifiPassword: '', accountType: 'beginner_standard' };
+let registeredDevice = null;
+let goalPriority = ['beginner_safe'];
+let generatedThresholds = null;
 let fieldInfo = {
     name: '',
     location: '',
@@ -43,6 +47,15 @@ const ANALYSIS_GOALS = [
     { id: 'yield', label: 'Yield' },
     { id: 'health', label: 'Health' },
     { id: 'space', label: 'Space fit' },
+];
+
+const GOAL_OPTIONS = [
+    { id: 'healthy_growth', label: 'Healthy Growth' },
+    { id: 'eco_save', label: 'Eco Save' },
+    { id: 'low_maintenance', label: 'Low Maintenance' },
+    { id: 'fast_harvest', label: 'Fast Harvest' },
+    { id: 'cost_efficient', label: 'Cost Efficient' },
+    { id: 'beginner_safe', label: 'Beginner Safe' },
 ];
 
 const EMOJI_MAP = {
@@ -73,6 +86,10 @@ export function render() {
     photoData = null;
     viewMode = 'realistic';
     scanStarted = false;
+    deviceSetup = { serial: 'SD-BGN-STD-00456', wifiSsid: '', wifiPassword: '', accountType: 'beginner_standard' };
+    registeredDevice = null;
+    goalPriority = ['beginner_safe'];
+    generatedThresholds = null;
     fieldInfo = {
         name: '',
         location: '',
@@ -92,7 +109,7 @@ export function render() {
                     style="background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;color:var(--text);line-height:1;">←</button>
                 <div>
                     <div style="font-weight:800;font-size:16px;">New Field</div>
-                    <div style="font-size:11px;color:var(--muted);margin-top:1px;">analysis photo to 3D vertical preview</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:1px;">device setup to AI thresholds and 3D preview</div>
                 </div>
                 <div style="width:40px;"></div>
             </div>
@@ -128,36 +145,46 @@ function drawStep() {
     dispose3D();
 
     if (step === 1) {
-        renderStep1(content);
+        renderDeviceStep(content);
         cancelBtn.textContent = 'Cancel';
-        btn.textContent = 'Next: Add Photo';
+        btn.textContent = registeredDevice ? 'Next: Field Info' : 'Register Device';
     }
     if (step === 2) {
-        renderStep2(content);
-        cancelBtn.textContent = 'Exit';
-        btn.textContent = 'Generate 3D Preview';
+        renderStep1(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = 'Next: Add Photo';
     }
     if (step === 3) {
+        renderStep2(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = 'Next: AI Thresholds';
+    }
+    if (step === 4) {
+        renderThresholdStep(content);
+        cancelBtn.textContent = 'Back';
+        btn.textContent = generatedThresholds ? 'Next: 3D Preview' : 'Generate Thresholds';
+    }
+    if (step === 5) {
         renderStep3(content);
         cancelBtn.textContent = 'Preview Only';
         btn.textContent = 'Create Field';
     }
 }
 function renderStepDots() {
-    const labels = ['Plant', 'Photo', '3D'];
+    const labels = ['Device', 'Field', 'Photo', 'Goals', '3D'];
     document.getElementById('bfSteps').innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-bottom:10px;">
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding-bottom:10px;">
             ${labels.map((label, index) => {
                 const active = index + 1 <= step;
                 return `
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+                    <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+                        <div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
                                     background:${active ? 'var(--accent)' : 'var(--border)'};
                                     color:${active ? '#fff' : 'var(--muted)'};
-                                    font-size:11px;font-weight:800;flex-shrink:0;">
+                                    font-size:10px;font-weight:800;flex-shrink:0;">
                             ${index + 1 < step ? '✓' : index + 1}
                         </div>
-                        <div style="font-size:11px;font-weight:800;color:${index + 1 === step ? 'var(--accent)' : 'var(--muted)'};">
+                        <div style="font-size:10px;font-weight:800;color:${index + 1 === step ? 'var(--accent)' : 'var(--muted)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                             ${label}
                         </div>
                     </div>
@@ -167,6 +194,46 @@ function renderStepDots() {
     `;
 }
 
+function renderDeviceStep(content) {
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">DEVICE REGISTRY</div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px;">
+                    Enter the SeedDown device serial. QR scanning can be added later; this uses the same backend device-token flow.
+                </div>
+                ${fieldInput('deviceSerialInput', 'Device serial', 'SD-BGN-STD-00456', deviceSetup.serial)}
+                ${fieldInput('wifiSsidInput', 'WiFi SSID', 'Your WiFi name', deviceSetup.wifiSsid)}
+                <label style="display:block;margin-bottom:10px;">
+                    <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">WiFi password</span>
+                    <input id="wifiPasswordInput" type="password" value="${escapeHTML(deviceSetup.wifiPassword)}" placeholder="stored only for setup simulation"
+                        style="width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;">
+                </label>
+                <label style="display:block;margin-bottom:10px;">
+                    <span style="display:block;font-size:11px;font-weight:800;color:var(--sub);margin-bottom:5px;">Account package</span>
+                    <select id="accountTypeInput" style="width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:10px;background:var(--surface2);color:var(--text);font-size:14px;outline:none;">
+                        ${['beginner_starter','beginner_standard','beginner_pro'].map(type => `<option value="${type}" ${deviceSetup.accountType === type ? 'selected' : ''}>${type.replace(/_/g, ' ')}</option>`).join('')}
+                    </select>
+                </label>
+                <button id="registerDeviceBtn" style="width:100%;padding:12px;border:none;border-radius:12px;background:var(--accent);color:white;font-weight:900;cursor:pointer;">
+                    ${registeredDevice ? 'Device Registered' : 'Register Device'}
+                </button>
+                <div id="deviceStatus" style="margin-top:10px;font-size:12px;color:${registeredDevice ? 'var(--accent)' : 'var(--muted)'};line-height:1.45;">
+                    ${registeredDevice ? `Linked ${escapeHTML(registeredDevice.deviceId)} · ${escapeHTML(registeredDevice.packageLevel)}` : 'Device token will be generated by backend and hidden from normal UI.'}
+                </div>
+            </section>
+        </div>
+    `;
+
+    bindTextInput('deviceSerialInput', value => { deviceSetup.serial = value; registeredDevice = null; });
+    bindTextInput('wifiSsidInput', value => { deviceSetup.wifiSsid = value; registeredDevice = null; });
+    bindTextInput('wifiPasswordInput', value => { deviceSetup.wifiPassword = value; registeredDevice = null; });
+    document.getElementById('accountTypeInput').addEventListener('change', event => {
+        deviceSetup.accountType = event.target.value;
+        registeredDevice = null;
+    });
+    document.getElementById('registerDeviceBtn').addEventListener('click', registerDeviceFromStep);
+}
 function renderStep1(content) {
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
@@ -933,8 +1000,167 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
 }
+function renderThresholdStep(content) {
+    const plants = detectedPlants.length ? detectedPlants : parseTargetPlants(fieldInfo.targetPlant).map(name => plantFromName(name, 3, 0, 'target'));
+    content.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:14px;">
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:12px;">GOAL PRIORITY</div>
+                <div style="font-size:12px;color:var(--muted);line-height:1.45;margin-bottom:12px;">Choose up to two goals. SeedDown will generate thresholds for this device and crop mix.</div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                    ${GOAL_OPTIONS.map(goal => {
+                        const selected = goalPriority.includes(goal.id);
+                        return `<button class="goal-priority" data-id="${goal.id}"
+                            style="padding:11px 8px;border-radius:12px;border:1.5px solid ${selected ? 'var(--accent)' : 'var(--border)'};background:${selected ? 'var(--accent-l)' : 'var(--surface2)'};color:${selected ? 'var(--accent)' : 'var(--text)'};font-weight:900;font-size:12px;cursor:pointer;">
+                            ${goal.label}
+                        </button>`;
+                    }).join('')}
+                </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">AI THRESHOLDS</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45;">Plants: ${plants.map(p => escapeHTML(p.name)).join(', ') || 'mixed greens'}</div>
+                    </div>
+                    <button id="generateThresholdsBtn" style="padding:8px 10px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-l);color:var(--accent);font-size:11px;font-weight:900;cursor:pointer;">Generate</button>
+                </div>
+                <div id="thresholdStatus" style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.45;">
+                    ${generatedThresholds ? escapeHTML(generatedThresholds.notes || 'Thresholds ready') : 'No thresholds generated yet.'}
+                </div>
+                <div id="thresholdGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                    ${thresholdInputsHtml(generatedThresholds?.thresholds || {})}
+                </div>
+            </section>
+        </div>
+    `;
+
+    document.querySelectorAll('.goal-priority').forEach(button => {
+        button.addEventListener('click', () => {
+            const id = button.dataset.id;
+            if (goalPriority.includes(id)) goalPriority = goalPriority.filter(item => item !== id);
+            else if (goalPriority.length < 2) goalPriority = [...goalPriority, id];
+            else showToast('warning', 'Choose up to 2 goals');
+            generatedThresholds = null;
+            renderThresholdStep(content);
+        });
+    });
+
+    document.getElementById('generateThresholdsBtn').addEventListener('click', generateThresholdsForField);
+    bindThresholdInputs();
+}
+
+function thresholdInputsHtml(thresholds = {}) {
+    const items = [
+        ['tempMin', 'Temp min'], ['tempMax', 'Temp max'], ['humidityMin', 'Humid min'], ['humidityMax', 'Humid max'],
+        ['soilDryThreshold', 'Soil dry'], ['darkThreshold', 'Light dark'], ['phMin', 'pH min'], ['phMax', 'pH max'],
+        ['ecMin', 'EC min'], ['ecMax', 'EC max'], ['co2MinPpm', 'CO2 min'], ['wateringDurationSeconds', 'Water sec'],
+        ['fanDurationSeconds', 'Fan sec'], ['sensorIntervalSeconds', 'Interval sec'],
+    ];
+    return items.map(([key, label]) => `
+        <label style="display:block;">
+            <span style="display:block;font-size:10px;font-weight:900;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">${label}</span>
+            <input class="threshold-input" data-key="${key}" type="number" value="${thresholds[key] ?? ''}" placeholder="auto"
+                style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);font-size:13px;font-weight:800;color:var(--text);outline:none;">
+        </label>
+    `).join('');
+}
+
+function bindThresholdInputs() {
+    document.querySelectorAll('.threshold-input').forEach(input => {
+        input.addEventListener('input', event => {
+            if (!generatedThresholds) generatedThresholds = { thresholds: {}, notes: 'Manual thresholds', source: 'manual' };
+            const value = event.target.value === '' ? undefined : Number(event.target.value);
+            if (Number.isFinite(value)) generatedThresholds.thresholds[event.target.dataset.key] = value;
+        });
+    });
+}
+
+async function registerDeviceFromStep() {
+    if (!deviceSetup.serial.trim()) {
+        showToast('warning', 'Enter device serial');
+        return null;
+    }
+
+    const button = document.getElementById('registerDeviceBtn') || document.getElementById('bfNext');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Registering...';
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/devices/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                serial: deviceSetup.serial.trim(),
+                wifi_ssid: deviceSetup.wifiSsid.trim(),
+                wifi_password: deviceSetup.wifiPassword,
+                accountType: deviceSetup.accountType,
+                farmId: AppState.currentFarmId || 'farm_001',
+                fieldId: `field_${Date.now()}`,
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Device registration failed');
+        registeredDevice = data.device;
+        showToast('success', 'Device registered');
+        drawStep();
+        return registeredDevice;
+    } catch (error) {
+        showToast('error', error.message);
+        return null;
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+async function generateThresholdsForField() {
+    const button = document.getElementById('generateThresholdsBtn') || document.getElementById('bfNext');
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Generating...';
+    }
+
+    const plants = (detectedPlants.length ? detectedPlants : parseTargetPlants(fieldInfo.targetPlant).map(name => plantFromName(name, 3, 0, 'target')))
+        .map((plant, index) => ({ tier: Math.floor(index / (currentRack().slotsPerTier || 3)) + 1, plant_type: plant.species || plant.name }));
+
+    try {
+        const response = await fetch(`${API_BASE}/api/ai/generate-thresholds`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                plants,
+                goal_priority: goalPriority,
+                packageLevel: registeredDevice?.packageLevel || 'standard',
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Threshold generation failed');
+        generatedThresholds = { thresholds: data.thresholds, notes: data.notes, source: data.source };
+        showToast('success', data.source === 'ai' ? 'AI thresholds generated' : 'Fallback thresholds generated');
+        drawStep();
+        return generatedThresholds;
+    } catch (error) {
+        showToast('error', error.message);
+        return null;
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
 async function handleNext() {
     if (step === 1) {
+        if (!registeredDevice) {
+            const device = await registerDeviceFromStep();
+            if (!device) return;
+        }
+        step = 2;
+        drawStep();
+        return;
+    }
+
+    if (step === 2) {
         if (!fieldInfo.name.trim()) {
             showToast('warning', 'Enter a field name');
             return;
@@ -944,12 +1170,12 @@ async function handleNext() {
             return;
         }
         syncTargetPlants(fieldInfo.targetPlant);
-        step = 2;
+        step = 3;
         drawStep();
         return;
     }
 
-    if (step === 2) {
+    if (step === 3) {
         if (!photoData) {
             showToast('warning', 'Add a field photo before generating 3D');
             return;
@@ -957,12 +1183,22 @@ async function handleNext() {
         if (detectedPlants.length === 0) {
             syncTargetPlants(fieldInfo.targetPlant || 'Plant');
         }
-        step = 3;
+        step = 4;
         drawStep();
         return;
     }
 
-    if (step === 3) {
+    if (step === 4) {
+        if (!generatedThresholds) {
+            const thresholds = await generateThresholdsForField();
+            if (!thresholds) return;
+        }
+        step = 5;
+        drawStep();
+        return;
+    }
+
+    if (step === 5) {
         await createField();
     }
 }
@@ -1000,6 +1236,8 @@ async function createField() {
     }
 
     const rack = currentRack();
+    const fieldId = registeredDevice?.fieldId || ield_;
+    const thresholds = generatedThresholds?.thresholds || {};
     const payload = {
         name: fieldInfo.name.trim(),
         location: fieldInfo.location.trim(),
@@ -1009,6 +1247,11 @@ async function createField() {
         viewMode,
         photoPreview: photoData?.dataUrl || null,
         plants: detectedPlants,
+        deviceId: registeredDevice?.deviceId || 'farm_001',
+        serial: registeredDevice?.serial || deviceSetup.serial,
+        packageLevel: registeredDevice?.packageLevel || 'standard',
+        goalPriority,
+        thresholds,
     };
 
     try {
@@ -1021,9 +1264,22 @@ async function createField() {
         console.warn('[BuildFarm] create field API unavailable:', error.message);
     }
 
+    if (registeredDevice?.deviceId) {
+        fetch(`${API_BASE}/api/sensors/preferences`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'x-device-token': registeredDevice.deviceToken || '' },
+            body: JSON.stringify({
+                deviceId: registeredDevice.deviceId,
+                packageLevel: registeredDevice.packageLevel,
+                goalPriority,
+                ...thresholds,
+            }),
+        }).catch(error => console.warn('[BuildFarm] preference sync skipped:', error.message));
+    }
+
     const saved = loadSavedFarms();
     const farm = {
-        id: `field_${Date.now()}`,
+        id: fieldId,
         name: payload.name,
         location: payload.location,
         zone: fieldInfo.location.trim() || String.fromCharCode(65 + (saved.length % 26)),
@@ -1032,6 +1288,12 @@ async function createField() {
         rackLabel: rack.label,
         targetPlant: payload.targetPlant,
         analysisGoal: payload.analysisGoal,
+        deviceId: registeredDevice?.deviceId || 'farm_001',
+        deviceToken: registeredDevice?.deviceToken || null,
+        serial: registeredDevice?.serial || deviceSetup.serial,
+        packageLevel: registeredDevice?.packageLevel || 'standard',
+        goalPriority: [...goalPriority],
+        thresholds: { ...thresholds },
         viewMode,
         photoPreview: payload.photoPreview,
         plants: detectedPlants.map(plant => ({ ...plant })),
@@ -1190,3 +1452,9 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+
+
+
+
+

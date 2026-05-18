@@ -11,14 +11,20 @@ const char *WIFI_SSID = "Wokwi-GUEST";
 const char *WIFI_PASSWORD = "";
 
 const char *RENDER_BACKEND_URL = "https://nextlevelfarm.onrender.com";
+const char *DEVICE_ID = "dev_demo_001";
+// Paste the token returned by POST /api/devices/register. Leave empty to keep legacy demo mode.
+const char *DEVICE_TOKEN = "";
+
 String sensorApiUrl = String(RENDER_BACKEND_URL) + "/api/sensors";
-String commandApiUrl = String(RENDER_BACKEND_URL) + "/api/sensors/command?deviceId=farm_001&format=text";
+String commandApiUrl = String(RENDER_BACKEND_URL) + "/api/sensors/command?deviceId=" + String(DEVICE_ID) + "&format=text";
 
 const int DHT_PIN = 15;
 const int MQ2_PIN = 34;
 const int SOIL_PIN = 35;
 const int PH_PIN = 32;
 const int LDR_PIN = 33;
+const int EC_PIN = 36;
+const int CO2_PIN = 39;
 
 const int TRIG_PIN = 5;
 const int ECHO_PIN = 18;
@@ -26,18 +32,26 @@ const int ECHO_PIN = 18;
 const int GROW_LED_PIN = 23;
 const int WATER_LED_PIN = 22;
 const int BUZZER_PIN = 21;
+const int FAN_LED_PIN = 19;
+const int PH_LED_PIN = 4;
+const int FERT_LED_PIN = 16;
+const int CO2_LED_PIN = 17;
+const int GAS_LED_PIN = 2;
 
 const int BUZZER_CHANNEL = 0;
 const int BUZZER_RESOLUTION = 8;
 
 const int SOIL_DRY_THRESHOLD = 1800;
-const int GAS_DANGER_THRESHOLD = 2500;
+const int GAS_DANGER_THRESHOLD = 3000;
 const int DARK_THRESHOLD = 1500;
+const int CO2_LOW_THRESHOLD = 800;
 
 const float TEMP_LOW = 18.0;
 const float TEMP_HIGH = 35.0;
 const float PH_LOW = 5.5;
-const float PH_HIGH = 6.5;
+const float PH_HIGH = 6.8;
+const float EC_LOW = 1.2;
+const float EC_HIGH = 2.0;
 
 unsigned long sampleIntervalMs = DEMO_MODE ? 5000 : 3600000;
 unsigned long lastSampleTime = 0;
@@ -53,6 +67,10 @@ struct SensorData {
   float phValue;
   int lightRaw;
   float waterDistanceCm;
+  int ecRaw;
+  float ecValue;
+  int co2Raw;
+  int co2Ppm;
 };
 
 float mapFloat(float x, float inMin, float inMax, float outMin, float outMax) {
@@ -67,30 +85,26 @@ float readDistanceCM() {
   digitalWrite(TRIG_PIN, LOW);
 
   long duration = pulseIn(ECHO_PIN, HIGH, 30000);
-  if (duration == 0) {
-    return -1;
-  }
-
+  if (duration == 0) return -1;
   return duration * 0.034 / 2;
 }
 
-void buzzerOn() {
-  ledcWriteTone(BUZZER_CHANNEL, 1000);
-}
-
-void buzzerOff() {
-  ledcWriteTone(BUZZER_CHANNEL, 0);
-}
+void buzzerOn() { ledcWriteTone(BUZZER_CHANNEL, 1000); }
+void buzzerOff() { ledcWriteTone(BUZZER_CHANNEL, 0); }
 
 void allOutputsOff() {
   digitalWrite(GROW_LED_PIN, LOW);
   digitalWrite(WATER_LED_PIN, LOW);
+  digitalWrite(FAN_LED_PIN, LOW);
+  digitalWrite(PH_LED_PIN, LOW);
+  digitalWrite(FERT_LED_PIN, LOW);
+  digitalWrite(CO2_LED_PIN, LOW);
+  digitalWrite(GAS_LED_PIN, LOW);
   buzzerOff();
 }
 
 void connectWiFi() {
   Serial.print("Connecting to WiFi");
-
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 6);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -115,13 +129,17 @@ SensorData readSensors() {
   data.phValue = mapFloat(data.phRaw, 0, 4095, 0.0, 14.0);
   data.lightRaw = analogRead(LDR_PIN);
   data.waterDistanceCm = readDistanceCM();
+  data.ecRaw = analogRead(EC_PIN);
+  data.ecValue = mapFloat(data.ecRaw, 0, 4095, 0.0, 4.0);
+  data.co2Raw = analogRead(CO2_PIN);
+  data.co2Ppm = (int)mapFloat(data.co2Raw, 0, 4095, 400, 2000);
 
   return data;
 }
 
 String buildSensorJson(SensorData data) {
   String json = "{";
-  json += "\"deviceId\":\"farm_001\",";
+  json += "\"deviceId\":\"" + String(DEVICE_ID) + "\",";
   json += "\"temperature\":" + String(data.temperature, 2) + ",";
   json += "\"humidity\":" + String(data.humidity, 2) + ",";
   json += "\"gasRaw\":" + String(data.gasRaw) + ",";
@@ -130,10 +148,20 @@ String buildSensorJson(SensorData data) {
   json += "\"phRaw\":" + String(data.phRaw) + ",";
   json += "\"lightRaw\":" + String(data.lightRaw) + ",";
   json += "\"waterDistanceCm\":" + String(data.waterDistanceCm, 2) + ",";
+  json += "\"ecRaw\":" + String(data.ecRaw) + ",";
+  json += "\"ec\":" + String(data.ecValue, 2) + ",";
+  json += "\"co2Raw\":" + String(data.co2Raw) + ",";
+  json += "\"co2Ppm\":" + String(data.co2Ppm) + ",";
   json += "\"intervalSeconds\":" + String(sampleIntervalMs / 1000);
   json += "}";
-
   return json;
+}
+
+void addDeviceHeaders(HTTPClient &http) {
+  http.addHeader("Content-Type", "application/json");
+  if (String(DEVICE_TOKEN).length() > 0) {
+    http.addHeader("x-device-token", DEVICE_TOKEN);
+  }
 }
 
 void uploadSensorData(String jsonPayload) {
@@ -155,54 +183,46 @@ void uploadSensorData(String jsonPayload) {
 
   HTTPClient http;
   http.begin(client, sensorApiUrl);
-  http.addHeader("Content-Type", "application/json");
+  addDeviceHeaders(http);
 
   int httpCode = http.POST(jsonPayload);
   Serial.print("[Backend API] HTTP status: ");
   Serial.println(httpCode);
-
-  String response = http.getString();
-  Serial.println(response);
-
+  Serial.println(http.getString());
   http.end();
+}
+
+void appendCommand(String &command, const char *next) {
+  if (command.indexOf(next) >= 0) return;
+  if (command.length() > 0) command += ",";
+  command += next;
 }
 
 String mockAiCommand(SensorData data) {
   String command = "";
 
   if (data.gasRaw > GAS_DANGER_THRESHOLD) {
-    command += "BUZZER_ON";
+    appendCommand(command, "GAS_ALERT");
+    appendCommand(command, "BUZZER_ON");
+    appendCommand(command, "FAN_ON");
   }
 
   if (data.temperature < TEMP_LOW || data.temperature > TEMP_HIGH) {
-    if (command.length() > 0) command += ",";
-    command += "BUZZER_ON";
+    appendCommand(command, data.temperature > TEMP_HIGH ? "FAN_ON" : "BUZZER_ON");
+    appendCommand(command, "BUZZER_ON");
   }
 
-  if (data.soilRaw < SOIL_DRY_THRESHOLD) {
-    if (command.length() > 0) command += ",";
-    command += "WATER_ON";
-  }
+  if (data.soilRaw < SOIL_DRY_THRESHOLD) appendCommand(command, "WATER_ON");
+  if (data.lightRaw < DARK_THRESHOLD) appendCommand(command, "LIGHT_ON");
+  if (data.phValue < PH_LOW || data.phValue > PH_HIGH) appendCommand(command, "PH_WARNING");
+  if (data.ecValue < EC_LOW || data.ecValue > EC_HIGH) appendCommand(command, "FERT_ALERT");
+  if (data.co2Ppm < CO2_LOW_THRESHOLD) appendCommand(command, "CO2_LOW");
 
-  if (data.lightRaw < DARK_THRESHOLD) {
-    if (command.length() > 0) command += ",";
-    command += "LIGHT_ON";
-  }
-
-  if (data.phValue < PH_LOW || data.phValue > PH_HIGH) {
-    if (command.length() > 0) command += ",";
-    command += "PH_WARNING";
-  }
-
-  if (command.length() == 0) {
-    return "NO_ACTION";
-  }
-
-  return command;
+  return command.length() == 0 ? "NO_ACTION" : command;
 }
 
 String getCommandFromBackend(SensorData data) {
-  Serial.println("[Backend API] GET /api/sensors/command?deviceId=farm_001&format=text");
+  Serial.println("[Backend API] GET /api/sensors/command?deviceId=" + String(DEVICE_ID) + "&format=text");
 
   if (MOCK_BACKEND) {
     String command = mockAiCommand(data);
@@ -221,6 +241,7 @@ String getCommandFromBackend(SensorData data) {
 
   HTTPClient http;
   http.begin(client, commandApiUrl);
+  addDeviceHeaders(http);
 
   int httpCode = http.GET();
   Serial.print("[Backend API] HTTP status: ");
@@ -230,9 +251,7 @@ String getCommandFromBackend(SensorData data) {
   response.trim();
   http.end();
 
-  if (response.length() == 0) {
-    return "NO_ACTION";
-  }
+  if (response.length() == 0) return "NO_ACTION";
 
   int separatorIndex = response.indexOf('|');
   if (separatorIndex != -1) {
@@ -255,16 +274,28 @@ void executeSingleCommand(String command) {
 
   if (command == "WATER_ON") {
     digitalWrite(WATER_LED_PIN, HIGH);
-    Serial.println("Watering LED ON");
+    Serial.println("Pump / water relay indicator ON");
   } else if (command == "LIGHT_ON") {
     digitalWrite(GROW_LED_PIN, HIGH);
-    Serial.println("Grow light LED ON");
+    Serial.println("Grow light indicator ON");
+  } else if (command == "FAN_ON") {
+    digitalWrite(FAN_LED_PIN, HIGH);
+    Serial.println("Fan / ventilation indicator ON");
   } else if (command == "BUZZER_ON") {
     buzzerOn();
     Serial.println("Buzzer ON");
   } else if (command == "PH_WARNING") {
-    buzzerOn();
-    Serial.println("pH warning alert ON");
+    digitalWrite(PH_LED_PIN, HIGH);
+    Serial.println("pH warning indicator ON");
+  } else if (command == "FERT_ALERT") {
+    digitalWrite(FERT_LED_PIN, HIGH);
+    Serial.println("Fertilizer / EC alert indicator ON");
+  } else if (command == "CO2_LOW") {
+    digitalWrite(CO2_LED_PIN, HIGH);
+    Serial.println("CO2 low indicator ON");
+  } else if (command == "GAS_ALERT") {
+    digitalWrite(GAS_LED_PIN, HIGH);
+    Serial.println("Gas alert indicator ON");
   } else if (command == "NO_ACTION") {
     Serial.println("No action required");
   } else if (command.length() > 0) {
@@ -278,7 +309,6 @@ void executeCommand(String command) {
   Serial.println(command);
 
   allOutputsOff();
-
   command.trim();
   if (command.length() == 0 || command == "NO_ACTION") {
     Serial.println("No action required");
@@ -299,51 +329,27 @@ void executeCommand(String command) {
     start = commaIndex + 1;
   }
 
-  if (!executedAny) {
-    Serial.println("No action required");
-  }
+  if (!executedAny) Serial.println("No action required");
 }
+
 void printRealtimeMonitor(SensorData data) {
   Serial.println();
   Serial.println("===== Real-Time Farm Monitor =====");
-
-  Serial.print("Temperature: ");
-  Serial.print(data.temperature, 2);
-  Serial.println(" C");
-
-  Serial.print("Humidity: ");
-  Serial.print(data.humidity, 2);
-  Serial.println(" %");
-
-  Serial.print("Gas MQ2 Raw: ");
-  Serial.println(data.gasRaw);
-
-  Serial.print("Soil Moisture Raw: ");
-  Serial.println(data.soilRaw);
-
-  Serial.print("pH Raw: ");
-  Serial.print(data.phRaw);
-  Serial.print(" | pH Value: ");
-  Serial.println(data.phValue, 2);
-
-  Serial.print("Light Raw: ");
-  Serial.println(data.lightRaw);
-
-  Serial.print("Water Distance: ");
-  Serial.print(data.waterDistanceCm, 2);
-  Serial.println(" cm");
-
-  Serial.print("Current sensing interval: ");
-  Serial.print(sampleIntervalMs / 1000);
-  Serial.println(" seconds");
-
+  Serial.print("Temperature: "); Serial.print(data.temperature, 2); Serial.println(" C");
+  Serial.print("Humidity: "); Serial.print(data.humidity, 2); Serial.println(" %");
+  Serial.print("Gas MQ2 Raw: "); Serial.println(data.gasRaw);
+  Serial.print("Soil Moisture Raw: "); Serial.println(data.soilRaw);
+  Serial.print("pH Raw: "); Serial.print(data.phRaw); Serial.print(" | pH Value: "); Serial.println(data.phValue, 2);
+  Serial.print("Light Raw: "); Serial.println(data.lightRaw);
+  Serial.print("Water Distance: "); Serial.print(data.waterDistanceCm, 2); Serial.println(" cm");
+  Serial.print("EC Raw: "); Serial.print(data.ecRaw); Serial.print(" | EC Value: "); Serial.println(data.ecValue, 2);
+  Serial.print("CO2 Raw: "); Serial.print(data.co2Raw); Serial.print(" | CO2 ppm: "); Serial.println(data.co2Ppm);
+  Serial.print("Current sensing interval: "); Serial.print(sampleIntervalMs / 1000); Serial.println(" seconds");
   Serial.println("==================================");
 }
 
 void handleSerialPreference() {
-  if (!Serial.available()) {
-    return;
-  }
+  if (!Serial.available()) return;
 
   String input = Serial.readStringUntil('\n');
   input.trim();
@@ -351,7 +357,6 @@ void handleSerialPreference() {
 
   if (input.startsWith("interval ")) {
     int seconds = input.substring(9).toInt();
-
     if (seconds > 0) {
       sampleIntervalMs = (unsigned long)seconds * 1000UL;
       Serial.print("[User Preference] New sensing interval: ");
@@ -375,7 +380,6 @@ void handleSerialPreference() {
 
 void runIoTCycle() {
   SensorData data = readSensors();
-
   printRealtimeMonitor(data);
 
   String payload = buildSensorJson(data);
@@ -393,15 +397,18 @@ void setup() {
   delay(1000);
 
   dht.setup(DHT_PIN, DHTesp::DHT22);
-
   analogReadResolution(12);
 
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
-
   pinMode(GROW_LED_PIN, OUTPUT);
   pinMode(WATER_LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(FAN_LED_PIN, OUTPUT);
+  pinMode(PH_LED_PIN, OUTPUT);
+  pinMode(FERT_LED_PIN, OUTPUT);
+  pinMode(CO2_LED_PIN, OUTPUT);
+  pinMode(GAS_LED_PIN, OUTPUT);
 
   ledcSetup(BUZZER_CHANNEL, 1000, BUZZER_RESOLUTION);
   ledcAttachPin(BUZZER_PIN, BUZZER_CHANNEL);
@@ -410,6 +417,7 @@ void setup() {
 
   Serial.println("ESP32 Vertical Farming IoT Device");
   Serial.println("Wokwi demo: sensor -> backend API -> AI command -> action");
+  Serial.print("Device ID: "); Serial.println(DEVICE_ID);
   Serial.println("Default final interval: 1 hour");
   Serial.println("Current demo interval: 5 seconds");
   Serial.println("Commands: interval 10 | default | demo");
@@ -422,7 +430,6 @@ void loop() {
   handleSerialPreference();
 
   unsigned long currentTime = millis();
-
   if (currentTime - lastSampleTime >= sampleIntervalMs) {
     lastSampleTime = currentTime;
     runIoTCycle();

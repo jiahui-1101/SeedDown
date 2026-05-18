@@ -29,6 +29,8 @@ app.use('/api/iot', sensorRoutes);
 app.post('/api/sensor-data', createSensorReading);
 app.get('/api/device-command', getLegacyDeviceCommand);
 app.use('/api/farms', require('./src/routes/farmRoutes'));
+app.use('/api/devices', require('./src/routes/deviceRoutes'));
+app.use('/api/ai', require('./src/routes/aiRoutes'));
 app.use('/api/whatif', require('./src/routes/whatIfRoutes'));
 app.use('/api/chat', require('./src/routes/chatRoutes'));
 app.use('/api/crops', require('./src/routes/cropRoutes'));
@@ -39,3 +41,4 @@ app.get('/', (req, res) =>
 );
 
 module.exports = app;
+

@@ -91,6 +91,7 @@ export function render() {
                             ${featureButton('disease', '🧫', 'Disease')}
                             ${featureButton('consumption', '⚡', 'ESG')}
                             ${featureButton('alerts', '🚨', 'Alerts')}
+                            <button id="assignDeviceBtn" class="ops-tool-btn" type="button"><span>📡</span><strong>Assign Device</strong></button>
                             <button id="fabPlant" class="ops-tool-btn" type="button"><span>🌱</span><strong>Add Plant</strong></button>
                         </div>
                     </section>
@@ -133,6 +134,7 @@ function bindEvents() {
     });
 
     document.getElementById('fabPlant')?.addEventListener('click', openAddPlantModal);
+    document.getElementById('assignDeviceBtn')?.addEventListener('click', openAssignDeviceModal);
     document.getElementById('panelToggleBtn')?.addEventListener('click', toggleOpsPanel);
     document.getElementById('panelCloseBtn')?.addEventListener('click', toggleOpsPanel);
     document.getElementById('commercialChatSend')?.addEventListener('click', sendCommercialChat);
@@ -334,6 +336,79 @@ function renderChat() {
     log.scrollTop = log.scrollHeight;
 }
 
+function openAssignDeviceModal() {
+    const existing = document.getElementById('assignDeviceOverlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'assignDeviceOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.38);display:flex;align-items:center;justify-content:center;padding:18px;';
+    overlay.innerHTML = `
+        <div style="width:min(430px,100%);background:#fff;border-radius:22px;padding:18px;box-shadow:0 26px 80px rgba(15,23,42,.25);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;">
+                <div>
+                    <div style="font-size:10px;font-weight:950;color:#15803d;text-transform:uppercase;letter-spacing:.1em;">Commercial Device</div>
+                    <strong style="font-size:18px;">Assign Zone Device</strong>
+                </div>
+                <button id="assignClose" style="width:34px;height:34px;border:none;border-radius:12px;background:#f1f5f9;font-size:18px;font-weight:900;cursor:pointer;">×</button>
+            </div>
+            <label style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">Serial</label>
+            <input id="assignSerial" value="SD-COM-ZNB-00001" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:14px;margin-bottom:12px;outline:none;">
+            <label style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">Zone</label>
+            <select id="assignZone" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:14px;margin-bottom:12px;outline:none;">
+                <option value="zone_A">Zone A</option>
+                <option value="zone_B">Zone B</option>
+                <option value="zone_C">Zone C</option>
+            </select>
+            <label style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">WiFi SSID</label>
+            <input id="assignWifi" placeholder="Farm WiFi" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:14px;margin-bottom:12px;outline:none;">
+            <button id="assignSubmit" style="width:100%;padding:13px;border:none;border-radius:14px;background:#166534;color:white;font-weight:950;cursor:pointer;">Register and Assign</button>
+            <div id="assignStatus" style="font-size:12px;color:#64748b;line-height:1.45;margin-top:10px;">Commercial serials: SD-COM-ZNB, SD-COM-ZNP, SD-COM-MST.</div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('assignClose').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
+    document.getElementById('assignSubmit').addEventListener('click', assignCommercialDevice);
+}
+
+async function assignCommercialDevice() {
+    const serial = document.getElementById('assignSerial')?.value.trim();
+    const zoneId = document.getElementById('assignZone')?.value;
+    const wifi = document.getElementById('assignWifi')?.value.trim();
+    const status = document.getElementById('assignStatus');
+    const button = document.getElementById('assignSubmit');
+    if (!serial) return;
+
+    button.disabled = true;
+    button.textContent = 'Assigning...';
+    try {
+        const response = await fetch(`${API_BASE}/api/devices/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                serial,
+                wifi_ssid: wifi,
+                accountType: serial.includes('MST') ? 'commercial_master' : serial.includes('ZNP') ? 'commercial_zone_pro' : 'commercial_zone_basic',
+                farmId: AppState.currentFarmId || 'farm_commercial_001',
+                zoneId,
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || 'Device assignment failed');
+        const farm = getCurrentFarm() || {};
+        farm.commercialDevices = [...(farm.commercialDevices || []), data.device];
+        AppState.currentFarm = farm;
+        status.style.color = '#047857';
+        status.textContent = `Assigned ${data.device.deviceId} to ${zoneId}`;
+    } catch (error) {
+        status.style.color = '#dc2626';
+        status.textContent = error.message;
+    } finally {
+        button.disabled = false;
+        button.textContent = 'Register and Assign';
+    }
+}
 function sensorCard(label, id, value, key) {
     return `
         <button class="pro-sensor-card" data-key="${key}" data-label="${label}" type="button">
@@ -712,3 +787,4 @@ function ensureCommercialCommandStyles() {
     `;
     document.head.appendChild(style);
 }
+

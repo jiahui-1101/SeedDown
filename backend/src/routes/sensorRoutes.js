@@ -15,10 +15,10 @@ router.get('/', (req, res) => {
   res.json({
     message: 'SeedDown IoT sensor route working',
     endpoints: [
-      'POST /api/sensors',
-      'GET /api/sensors/latest?deviceId=farm_001',
-      'GET /api/sensors/history?deviceId=farm_001&limit=20',
-      'GET /api/sensors/command?deviceId=farm_001',
+      'POST /api/sensors + optional x-device-token',
+      'GET /api/sensors/latest?deviceId=... | fieldId=... | zoneId=... | farmId=...',
+      'GET /api/sensors/history?deviceId=...&limit=20',
+      'GET /api/sensors/command?deviceId=...&format=text + optional x-device-token',
       'POST /api/sensors/command',
       'POST /api/sensors/command-result',
       'GET /api/sensors/preferences?deviceId=farm_001',
@@ -39,5 +39,6 @@ router.put('/preferences', updatePreferences);
 
 
 module.exports = router;
+
 
 
