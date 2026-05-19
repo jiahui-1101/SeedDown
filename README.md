@@ -262,33 +262,102 @@ Commercial farms use a separate larger digital twin:
 
 ### 9. Disease Analysis
 
-Commercial Disease Analysis supports plant health checking:
+SeedDown includes a dedicated disease and plant health analysis page for commercial workflows. The idea is that each commercial zone can have a camera or uploaded image, and the operator can run analysis when a plant looks abnormal.
 
 ```http
 POST /api/ai/disease-analysis
 ```
 
-It can return:
+The disease flow is designed to reduce risky one-shot AI guesses. It can:
 
-- Most likely disease or stress cause.
-- Confidence level.
-- Explanation of confidence.
-- Suggested solution.
-- Follow-up questions when the image or data is not enough.
+- Use the current farm context, selected plant, and image input.
+- Identify likely disease, nutrient, watering, light, or environmental stress causes.
+- Return a confidence score instead of pretending every answer is certain.
+- Explain why the confidence level is high or low.
+- Recommend practical recovery steps such as isolation, pruning, airflow changes, pH check, nutrient adjustment, or watering correction.
+- Ask follow-up questions when the image is unclear or the model cannot decide safely.
+
+This feature is useful for commercial farms because a disease issue in one zone can spread quickly. By connecting disease analysis with zone-level data, SeedDown can help the operator decide whether the problem is visual disease, nutrient imbalance, humidity stress, or sensor-triggered environmental stress.
 
 ### 10. What-If and Resource Planning
 
-SeedDown includes planning tools for:
+SeedDown includes What-If planning so users can test a decision before changing the real farm.
 
-- Yield forecasting.
-- New plant impact.
-- Energy usage.
-- Profit estimate.
-- Crop comparison.
-- Commercial What-If Pro scenarios.
-- Recipe / crop usage recommendations.
+For beginner growers, What-If helps answer questions such as:
 
-### 11. Community Farming
+- What happens if I add tomato, cucumber, basil, or lettuce to my rack?
+- Will the farm still have enough space?
+- How many plants can fit based on the current rack structure?
+- Which crop is easier for the current sensor environment?
+- What recipe or usage ideas can I make from the crop I grow?
+
+For commercial users, What-If Pro is more business-focused:
+
+- Estimate yield based on plant count, crop type, and current farm status.
+- Estimate profit from the selected crop and expected production.
+- Compare energy usage and likely operating cost.
+- Check how adding a new plant affects zone capacity and resource demand.
+- Use market price and crop data to support planting decisions.
+- Support commercial planning before expanding zones or changing crop mix.
+
+The goal is to move the user from passive monitoring to active decision-making. Instead of only showing "what is happening now", SeedDown helps answer "what should I do next?"
+
+### 11. Eco Save and Consumption Tracking
+
+Eco Save focuses on reducing water and electricity waste while still keeping crops healthy.
+
+Current SeedDown logic supports resource-conscious decisions through:
+
+- Watering only when soil or humidity conditions require it.
+- Turning grow lights on only when light level is below threshold.
+- Activating fan / ventilation only when temperature, gas, humidity, or CO2 conditions require it.
+- Sensor interval control so stable farms do not need unnecessary high-frequency readings.
+- Energy and profit pages that estimate operating impact from live or historical sensor data.
+- Consumption / ESG views that help commercial users understand resource use.
+
+This is important for the case study because vertical farming can become expensive when lights, pumps, and ventilation run continuously. SeedDown's automation logic is designed around condition-based actuation instead of always-on operation.
+
+### 12. Control and Automation Center
+
+The Control page is the operator-facing automation panel.
+
+For Beginner mode, control stays simple and focuses mainly on safe interval and basic automation behaviour. For Commercial mode, control becomes more detailed:
+
+- View or edit threshold values.
+- Sync threshold preferences to the backend.
+- Send manual actuator commands such as `WATER_ON`, `LIGHT_ON`, `FAN_ON`, or emergency commands.
+- Review latest pending command from the backend.
+- Get AI recommendation warnings when a threshold is set too far outside a safe range.
+- Separate farm-level and zone-level thinking for commercial use.
+
+This page matters because commercial farms need override ability. The system can automate routine action, but the operator still needs manual control when testing hardware, handling emergencies, or tuning a zone.
+
+### 13. Farm Advisor and AI Chat
+
+SeedDown includes advisor-style guidance so users do not only see raw numbers.
+
+The advisor can explain:
+
+- Why a sensor is abnormal.
+- What the likely crop impact is.
+- Whether the situation is warning or danger.
+- What action the system is taking.
+- What a beginner should check first.
+- What a commercial operator should monitor across zones.
+
+The AI chat is especially useful for:
+
+- Crop care questions.
+- Sensor reading interpretation.
+- Harvest timing.
+- Plant management.
+- Disease risk.
+- Energy and resource questions.
+- Commercial planning prompts.
+
+This makes SeedDown friendlier for beginners while still useful for commercial operators who need quick explanations.
+
+### 14. Community Farming
 
 SeedDown includes community features:
 
@@ -299,6 +368,8 @@ SeedDown includes community features:
 - Visit neighbor farms.
 - Water neighbor plants.
 - Catch bugs for reward coins.
+
+The community feature is not just decoration. It supports the beginner problem: many first-time urban farmers give up because they have no one to ask. SOS posts, comments, rewards, and neighbor visits create a light support system around the farm dashboard.
 
 ---
 
@@ -773,23 +844,78 @@ Suggested hackathon demo sequence:
 
 ### 1. Predictive Farm Simulation
 
-Add a timeline slider to preview farm condition, growth, energy, and yield up to 14 days ahead.
+Add a timeline slider that lets operators scrub forward up to 14 days and preview likely farm outcomes.
+
+Planned inputs:
+
+- Current sensor readings.
+- Historical zone trends.
+- Crop type and growth stage.
+- Light, watering, temperature, pH, EC, and CO2 thresholds.
+- Planned crop additions or removals.
+
+Expected output:
+
+- Predicted yield range.
+- Likely energy and water demand.
+- Crop stress risk.
+- Visual 3D time-lapse of rack or zone condition.
+- Recommended adjustment before the risk becomes real.
+
+This would turn SeedDown from a monitoring dashboard into an active harvest planning tool.
 
 ### 2. Self-Evolving Crop Recipes
 
-Use historical farm cycles to evolve crop recipes for light, irrigation, temperature, CO2, and nutrients.
+Use historical farm cycles to improve growing recipes automatically.
+
+Instead of using one fixed recipe for every user, SeedDown can learn from each farm's real environment:
+
+- Which light duration worked best for this rack.
+- Which watering interval reduced waste without stressing the crop.
+- Which pH / EC range produced better growth.
+- Which temperature and humidity pattern caused fewer alerts.
+- Which zone consistently performs better or worse.
+
+Future versions can use optimisation methods such as genetic algorithms or reinforcement-style recipe tuning to evolve light, irrigation, temperature, CO2, and nutrient settings cycle by cycle.
 
 ### 3. Multi-Modal Deep Diagnosis
 
-Combine camera image, sensor anomalies, user answers, and crop research into a more scientific plant health report.
+The current disease feature can analyze a plant image and ask follow-up questions. The next version should combine multiple evidence sources:
+
+- Camera image.
+- Sensor anomaly timeline.
+- Recent watering, light, pH, EC, and humidity data.
+- Crop type and growth stage.
+- User answers about leaf colour, spots, wilting, smell, or pests.
+- Research-backed disease and nutrient references.
+
+The output should become a more scientific diagnosis report:
+
+- Most likely root cause.
+- Alternative possible causes.
+- Confidence explanation.
+- Evidence used.
+- Exact corrective action.
+- Prevention plan for the next cycle.
 
 ### 4. Stronger Commercial Operations
 
+Commercial mode is already separated from Beginner mode, but it can become much stronger for real operators.
+
+Planned commercial upgrades:
+
 - Multi-farm organization management.
 - Zone comparison and batch tracking.
+- Farm Master dashboard for total farm status.
+- Per-zone crop batch records.
+- Operator task assignment.
 - Role-based access for owner, operator, technician, and viewer.
 - Exportable PDF / CSV reports.
 - Compliance and ESG audit logs.
+- Maintenance logs for pumps, fans, lights, and sensors.
+- Better commercial financial modelling by crop batch and market price.
+
+This direction is important because commercial users do not only need a cute farm view; they need traceability, accountability, and repeatable operations.
 
 ### 5. Edge AI Gateway
 
@@ -801,13 +927,39 @@ Keep ESP32 as sensor node and add Raspberry Pi as optional local AI gateway for:
 - Offline dashboard.
 - On-site AI processing.
 
+This hybrid architecture is realistic for agriculture:
+
+```text
+ESP32 = low-cost sensor and actuator node
+Raspberry Pi = local camera and AI gateway
+Cloud backend = storage, dashboard, analytics, and remote access
+```
+
+ESP32 remains the best option for cheap GPIO and real-time actuator control, while Raspberry Pi can handle heavier camera and AI workloads.
+
 ### 6. Production IoT Reliability
 
-- MQTT or WebSocket streaming.
-- ESP32 OTA updates.
-- Offline LittleFS / MicroSD queue.
-- Device health monitoring.
-- Secure provisioning.
+- MQTT or WebSocket streaming for faster commercial updates.
+- ESP32 OTA updates so firmware can be fixed remotely.
+- Offline LittleFS queue for Beginner packages.
+- MicroSD queue for Commercial packages.
+- Batch upload when WiFi reconnects.
+- Device health monitoring with lastSeen, firmwareVersion, and sensor sanity checks.
+- Secure provisioning instead of manually embedding WiFi and tokens.
+- Better hardware failure detection, such as pump failure when soil remains dry after `WATER_ON`.
+
+### 7. Better 3D Digital Twin
+
+Future 3D improvements can make the digital twin more operational:
+
+- Click every rack, tier, zone, sensor, and actuator.
+- Show live device states such as fan spinning, grow light on, pump active, camera online, and alert buzzer active.
+- Colour plants by health: healthy, warning, critical.
+- Display zone-level overlay for temperature, pH, EC, CO2, and water.
+- Add fullscreen inspection mode for commercial operators.
+- Add comparison between planned layout and actual sensor coverage.
+
+This would make the 3D scene more than a visual preview. It becomes the farm management surface.
 
 ---
 
