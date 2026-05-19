@@ -14,6 +14,18 @@ Each package contains:
 
 - `sketch.ino`
 - `diagram.json`
+- `platformio.ini`
+- `wokwi.toml`
+- `src/main.cpp`
+
+`sketch.ino` is kept for web Wokwi copy-paste use.
+
+`src/main.cpp` is for PlatformIO. It only wraps the same sketch:
+
+```cpp
+#include <Arduino.h>
+#include "../sketch.ino"
+```
 
 ## Real Wokwi Components
 
@@ -58,6 +70,61 @@ const char* DEVICE_TOKEN = "PASTE_DEVICE_TOKEN_HERE";
 If you already registered a QR device through SeedDown, paste the real backend `deviceId` and `deviceToken`.
 
 If `DEVICE_TOKEN` is still `PASTE_DEVICE_TOKEN_HERE`, the sketch will skip the `x-device-token` header and use the backend's legacy fallback path for easier demo testing.
+
+## Run With VSCode + PlatformIO + Wokwi
+
+Use one package folder at a time.
+
+Example for Beginner Standard:
+
+```text
+iot/wokwi/beginner_standard
+```
+
+1. Open VSCode.
+2. `File -> Open Folder`.
+3. Select the package folder, for example `beginner_standard`.
+4. Build with PlatformIO:
+
+```powershell
+pio run
+```
+
+or click the PlatformIO Build button.
+
+5. Confirm PlatformIO generated:
+
+```text
+.pio/build/esp32dev/firmware.bin
+.pio/build/esp32dev/firmware.elf
+```
+
+6. Press `F1`.
+7. Run:
+
+```text
+Wokwi: Start Simulator
+```
+
+The Wokwi VSCode extension reads:
+
+```text
+wokwi.toml
+diagram.json
+.pio/build/esp32dev/firmware.bin
+.pio/build/esp32dev/firmware.elf
+```
+
+The `wokwi.toml` in each package already points to the correct PlatformIO output:
+
+```toml
+[wokwi]
+version = 1
+firmware = ".pio/build/esp32dev/firmware.bin"
+elf = ".pio/build/esp32dev/firmware.elf"
+```
+
+Do not open the whole SeedDown repository when starting the simulator. Open the specific package folder, otherwise Wokwi may not find the correct `wokwi.toml`.
 
 ## Backend Logic Alignment
 
