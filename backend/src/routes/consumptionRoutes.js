@@ -315,54 +315,42 @@ function analyseSensorHistory(sensorHistory = []) {
 ══════════════════════════════════════════════════════════════ */
 
 async function aiPredictAllCrops(cropKeys, cropDataMap, sensorStats) {
-
   const cropList = cropKeys.map(key => {
     const b = cropDataMap[key];
     const ideal = b.idealSensorZone;
-    return `
-- ${b.name}: benchmark ${b.vertical.growDays}d vertical / ${b.traditional.growDays}d traditional
-  Ideal: temp ${ideal.tempMin}-${ideal.tempMax}°C, PPFD ${ideal.lightPPFD.min}-${ideal.lightPPFD.max}, DLI ${ideal.DLI_target}, water ${ideal.waterLevelMin}-${ideal.waterLevelMax}%`;
+    return `- ${b.name}: benchmark ${b.vertical.growDays}d vertical / ${b.traditional.growDays}d traditional`;
   }).join('\n');
 
   const systemPrompt = `
-You are an agricultural AI for vertical farming.
-Respond ONLY with valid JSON array — no markdown, no explanation.
-Return exactly this structure:
+You are a strict JSON API. 
+Respond ONLY with a raw JSON array. 
+Do not include any introductory text, markdown formatting, or explanations.
+Valid JSON structure:
 [
-  { "key": "cropkey", "predictedGrowDays": <integer>, "confidence": "<high|medium|low>", "agronomicNote": "<1 sentence>" },
-  ...
+  { "key": "cropkey", "predictedGrowDays": 30, "confidence": "high", "agronomicNote": "Short sentence here." }
 ]
-One object per crop in the same order as input.
 `.trim();
 
-  const userPrompt = `
-SENSOR DATA (last 24h):
-- Avg temperature: ${sensorStats.avgTemp}°C (std dev: ${sensorStats.tempStdDev})
-- Temperature stress events: ${sensorStats.tempStress}/${sensorStats.readingsCount}
-- Estimated PPFD: ${sensorStats.estimatedPPFD} μmol/m²/s
-- Light hours: ${sensorStats.lightHoursDetected}h
-- DLI: ${sensorStats.DLI} mol/m²/day
-- Avg water level: ${sensorStats.avgWaterLevel}%
-- Water stability: ${sensorStats.waterStabilityPct}%
-
-CROPS TO PREDICT:
-${cropList}
-
-For each crop, predict grow days based on how actual sensor data compares to ideal conditions.
-`.trim();
+  const userPrompt = `Predict growth days for these crops based on ${sensorStats.avgTemp}°C temp and ${sensorStats.DLI} DLI. List: ${cropList}`;
 
   try {
     const raw = await callGroq(systemPrompt, userPrompt, 600);
     if (!raw) return null;
 
-    const cleaned = raw.replace(/```json|```/gi, '').trim();
-    const parsed  = JSON.parse(cleaned);
+    // 🔍 強化版 JSON 清洗：移除所有 markdown 符號並找到第一個 '[' 到最後一個 ']'
+    const start = raw.indexOf('[');
+    const end = raw.lastIndexOf(']');
+    
+    if (start === -1 || end === -1) {
+      console.warn('[consumptionRoutes] No JSON array found in response');
+      return null;
+    }
 
-    if (!Array.isArray(parsed)) return null;
-    return parsed;
+    const jsonString = raw.substring(start, end + 1);
+    return JSON.parse(jsonString);
 
   } catch (err) {
-    console.warn('[consumptionRoutes] aiPredictAllCrops parse error:', err.message);
+    console.warn('[consumptionRoutes] Parse error. Raw response:', raw);
     return null;
   }
 }

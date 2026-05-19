@@ -4,7 +4,8 @@
  */
 
 import { AppState } from '../store.js';
-import { saveFarmsToFirestore } from '../utils/firebase.js';
+// (如果你的项目中其他地方还需要用到 saveFarmsToFirestore，保留 import 无妨，但这里已经不需要调用了)
+import { saveFarmsToFirestore } from '../utils/firebase.js'; 
 import { showToast } from '../utils/toast.js';
 import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js';
 import jsQR from 'jsqr';
@@ -15,6 +16,17 @@ const FARMS_STORAGE_KEY = 'user_farms';
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
     : window.location.origin;
+
+// ─── 【新增】JWT 认证 Header 助手函数 ───
+function getAuthHeaders(extraHeaders = {}) {
+    const token = localStorage.getItem('token');
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...extraHeaders
+    };
+}
+// ──────────────────────────────────────────
 
 let step = 1;
 let photoData = null;
@@ -1013,7 +1025,7 @@ async function generateCommercialZoneThresholds() {
         const farmPlants = allCommercialPlants().map((plant, index) => ({ tier: index + 1, plant_type: plant }));
         const farmResponse = await fetch(`${API_BASE}/api/ai/generate-thresholds`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 plants: farmPlants,
                 goal_priority: commercialGoals,
@@ -1033,7 +1045,7 @@ async function generateCommercialZoneThresholds() {
                 .map((plant, index) => ({ tier: index + 1, plant_type: plant }));
             const response = await fetch(`${API_BASE}/api/ai/generate-thresholds`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({
                     plants,
                     goal_priority: commercialGoals,
@@ -1143,7 +1155,7 @@ async function assignPendingCommercialDevice(targetId) {
     try {
         const response = await fetch(`${API_BASE}/api/devices/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 serial: commercialPendingDevice.serial,
                 wifi_ssid: deviceSetup.wifiSsid.trim(),
@@ -1702,7 +1714,7 @@ async function scanPlantsFromPhoto() {
     try {
         const res = await fetch(`${API_BASE}/api/farms/scan-plants`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 image: photoData.base64,
                 mediaType: photoData.mediaType,
@@ -2199,6 +2211,7 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.quadraticCurveTo(x, y, x + r, y);
     ctx.closePath();
 }
+
 function renderThresholdStep(content) {
     const plants = detectedPlants.length ? detectedPlants : [];
     content.innerHTML = `
@@ -2435,7 +2448,7 @@ async function registerDeviceFromStep(scannedPackage = null) {
     try {
         const response = await fetch(`${API_BASE}/api/devices/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 serial: deviceSetup.serial.trim(),
                 wifi_ssid: deviceSetup.wifiSsid.trim(),
@@ -2481,6 +2494,7 @@ async function safeJson(response) {
         return {};
     }
 }
+
 async function generateThresholdsForField() {
     const button = document.getElementById('generateThresholdsBtn') || document.getElementById('bfNext');
     if (button) {
@@ -2494,7 +2508,7 @@ async function generateThresholdsForField() {
     try {
         const response = await fetch(`${API_BASE}/api/ai/generate-thresholds`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 plants,
                 goal_priority: goalPriority,
@@ -2663,7 +2677,7 @@ function handleCancel() {
 async function syncDevicePreferences(thresholds = {}) {
     if (!registeredDevice?.deviceId) return { synced: false, reason: 'No registered device' };
 
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = getAuthHeaders();
     if (registeredDevice.deviceToken && !registeredDevice.isDemoFallback) {
         headers['x-device-token'] = registeredDevice.deviceToken;
     }
@@ -2691,7 +2705,6 @@ async function syncDevicePreferences(thresholds = {}) {
 
     return { synced: true, preferences: data.preferences || data };
 }
-
 
 async function createField() {
     const button = document.getElementById('bfNext');
@@ -2725,7 +2738,7 @@ async function createField() {
     try {
         const response = await fetch(`${API_BASE}/api/farms/create`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 ...payload,
                 fieldId,
@@ -2783,17 +2796,6 @@ async function createField() {
     saved.push(farm);
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
 
-    // ---- ADDED FIREBASE SYNC LOGIC ----
-    if (AppState.uid) {
-        try {
-            await saveFarmsToFirestore(AppState.uid, saved);
-            console.log('[BuildFarm] ✅ Farm synced to Firebase');
-        } catch (err) {
-            console.error('[BuildFarm] ❌ Failed to sync farm to Firebase', err);
-        }
-    }
-    // -----------------------------------
-
     AppState.newFarm = payload;
     AppState.currentFarm = farm;
     AppState.currentFarmId = farm.id;
@@ -2802,7 +2804,6 @@ async function createField() {
     dispose3D();
 
     // ── Close-loop: register this farm so it appears in Community Farm Visits ──
-    // Build a 9-tile emoji layout from detectedPlants for the 2D grid preview
     const EMOJI_FALLBACK = { tomato:'🍅', mint:'🌿', basil:'🌿', chili:'🌶️', lettuce:'🥬', spinach:'🌿', carrot:'🥕', cucumber:'🥒', pepper:'🌶️', strawberry:'🍓', default:'🌱' };
     const farmLayout = Array(9).fill(null);
     detectedPlants.slice(0, 9).forEach((p, i) => {
@@ -2811,7 +2812,7 @@ async function createField() {
     });
     fetch(`${API_BASE}/api/community/visits/register-farm`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ farmLayout, displayName: farm.name, avatar: '🧑‍🌾' }),
     }).catch(() => {}); // fire-and-forget
 
@@ -2877,7 +2878,7 @@ async function createCommercialFarm() {
     try {
         const response = await fetch(`${API_BASE}/api/farms/create`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify(payload),
         });
         const data = await safeJson(response);
@@ -2919,15 +2920,6 @@ async function createCommercialFarm() {
 
     saved.push(farm);
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
-    if (AppState.uid) {
-        try {
-            // 确保 saveFarmsToFirestore 已经能在这里直接使用
-            await saveFarmsToFirestore(AppState.uid, saved);
-            console.log('[BuildFarm] ✅ Commercial Farm synced to Firebase');
-        } catch (err) {
-            console.error('[BuildFarm] ❌ Failed to sync commercial farm to Firebase', err);
-        }
-    }
 
     AppState.currentFarm = farm;
     AppState.currentFarmId = farm.id;
@@ -2941,7 +2933,7 @@ async function createCommercialFarm() {
 async function syncCommercialZonePreferences(farmId, zones) {
     for (const zone of zones) {
         if (!zone.deviceId) continue;
-        const headers = { 'Content-Type': 'application/json' };
+        const headers = getAuthHeaders();
         if (zone.deviceToken) headers['x-device-token'] = zone.deviceToken;
         try {
             const response = await fetch(`${API_BASE}/api/sensors/preferences`, {
@@ -2968,7 +2960,7 @@ async function syncCommercialZonePreferences(farmId, zones) {
 
 async function syncCommercialFarmPreferences(farmId, masterDevice) {
     if (!masterDevice?.deviceId) return;
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = getAuthHeaders();
     if (masterDevice.deviceToken) headers['x-device-token'] = masterDevice.deviceToken;
     try {
         const response = await fetch(`${API_BASE}/api/sensors/preferences`, {
@@ -3137,14 +3129,3 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
-
-
-
-
-
-
-
-
-
-
-
