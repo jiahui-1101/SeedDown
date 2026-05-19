@@ -29,7 +29,8 @@ export function render() {
         saveFarms(savedFarms);
     }
 
-    const isCommercial = AppState.mode === 'commercial';
+    const isCommercial = currentMode() === 'commercial';
+    AppState.mode = isCommercial ? 'commercial' : 'beginner';
 
     container.innerHTML = `
         <div class="screen active" id="farmlistScreen">
@@ -94,7 +95,13 @@ function bindEvents(savedFarms) {
         });
     });
 
-    document.getElementById('buildFarmBtn').onclick = () => showScreen('buildfarm');
+    document.getElementById('buildFarmBtn').onclick = () => {
+        const mode = currentMode();
+        AppState.mode = mode;
+        localStorage.setItem('seeddown_mode', mode);
+        localStorage.setItem('seeddown_build_flow', mode);
+        showScreen('buildfarm');
+    };
 
     document.getElementById('switchModeBtn').onclick = () => {
         if (AppState.mode === 'beginner') {
@@ -103,6 +110,7 @@ function bindEvents(savedFarms) {
         }
 
         AppState.mode = 'beginner';
+        localStorage.setItem('seeddown_mode', 'beginner');
         AppState.isGuest = true;
         showToast('info', 'Switched to 🌱 Beginner mode');
         render();
@@ -115,6 +123,14 @@ function bindEvents(savedFarms) {
             }
         };
     });
+}
+
+function currentMode() {
+    try {
+        return localStorage.getItem('seeddown_mode') === 'commercial' ? 'commercial' : 'beginner';
+    } catch {
+        return AppState.mode === 'commercial' ? 'commercial' : 'beginner';
+    }
 }
 
 function openCommercialGate() {
@@ -192,6 +208,7 @@ function openCommercialGate() {
         }
 
         AppState.mode = 'commercial';
+        localStorage.setItem('seeddown_mode', 'commercial');
         AppState.isGuest = false;
         closeFarmModal();
         showToast('success', 'Switched to 🏭 Commercial mode');

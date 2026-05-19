@@ -309,6 +309,7 @@ async function _onLoginSuccess(mode, user, isGuest) {
     AppState.userName  = isGuest
         ? 'Guest'
         : (user.displayName || user.email?.split('@')[0] || 'Farmer');
+    localStorage.setItem('seeddown_mode', mode);
 
     // Load all user data from Firestore → write into localStorage
     try {

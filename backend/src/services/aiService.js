@@ -225,11 +225,18 @@ function plantRecognitionPrompt(targetPlant) {
 
   return `You are a vertical farm expert. Analyse this indoor or vertical farm photo.${hint}
 
-Identify every plant species you can see and estimate how many slots or pots each occupies.
+Identify every plant species you can see, estimate how many slots or pots each occupies, and recognise the visible vertical farming structure.
 
 Return ONLY valid JSON, no markdown fences, no preamble:
 
 {
+  "structure": {
+    "rackType": "2-tier | 3-tier | 4-tier | 5-tier | wall | a-frame | nft-channel | hanging",
+    "label": "short structure name",
+    "tiers": 3,
+    "slotsPerTier": 3,
+    "confidence": 0.82
+  },
   "plants": [
     {
       "name": "Common Name",
@@ -244,10 +251,12 @@ Return ONLY valid JSON, no markdown fences, no preamble:
 Rules:
 - confidence: 0.0-1.0
 - slots: integer, estimated pot or slot count for this species visible
+- rackType must be one of the listed values; choose the closest match from visual structure
+- tiers and slotsPerTier should match the visible rack/tower/channel when possible
 - species: lowercase, underscores for spaces
 - use realistic vegetable or herb emojis
 - if photo is unclear but the target plant hint is useful, return one plant using the hint with lower confidence
-- if no plants are visible and no hint is useful, return {"plants":[]}
+- if no plants are visible and no hint is useful, still return structure if visible, with "plants":[]
 - return raw JSON only`;
 }
 
@@ -287,7 +296,76 @@ Rules:
 function parsePlantRecognition(rawText) {
   const parsed = JSON.parse(stripJson(rawText, '{"plants":[]}'));
   parsed.plants = sanitizePlants(parsed.plants || []);
+  parsed.structure = sanitizeStructure(parsed.structure || parsed.rack || parsed.layout);
   return parsed;
+}
+
+function sanitizeStructure(structure = {}) {
+  const allowed = new Set(['2-tier', '3-tier', '4-tier', '5-tier', 'wall', 'a-frame', 'nft-channel', 'hanging']);
+  const rawType = String(structure.rackType || structure.type || structure.id || '').toLowerCase();
+  const rackType = allowed.has(rawType) ? rawType : inferRackType(structure);
+  return {
+    rackType,
+    label: structure.label || labelRackType(rackType),
+    tiers: Math.max(1, Math.min(8, parseInt(structure.tiers || structure.tierCount, 10) || defaultTiers(rackType))),
+    slotsPerTier: Math.max(1, Math.min(12, parseInt(structure.slotsPerTier || structure.columns, 10) || defaultSlotsPerTier(rackType))),
+    confidence: Math.min(1, Math.max(0, parseFloat(structure.confidence) || 0.45)),
+  };
+}
+
+function inferRackType(structure = {}) {
+  const text = `${structure.label || ''} ${structure.description || ''} ${structure.structureType || ''}`.toLowerCase();
+  const tiers = parseInt(structure.tiers || structure.tierCount, 10) || 0;
+  const slots = parseInt(structure.slotsPerTier || structure.columns, 10) || 0;
+
+  if (text.includes('wall') || text.includes('panel') || text.includes('grid')) return 'wall';
+  if (text.includes('a-frame') || text.includes('pyramid') || text.includes('slant')) return 'a-frame';
+  if (text.includes('nft') || text.includes('channel') || text.includes('row')) return 'nft-channel';
+  if (text.includes('hanging') || text.includes('column')) return 'hanging';
+  if (tiers >= 5) return '5-tier';
+  if (tiers === 4 && slots >= 5) return 'wall';
+  if (tiers === 4) return '4-tier';
+  if (tiers === 2) return '2-tier';
+  return '3-tier';
+}
+
+function defaultTiers(rackType) {
+  return {
+    '2-tier': 2,
+    '3-tier': 3,
+    '4-tier': 4,
+    '5-tier': 5,
+    wall: 4,
+    'a-frame': 4,
+    'nft-channel': 3,
+    hanging: 5,
+  }[rackType] || 3;
+}
+
+function defaultSlotsPerTier(rackType) {
+  return {
+    '2-tier': 3,
+    '3-tier': 3,
+    '4-tier': 4,
+    '5-tier': 4,
+    wall: 5,
+    'a-frame': 4,
+    'nft-channel': 6,
+    hanging: 3,
+  }[rackType] || 3;
+}
+
+function labelRackType(rackType) {
+  return {
+    '2-tier': '2-Tier Starter Rack',
+    '3-tier': '3-Tier Vertical Rack',
+    '4-tier': '4-Tier Grow Shelf',
+    '5-tier': '5-Tier Tower Rack',
+    wall: 'Wall Panel Grid',
+    'a-frame': 'A-Frame Pyramid',
+    'nft-channel': 'NFT Channel Rows',
+    hanging: 'Hanging Column Farm',
+  }[rackType] || '3-Tier Vertical Rack';
 }
 
 function parseDiseaseAnalysis(rawText, fallbackPlant = 'Plant') {
