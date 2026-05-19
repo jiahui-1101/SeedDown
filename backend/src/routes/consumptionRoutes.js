@@ -412,7 +412,8 @@ router.post('/analysis', async (req, res) => {
 
     /* ─── 1. Resolve crops ─────────────────────────────── */
 
-    const cropKeys = (plants.length > 0 ? plants : ['lettuce'])
+    // NO MORE LETTUCE FALLBACK HERE. Follow whatever plants array was passed.
+    const cropKeys = (Array.isArray(plants) ? plants : [])
       .slice(0, 4)
       .map(p => p.toLowerCase().trim());
 
@@ -429,10 +430,10 @@ router.post('/analysis', async (req, res) => {
     });
 
     const [allAiResults, aiNarrativeEarly] = await Promise.all([
-      hasSensors
+      hasSensors && cropKeys.length > 0
         ? aiPredictAllCrops(cropKeys, cropDataMap, sensorStats).catch(() => null)
         : Promise.resolve(null),
-      hasSensors
+      hasSensors && cropKeys.length > 0
         ? aiSustainabilityNarrativeEarly(cropKeys, cropDataMap, sensorStats, metrics).catch(() => null)
         : Promise.resolve(null),
     ]);
@@ -501,16 +502,18 @@ router.post('/analysis', async (req, res) => {
 
     /* ─── 5. Ideal water zone (crop-weighted average) ───── */
 
-    const avgIdealMin = Math.round(
-      plantData.reduce((s, p) => s + p.idealZone.waterLevelMin, 0) / plantData.length
-    );
-    const avgIdealMax = Math.round(
-      plantData.reduce((s, p) => s + p.idealZone.waterLevelMax, 0) / plantData.length
-    );
+    // Prevent NaN if no plants exist
+    const avgIdealMin = plantData.length > 0
+      ? Math.round(plantData.reduce((s, p) => s + p.idealZone.waterLevelMin, 0) / plantData.length)
+      : 65;
+    const avgIdealMax = plantData.length > 0
+      ? Math.round(plantData.reduce((s, p) => s + p.idealZone.waterLevelMax, 0) / plantData.length)
+      : 80;
 
     /* ─── 6. Economics ──────────────────────────────────── */
 
-    const primary         = plantData[0];
+    // Fallback to default if no plants exist so KPI metrics don't break
+    const primary         = plantData[0] || CROP_DB.default;
     const tradWater       = primary.traditional.waterPerDayL;
     const tradEnergyPerDay = primary.traditional.energyKwhPerDay;
 
@@ -551,7 +554,7 @@ router.post('/analysis', async (req, res) => {
     let aiNarrative = aiNarrativeEarly;
 
     if (!aiNarrative) {
-      const aiGrowNote = plantData[0].aiGrowDays
+      const aiGrowNote = plantData[0] && plantData[0].aiGrowDays
         ? ` AI predicts your ${primary.name.toLowerCase()} will mature in ${plantData[0].aiGrowDays} days (benchmark: ${primary.vertical.growDays} days).`
         : '';
       aiNarrative =

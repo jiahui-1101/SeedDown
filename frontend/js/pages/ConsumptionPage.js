@@ -563,20 +563,21 @@ async function _processData(readings, isMock) {
    FETCH AI (WITH TIMEOUT & MOCK FALLBACK)
 ============================================================ */
 async function _fetchAI(metrics, readings, isMock) {
-  const allPlants = _getPlants();
+  const allPlants = _getPlants(); // No more hardcoded lettuce, strictly reads from AppState
 
   // Helper for applying fallback UI
   const applyFallback = (msg) => {
     _el('con-ai-spinner').style.display = 'none';
     _el('con-ai-text').textContent = msg;
+    
     const fallbackPd = allPlants.map(name => _benchmarkFallback(name.toLowerCase().trim()));
     _allPlantData = fallbackPd;
     _renderPlantCards(fallbackPd, false);
     _renderCompBars(fallbackPd, metrics);
     
-    // Fallback UI for KPIs
-    _el('con-water-vs').textContent   = `vs traditional`;
-    _el('con-energy-vs').textContent  = `vs traditional`;
+    // Check if we actually have plants before accessing [0]
+    _el('con-water-vs').textContent   = fallbackPd[0] ? `↓ ${fallbackPd[0].waterSavePct}% vs traditional` : `vs traditional`;
+    _el('con-energy-vs').textContent  = fallbackPd[0] ? `↓ ${fallbackPd[0].energySavePct}% vs traditional` : `vs traditional`;
     _el('con-cost-saved').textContent = `RM 0.00/day`;
     _el('con-cost-sub').textContent   = `RM 0.00/mo`;
   };
@@ -588,7 +589,6 @@ async function _fetchAI(metrics, readings, isMock) {
     return;
   }
 
-  // Only take first 3 for AI processing to reduce payload, rest will be mock
   const aiPlants = allPlants.slice(0, 3);
   const restPlants = allPlants.slice(3);
 
@@ -618,14 +618,14 @@ async function _fetchAI(metrics, readings, isMock) {
     const mockPd = restPlants.map(name => _benchmarkFallback(name.toLowerCase().trim()));
     const combinedPd = [...(data.plantData || []), ...mockPd];
 
-    const rb    = data.ruleBasedSummary;
+    const rb    = data.ruleBasedSummary || {};
     const iz    = data.idealWaterZone || { min: 65, max: 80, mid: 72 };
     const tradE = data.traditionalEnergyPerDay || 3.0;
 
-    _el('con-water-vs').textContent   = `↓ ${rb.waterSavePct}% vs traditional`;
-    _el('con-energy-vs').textContent  = `↓ ${combinedPd[0]?.energySavePct || 0}% vs traditional`;
-    _el('con-cost-saved').textContent = `RM ${rb.dailySavingsRm.toFixed(2)}/day`;
-    _el('con-cost-sub').textContent   = `RM ${rb.monthlySavingsRm}/mo`;
+    _el('con-water-vs').textContent   = rb.waterSavePct ? `↓ ${rb.waterSavePct}% vs traditional` : 'vs traditional';
+    _el('con-energy-vs').textContent  = combinedPd[0] ? `↓ ${combinedPd[0].energySavePct || 0}% vs traditional` : 'vs traditional';
+    _el('con-cost-saved').textContent = rb.dailySavingsRm ? `RM ${rb.dailySavingsRm.toFixed(2)}/day` : 'RM 0.00/day';
+    _el('con-cost-sub').textContent   = rb.monthlySavingsRm ? `RM ${rb.monthlySavingsRm}/mo` : 'RM 0.00/mo';
 
     _renderCharts(readings, metrics, iz, tradE);
     _allPlantData = combinedPd;
@@ -737,8 +737,6 @@ function _renderCharts(
       (traditionalEnergyPerDay / 24).toFixed(3)
     );
 
-  // BUG FIX: Moved energySavePct calculation outside the block scope
-  // so it doesn't throw a ReferenceError below during Grade computation
   const totalEnergy = energyData.reduce((a, b) => a + b, 0);
   const traditionalTotal = traditionalPerHour * labels.length;
   
@@ -1128,6 +1126,12 @@ function _renderCharts(
 ============================================================ */
 function _renderPlantCards(plantData, showAll) {
 
+  if (!plantData || plantData.length === 0) {
+    _el('con-plant-cards').innerHTML = '<div style="text-align:center;padding:16px;color:#94A3B8;font-size:0.8rem;">No plants detected in your farm racks. Add plants to see benchmark comparisons.</div>';
+    _el('con-view-all-wrap').style.display = 'none';
+    return;
+  }
+
   const toShow =
     showAll
       ? plantData
@@ -1302,10 +1306,12 @@ function _renderCompBars(
   metrics
 ) {
 
-  const p =
-    plantData[0];
+  const p = plantData[0];
 
-  if (!p) return;
+  if (!p) {
+    _el('con-trad-bars').innerHTML = '<div style="text-align:center;padding:16px;color:#94A3B8;font-size:0.8rem;">Add plants to unlock comparative charts.</div>';
+    return;
+  }
 
   const bars = [
 
@@ -1714,7 +1720,8 @@ function _getPlants() {
     }
   });
 
-  return names.size > 0 ? [...names] : ['lettuce'];
+  // NO MORE HARDCODED LETTUCE! Return exactly what's planted.
+  return [...names];
 }
 /* ============================================================
    FALLBACK CARD
