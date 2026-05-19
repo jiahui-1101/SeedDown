@@ -1,354 +1,575 @@
 /* ============================================================
-   backend/src/routes/consumptionRoutes.js  — FIXED v2
+   backend/src/routes/consumptionRoutes.js
    POST /api/consumption/analysis
 
-   Fixed:
-   - Added energyKwhPerDay to every crop benchmark (was missing)
-   - Returns traditionalEnergyPerDay so frontend chart units match
-   - Fixed waterPerDayL values to be realistic per-day figures
-   ============================================================ */
+   Architecture:
+   - Static crop benchmarks = FAO/USDA/Cornell CEA baseline
+   - Groq AI = dynamic grow day prediction + agronomic analysis
+     based on REAL sensor history (temperature, light, water)
+   - Frontend receives AI-computed grow days, not hardcoded ones
+============================================================ */
 
 const express = require('express');
 const router  = express.Router();
 
 /* ══════════════════════════════════════════════════════════════
-   AGRICULTURAL RESEARCH BENCHMARKS
-   Sources:
-   • FAO AQUASTAT (2020) — water footprint per crop
-   • Barbosa et al. (2015) — vertical vs conventional lettuce
-   • USDA ERS — field energy & transport benchmarks
-   • Malaysia DOA (2021) — local outdoor farm water data
+   STATIC CROP BENCHMARKS (FAO / USDA / Cornell CEA 2024)
+   These are TRADITIONAL vs VERTICAL FARM baselines only.
+   Grow days for YOUR farm = computed by AI from sensor data.
+══════════════════════════════════════════════════════════════ */
 
-   energyKwhPerDay = daily electricity for irrigation pumps +
-                     transport to Klang Valley market (avg 80km)
-   waterPerDayL    = litres/day for a 1m² comparable outdoor plot
-   ══════════════════════════════════════════════════════════════ */
-const CROP_BENCHMARKS = {
+const CROP_DB = {
   lettuce: {
-    name: 'Lettuce', emoji: '🥬',
+    name: 'Lettuce',
+    emoji: '🥬',
     traditional: {
-      waterPerDayL:    45,    // L/day per 1m² outdoor bed (FAO)
-      energyKwhPerDay: 1.6,   // kWh/day: irrigation pump + transport
-      energyKwhPerKg:  0.5,   // kWh per kg yield
-      co2KgPerDay:     0.8,   // kg CO₂/day
-      landM2PerKg:     1.8,   // m² needed per kg
-      growDays:        60,
+      waterPerDayL:      45,
+      energyKwhPerDay:    1.6,
+      growDays:          60,
+      waterPerKg:       250,
+      co2KgPerDay:        0.8,
+      landM2PerKg:        1.8,
     },
     vertical: {
-      waterPerDayL:    2.0,   // Barbosa 2015: 96% less water
-      energyKwhPerDay: 0.27,  // kWh/day: 6hr LED×45W + fan + pump
-      energyKwhPerKg:  3.5,
-      landM2PerKg:     0.09,
-      growDays:        30,
+      waterPerDayL:      2.0,
+      energyKwhPerDay:   0.27,
+      growDays:          30,   // industry best-case benchmark
+      landM2PerKg:       0.09,
     },
-    idealZone: { waterLevelMin: 65, waterLevelMax: 80 },
-    fun_fact: 'Lettuce is 95% water by weight — vertical hydroponic delivery loses almost zero water to soil absorption or evaporation.',
+    idealSensorZone: {
+      tempMin: 18, tempMax: 24,           // °C
+      lightPPFD: { min: 200, max: 350 },  // μmol/m²/s
+      waterLevelMin: 65, waterLevelMax: 80,
+      DLI_target: 14,                     // mol/m²/day
+    },
+    source: 'FAO Hydroponics 2024 / Cornell CEA',
   },
+
   spinach: {
-    name: 'Spinach', emoji: '🥬',
+    name: 'Spinach',
+    emoji: '🥬',
     traditional: {
-      waterPerDayL: 50, energyKwhPerDay: 1.8, energyKwhPerKg: 0.6,
-      co2KgPerDay: 0.9, landM2PerKg: 2.0, growDays: 50,
+      waterPerDayL:      50,
+      energyKwhPerDay:    1.8,
+      growDays:          50,
+      waterPerKg:       280,
+      co2KgPerDay:        0.9,
+      landM2PerKg:        2.0,
     },
     vertical: {
-      waterPerDayL: 2.2, energyKwhPerDay: 0.225, energyKwhPerKg: 3.2, landM2PerKg: 0.1, growDays: 25,
+      waterPerDayL:      2.2,
+      energyKwhPerDay:   0.22,
+      growDays:          25,
+      landM2PerKg:       0.10,
     },
-    idealZone: { waterLevelMin: 60, waterLevelMax: 78 },
-    fun_fact: 'Spinach requires 280L of water per kg outdoors — vertical farms cut this to ~15L through closed-loop hydroponics.',
+    idealSensorZone: {
+      tempMin: 15, tempMax: 22,
+      lightPPFD: { min: 150, max: 300 },
+      waterLevelMin: 60, waterLevelMax: 78,
+      DLI_target: 12,
+    },
+    source: 'USDA Hydroponic Spinach Guidelines 2023',
   },
+
   basil: {
-    name: 'Basil', emoji: '🌿',
+    name: 'Basil',
+    emoji: '🌿',
     traditional: {
-      waterPerDayL: 55, energyKwhPerDay: 1.9, energyKwhPerKg: 0.7,
-      co2KgPerDay: 1.0, landM2PerKg: 2.5, growDays: 45,
+      waterPerDayL:      30,
+      energyKwhPerDay:    1.2,
+      growDays:          50,
+      waterPerKg:       180,
+      co2KgPerDay:        0.6,
+      landM2PerKg:        1.5,
     },
     vertical: {
-      waterPerDayL: 2.5, energyKwhPerDay: 0.27, energyKwhPerKg: 4.0, landM2PerKg: 0.12, growDays: 22,
+      waterPerDayL:      1.5,
+      energyKwhPerDay:   0.20,
+      growDays:          28,
+      landM2PerKg:       0.08,
     },
-    idealZone: { waterLevelMin: 60, waterLevelMax: 75 },
-    fun_fact: 'Basil precision delivery in vertical farms increases essential oil content by up to 20% vs field-grown.',
+    idealSensorZone: {
+      tempMin: 20, tempMax: 28,
+      lightPPFD: { min: 250, max: 450 },
+      waterLevelMin: 60, waterLevelMax: 75,
+      DLI_target: 16,
+    },
+    source: 'AeroFarms Basil Study 2022',
   },
+
   tomato: {
-    name: 'Tomato', emoji: '🍅',
+    name: 'Tomato',
+    emoji: '🍅',
     traditional: {
-      waterPerDayL: 60, energyKwhPerDay: 2.5, energyKwhPerKg: 0.8,
-      co2KgPerDay: 1.4, landM2PerKg: 3.0, growDays: 80,
+      waterPerDayL:      60,
+      energyKwhPerDay:    2.5,
+      growDays:          80,
+      waterPerKg:       320,
+      co2KgPerDay:        1.4,
+      landM2PerKg:        3.0,
     },
     vertical: {
-      waterPerDayL: 3.5, energyKwhPerDay: 0.36, energyKwhPerKg: 5.0, landM2PerKg: 0.15, growDays: 55,
+      waterPerDayL:      3.5,
+      energyKwhPerDay:   0.36,
+      growDays:          55,
+      landM2PerKg:       0.15,
     },
-    idealZone: { waterLevelMin: 70, waterLevelMax: 85 },
-    fun_fact: 'Tomatoes grown vertically yield up to 3× more per m² and mature 25 days faster under optimised LED spectrums.',
+    idealSensorZone: {
+      tempMin: 20, tempMax: 26,
+      lightPPFD: { min: 400, max: 700 },
+      waterLevelMin: 70, waterLevelMax: 85,
+      DLI_target: 20,
+    },
+    source: 'Nature Vertical Farming 2023 / FAO',
   },
-  carrot: {
-    name: 'Carrot', emoji: '🥕',
+
+  kale: {
+    name: 'Kale',
+    emoji: '🥬',
     traditional: {
-      waterPerDayL: 52, energyKwhPerDay: 1.9, energyKwhPerKg: 0.55,
-      co2KgPerDay: 0.9, landM2PerKg: 2.0, growDays: 80,
+      waterPerDayL:      40,
+      energyKwhPerDay:    1.5,
+      growDays:          60,
+      waterPerKg:       200,
+      co2KgPerDay:        0.7,
+      landM2PerKg:        1.6,
     },
     vertical: {
-      waterPerDayL: 2.4, energyKwhPerDay: 0.27, energyKwhPerKg: 3.3, landM2PerKg: 0.1, growDays: 50,
+      waterPerDayL:      1.8,
+      energyKwhPerDay:   0.24,
+      growDays:          35,
+      landM2PerKg:       0.09,
     },
-    idealZone: { waterLevelMin: 62, waterLevelMax: 78 },
-    fun_fact: 'Vertical farming allows year-round carrot production in Malaysia — eliminating the seasonal water stress that reduces outdoor yield by up to 40%.',
+    idealSensorZone: {
+      tempMin: 15, tempMax: 23,
+      lightPPFD: { min: 180, max: 320 },
+      waterLevelMin: 62, waterLevelMax: 78,
+      DLI_target: 13,
+    },
+    source: 'Cornell CEA Kale Benchmarks 2023',
   },
-  cucumber: {
-    name: 'Cucumber', emoji: '🥒',
+
+  default: {
+    name: 'Mixed Crops',
+    emoji: '🌱',
     traditional: {
-      waterPerDayL: 70, energyKwhPerDay: 2.8, energyKwhPerKg: 0.9,
-      co2KgPerDay: 1.6, landM2PerKg: 3.5, growDays: 65,
+      waterPerDayL:      55,
+      energyKwhPerDay:    2.0,
+      growDays:          65,
+      waterPerKg:       250,
+      co2KgPerDay:        1.0,
+      landM2PerKg:        2.5,
     },
     vertical: {
-      waterPerDayL: 4.0, energyKwhPerDay: 0.315, energyKwhPerKg: 5.5, landM2PerKg: 0.18, growDays: 40,
+      waterPerDayL:      2.5,
+      energyKwhPerDay:   0.27,
+      growDays:          35,
+      landM2PerKg:       0.12,
     },
-    idealZone: { waterLevelMin: 72, waterLevelMax: 88 },
-    fun_fact: 'Cucumbers are 96% water — vertical hydroponic systems deliver water directly to roots, eliminating the 70% evaporation loss of outdoor irrigation.',
+    idealSensorZone: {
+      tempMin: 18, tempMax: 25,
+      lightPPFD: { min: 200, max: 400 },
+      waterLevelMin: 65, waterLevelMax: 80,
+      DLI_target: 14,
+    },
+    source: 'FAO General Vertical Farm Guidelines 2024',
   },
   mint: {
-    name: 'Mint', emoji: '🌿',
-    traditional: {
-      waterPerDayL: 48, energyKwhPerDay: 1.6, energyKwhPerKg: 0.5,
-      co2KgPerDay: 0.7, landM2PerKg: 2.2, growDays: 40,
-    },
-    vertical: {
-      waterPerDayL: 2.0, energyKwhPerDay: 0.225, energyKwhPerKg: 3.0, landM2PerKg: 0.11, growDays: 20,
-    },
-    idealZone: { waterLevelMin: 65, waterLevelMax: 80 },
-    fun_fact: 'Mint has a high transpiration rate — vertical systems recirculate ~85% of water that outdoor plots lose to the soil.',
+  name: 'Mint',
+  emoji: '🌿',
+  traditional: {
+    waterPerDayL: 25, energyKwhPerDay: 1.0,
+    growDays: 40, waterPerKg: 150, co2KgPerDay: 0.5, landM2PerKg: 1.2,
   },
-  chili: {
-    name: 'Chili', emoji: '🌶️',
-    traditional: {
-      waterPerDayL: 65, energyKwhPerDay: 2.4, energyKwhPerKg: 0.9,
-      co2KgPerDay: 1.3, landM2PerKg: 3.5, growDays: 90,
-    },
-    vertical: {
-      waterPerDayL: 3.0, energyKwhPerDay: 0.36, energyKwhPerKg: 4.5, landM2PerKg: 0.18, growDays: 60,
-    },
-    idealZone: { waterLevelMin: 65, waterLevelMax: 82 },
-    fun_fact: 'Controlled LED spectrums in vertical farms increase capsaicin production — producing hotter, more consistent chili year-round.',
+  vertical: {
+    waterPerDayL: 1.2, energyKwhPerDay: 0.18,
+    growDays: 22, landM2PerKg: 0.07,
   },
-  pepper: {
-    name: 'Pepper', emoji: '🫑',
-    traditional: {
-      waterPerDayL: 62, energyKwhPerDay: 2.3, energyKwhPerKg: 0.85,
-      co2KgPerDay: 1.2, landM2PerKg: 2.8, growDays: 85,
-    },
-    vertical: {
-      waterPerDayL: 3.2, energyKwhPerDay: 0.36, energyKwhPerKg: 4.8, landM2PerKg: 0.16, growDays: 58,
-    },
-    idealZone: { waterLevelMin: 68, waterLevelMax: 83 },
-    fun_fact: 'Bell peppers grown vertically have 27 days shorter cycles compared to outdoor Malaysian farms.',
+  idealSensorZone: {
+    tempMin: 18, tempMax: 26,
+    lightPPFD: { min: 150, max: 280 },
+    waterLevelMin: 60, waterLevelMax: 75,
+    DLI_target: 12,
   },
-  strawberry: {
-    name: 'Strawberry', emoji: '🍓',
-    traditional: {
-      waterPerDayL: 58, energyKwhPerDay: 2.2, energyKwhPerKg: 0.85,
-      co2KgPerDay: 1.2, landM2PerKg: 2.6, growDays: 90,
-    },
-    vertical: {
-      waterPerDayL: 3.0, energyKwhPerDay: 0.36, energyKwhPerKg: 5.2, landM2PerKg: 0.14, growDays: 60,
-    },
-    idealZone: { waterLevelMin: 65, waterLevelMax: 80 },
-    fun_fact: 'Vertical strawberry farms produce fruit 30 days faster and use 95% less pesticide than outdoor Malaysian plots.',
+  source: 'Cornell CEA Herb Guidelines 2023',
+},
+
+chili: {
+  name: 'Chili',
+  emoji: '🌶️',
+  traditional: {
+    waterPerDayL: 50, energyKwhPerDay: 2.2,
+    growDays: 90, waterPerKg: 300, co2KgPerDay: 1.2, landM2PerKg: 2.8,
   },
-  cabbage: {
-    name: 'Cabbage', emoji: '🥬',
-    traditional: {
-      waterPerDayL: 55, energyKwhPerDay: 2.0, energyKwhPerKg: 0.65,
-      co2KgPerDay: 1.0, landM2PerKg: 2.2, growDays: 90,
-    },
-    vertical: {
-      waterPerDayL: 2.8, energyKwhPerDay: 0.27, energyKwhPerKg: 3.8, landM2PerKg: 0.12, growDays: 60,
-    },
-    idealZone: { waterLevelMin: 65, waterLevelMax: 80 },
-    fun_fact: 'Cabbage needs large amounts of water during head formation — vertical controlled delivery prevents the common tip-burn seen in outdoor Malaysian heat.',
+  vertical: {
+    waterPerDayL: 3.0, energyKwhPerDay: 0.32,
+    growDays: 65, landM2PerKg: 0.13,
   },
-  eggplant: {
-    name: 'Eggplant', emoji: '🍆',
-    traditional: {
-      waterPerDayL: 58, energyKwhPerDay: 2.3, energyKwhPerKg: 0.8,
-      co2KgPerDay: 1.2, landM2PerKg: 2.8, growDays: 80,
-    },
-    vertical: {
-      waterPerDayL: 3.0, energyKwhPerDay: 0.36, energyKwhPerKg: 4.5, landM2PerKg: 0.15, growDays: 55,
-    },
-    idealZone: { waterLevelMin: 68, waterLevelMax: 83 },
-    fun_fact: 'Eggplant is highly sensitive to water stress — vertical precision delivery eliminates the 40% yield loss common in Malaysian dry seasons.',
+  idealSensorZone: {
+    tempMin: 22, tempMax: 30,
+    lightPPFD: { min: 350, max: 600 },
+    waterLevelMin: 68, waterLevelMax: 82,
+    DLI_target: 18,
   },
-  default: {
-    name: 'Mixed Crops', emoji: '🌱',
-    traditional: {
-      waterPerDayL: 55, energyKwhPerDay: 2.0, energyKwhPerKg: 0.6,
-      co2KgPerDay: 1.0, landM2PerKg: 2.5, growDays: 65,
-    },
-    vertical: {
-      waterPerDayL: 2.5, energyKwhPerDay: 0.27, energyKwhPerKg: 3.8, landM2PerKg: 0.12, growDays: 35,
-    },
-    idealZone: { waterLevelMin: 65, waterLevelMax: 80 },
-    fun_fact: 'On average, vertical farming uses 95% less water and 99% less land than traditional agriculture, producing year-round regardless of Malaysian weather.',
-  },
+  source: 'FAO Pepper Production Guidelines 2023',
+},
 };
 
-/* ── Groq AI call ── */
+/* ══════════════════════════════════════════════════════════════
+   GROQ HELPER (WITH TIMEOUT 防卡死)
+══════════════════════════════════════════════════════════════ */
+
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-async function callGroq(systemPrompt, userPrompt, maxTokens = 350) {
-  const res = await fetch(GROQ_URL, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${process.env.ANTHROPIC_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model:       'llama-3.1-8b-instant',
-      max_tokens:  maxTokens,
-      temperature: 0.65,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userPrompt   },
-      ],
-    }),
-  });
-  const data = await res.json();
-  if (!data.choices?.[0]?.message?.content) {
-    console.warn('[consumptionRoutes] Groq empty response:', JSON.stringify(data).slice(0, 200));
+
+async function callGroq(systemPrompt, userPrompt, maxTokens = 500) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒 Backend Timeout
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        max_tokens: maxTokens,
+        temperature: 0.4,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: userPrompt   },
+        ],
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+    const data = await res.json();
+
+    if (!data?.choices?.[0]?.message?.content) {
+      console.warn('[consumptionRoutes] Groq empty response:', JSON.stringify(data).slice(0, 300));
+      return null;
+    }
+
+    return data.choices[0].message.content.trim();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.warn('[consumptionRoutes] Groq fetch error or timeout:', err.message);
     return null;
   }
-  return data.choices[0].message.content.trim();
 }
 
-/* ══════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════
+   SENSOR ANALYSIS HELPERS
+══════════════════════════════════════════════════════════════ */
+
+/**
+ * Analyse raw sensor history and return agronomic summary
+ * that Groq can use for real data-driven predictions.
+ */
+function analyseSensorHistory(sensorHistory = []) {
+  if (!sensorHistory.length) return null;
+
+  const temps   = sensorHistory.map(r => r.temperature ?? 25);
+  const lights  = sensorHistory.map(r => r.lightRaw     ?? 2000);
+  const water   = sensorHistory.map(r => r.waterLevel   ?? 70);
+
+  const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const std = arr => {
+    const m = avg(arr);
+    return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length);
+  };
+
+  const avgTemp    = +avg(temps).toFixed(1);
+  const avgLight   = +avg(lights).toFixed(0);
+  const avgWater   = +avg(water).toFixed(1);
+  const tempStress = temps.filter(t => t < 15 || t > 30).length;
+  const tempStdDev = +std(temps).toFixed(2);
+
+  // Estimate DLI (Daily Light Integral) from light readings
+  // Rough conversion: lightRaw ~2000 ≈ 400 μmol/m²/s at peak
+  const ppfd       = (avgLight / 2000) * 400;
+  const lightHours = sensorHistory.filter(r => (r.lightRaw ?? 2000) > 800).length;
+  const DLI        = +((ppfd * lightHours * 3600) / 1_000_000).toFixed(2);
+
+  const waterInRange = water.filter(w => w >= 60 && w <= 85).length;
+  const waterStability = Math.round((waterInRange / water.length) * 100);
+
+  return {
+    avgTemp, tempStdDev, tempStress,
+    avgLightRaw: avgLight,
+    estimatedPPFD: +ppfd.toFixed(1),
+    lightHoursDetected: lightHours,
+    DLI,
+    avgWaterLevel: avgWater,
+    waterStabilityPct: waterStability,
+    readingsCount: sensorHistory.length,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CORE: AI GROW DAY PREDICTION
+   Groq receives actual sensor stats and crop benchmarks,
+   returns JSON with predicted grow days + explanation.
+══════════════════════════════════════════════════════════════ */
+
+async function aiPredictAllCrops(cropKeys, cropDataMap, sensorStats) {
+  const cropList = cropKeys.map(key => {
+    const b = cropDataMap[key];
+    const ideal = b.idealSensorZone;
+    return `- ${b.name}: benchmark ${b.vertical.growDays}d vertical / ${b.traditional.growDays}d traditional`;
+  }).join('\n');
+
+  const systemPrompt = `
+You are a strict JSON API. 
+Respond ONLY with a raw JSON array. 
+Do not include any introductory text, markdown formatting, or explanations.
+Valid JSON structure:
+[
+  { "key": "cropkey", "predictedGrowDays": 30, "confidence": "high", "agronomicNote": "Short sentence here." }
+]
+`.trim();
+
+  const userPrompt = `Predict growth days for these crops based on ${sensorStats.avgTemp}°C temp and ${sensorStats.DLI} DLI. List: ${cropList}`;
+
+  try {
+    const raw = await callGroq(systemPrompt, userPrompt, 600);
+    if (!raw) return null;
+
+    // 🔍 強化版 JSON 清洗：移除所有 markdown 符號並找到第一個 '[' 到最後一個 ']'
+    const start = raw.indexOf('[');
+    const end = raw.lastIndexOf(']');
+    
+    if (start === -1 || end === -1) {
+      console.warn('[consumptionRoutes] No JSON array found in response');
+      return null;
+    }
+
+    const jsonString = raw.substring(start, end + 1);
+    return JSON.parse(jsonString);
+
+  } catch (err) {
+    console.warn('[consumptionRoutes] Parse error. Raw response:', raw);
+    return null;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   CORE: AI SUSTAINABILITY NARRATIVE
+   Separate call — focused on energy/water savings story.
+══════════════════════════════════════════════════════════════ */
+
+async function aiSustainabilityNarrativeEarly(cropKeys, cropDataMap, sensorStats, metrics) {
+  const systemPrompt = `
+You are a sustainability analyst for vertical farming operations.
+Write 3 sentences in plain prose using exact numbers provided.
+Focus on: sensor conditions, water/energy efficiency, one actionable recommendation.
+`.trim();
+
+  const cropLines = cropKeys.map(key => {
+    const b = cropDataMap[key];
+    const waterSavePct = Math.round(
+      ((b.traditional.waterPerDayL - b.vertical.waterPerDayL) / b.traditional.waterPerDayL) * 100
+    );
+    return `${b.name}: ${waterSavePct}% water saving vs traditional`;
+  }).join(', ');
+
+  const userPrompt = `
+Crops: ${cropLines}
+Sensor: avg temp ${sensorStats.avgTemp}°C, DLI ${sensorStats.DLI} mol/m²/day, water stability ${sensorStats.waterStabilityPct}%
+Today: ${metrics.waterLiters?.toFixed(2)}L water used, ${metrics.energyKwh?.toFixed(3)} kWh energy used
+`.trim();
+
+  return await callGroq(systemPrompt, userPrompt, 180);
+}
+
+/* ══════════════════════════════════════════════════════════════
    POST /api/consumption/analysis
-══════════════════════════════════════════════ */
+══════════════════════════════════════════════════════════════ */
+
 router.post('/analysis', async (req, res) => {
   try {
-    const { plants = [], metrics = {} } = req.body;
+    const {
+      plants        = [],
+      metrics       = {},
+      sensorHistory = [],   // NEW: frontend should pass this
+    } = req.body;
 
-    /* ── 1. Match plants to benchmark data ── */
-    const plantKeys = (plants.length > 0 ? plants : ['lettuce'])
+    const isReal = sensorHistory.length > 0 && sensorHistory.some(r => r.temperature !== undefined && r.temperature !== null);
+
+    /* ─── 1. Resolve crops ─────────────────────────────── */
+
+    // NO MORE LETTUCE FALLBACK HERE. Follow whatever plants array was passed.
+    const cropKeys = (Array.isArray(plants) ? plants : [])
       .slice(0, 4)
       .map(p => p.toLowerCase().trim());
 
-    const plantData = plantKeys.map(key => {
-      const b = CROP_BENCHMARKS[key] || CROP_BENCHMARKS.default;
+    /* ─── 2. Analyse sensor history ────────────────────── */
+
+    const sensorStats = analyseSensorHistory(sensorHistory);
+    const hasSensors  = sensorStats !== null;
+
+    /* ─── 3. AI calls (Parallel) ───────────────────────── */
+
+    const cropDataMap = {};
+    cropKeys.forEach(key => {
+      cropDataMap[key] = CROP_DB[key] || CROP_DB.default;
+    });
+
+    const [allAiResults, aiNarrativeEarly] = await Promise.all([
+      hasSensors && cropKeys.length > 0
+        ? aiPredictAllCrops(cropKeys, cropDataMap, sensorStats).catch(() => null)
+        : Promise.resolve(null),
+      hasSensors && cropKeys.length > 0
+        ? aiSustainabilityNarrativeEarly(cropKeys, cropDataMap, sensorStats, metrics).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    const growDayResults = cropKeys.map((key, i) => {
+      if (!allAiResults) return null;
+      const result = allAiResults.find(r => r.key === key) || allAiResults[i];
+      if (!result || result.predictedGrowDays < 10 || result.predictedGrowDays > 200) return null;
+      return result;
+    });
+
+    /* ─── 4. Build plant data ───────────────────────────── */
+
+    const plantData = cropKeys.map((key, i) => {
+      const b   = CROP_DB[key] || CROP_DB.default;
+      const ai  = growDayResults[i];
+
       const waterSavePct = Math.round(
         ((b.traditional.waterPerDayL - b.vertical.waterPerDayL) / b.traditional.waterPerDayL) * 100
       );
       const energySavePct = Math.round(
         ((b.traditional.energyKwhPerDay - b.vertical.energyKwhPerDay) / b.traditional.energyKwhPerDay) * 100
       );
-      const growDaysFaster = b.traditional.growDays - b.vertical.growDays;
-      const landReductionPct = Math.round(
-        (1 - b.vertical.landM2PerKg / b.traditional.landM2PerKg) * 100
-      );
+
+      // AI-predicted grow days for YOUR farm vs benchmarks
+      const aiGrowDays = ai?.predictedGrowDays ?? null;
 
       return {
         key,
-        name:           b.name,
-        emoji:          b.emoji,
-        fun_fact:       b.fun_fact,
-        traditional:    b.traditional,
-        vertical:       b.vertical,
-        idealZone:      b.idealZone,
+        name:  b.name,
+        emoji: b.emoji,
+
+        traditional: {
+          ...b.traditional,
+        },
+
+        vertical: {
+          ...b.vertical,
+        },
+
+        yourFarm: hasSensors && aiGrowDays ? {
+          growDays:        aiGrowDays,
+          confidence:      ai.confidence,
+          growthModifier:  ai.growthModifier,
+          keyFactors:      ai.keyFactors,
+          agronomicNote:   ai.agronomicNote,
+          waterPerDayL:    +(metrics.waterLiters ?? b.vertical.waterPerDayL).toFixed(3),
+          energyKwhPerDay: +(metrics.energyKwh   ?? b.vertical.energyKwhPerDay).toFixed(4),
+        } : null,
+
+        aiGrowDays,
+        aiConfidence:   ai?.confidence ?? null,
+        aiKeyFactors:   ai?.keyFactors ?? [],
+        agronomicNote:  ai?.agronomicNote ?? null,
+
+        idealZone: b.idealSensorZone,
+        source:    b.source,
+
         waterSavePct,
         energySavePct,
-        waterSavedLPerDay:    +(b.traditional.waterPerDayL - b.vertical.waterPerDayL).toFixed(1),
+        waterSavedLPerDay: +(b.traditional.waterPerDayL - b.vertical.waterPerDayL).toFixed(1),
         energySavedKwhPerDay: +(b.traditional.energyKwhPerDay - b.vertical.energyKwhPerDay).toFixed(3),
-        growDaysFaster:       Math.max(0, growDaysFaster),
-        landReductionPct:     Math.min(99, Math.max(0, landReductionPct)),
+        growDaysFaster: Math.max(0, b.traditional.growDays - (aiGrowDays ?? b.vertical.growDays)),
       };
     });
 
-    /* ── 2. Ideal water zone (average across all plants) ── */
-    const avgIdealMin = Math.round(
-      plantData.reduce((s, p) => s + p.idealZone.waterLevelMin, 0) / plantData.length
-    );
-    const avgIdealMax = Math.round(
-      plantData.reduce((s, p) => s + p.idealZone.waterLevelMax, 0) / plantData.length
-    );
+    /* ─── 5. Ideal water zone (crop-weighted average) ───── */
 
-    /* ── 3. Cost savings calculation ── */
-    const primary          = plantData[0];
-    const tradWater        = primary.traditional.waterPerDayL;
+    // Prevent NaN if no plants exist
+    const avgIdealMin = plantData.length > 0
+      ? Math.round(plantData.reduce((s, p) => s + p.idealZone.waterLevelMin, 0) / plantData.length)
+      : 65;
+    const avgIdealMax = plantData.length > 0
+      ? Math.round(plantData.reduce((s, p) => s + p.idealZone.waterLevelMax, 0) / plantData.length)
+      : 80;
+
+    /* ─── 6. Economics ──────────────────────────────────── */
+
+    // Fallback to default if no plants exist so KPI metrics don't break
+    const primary         = plantData[0] || CROP_DB.default;
+    const tradWater       = primary.traditional.waterPerDayL;
     const tradEnergyPerDay = primary.traditional.energyKwhPerDay;
-    const RM_PER_KWH       = 0.218;
-    const RM_PER_LITRE     = 0.002;
 
-    const waterUsed     = metrics.waterLiters || 0.5;
-    const energyUsed    = metrics.energyKwh   || 0.1;
-    const vertCostToday = (waterUsed * RM_PER_LITRE) + (energyUsed * RM_PER_KWH);
-    const tradCostToday = (tradWater * RM_PER_LITRE) + (tradEnergyPerDay * RM_PER_KWH);
-    const dailySavingsRm   = Math.max(0, tradCostToday - vertCostToday);
-    const monthlySavingsRm = +(dailySavingsRm * 30).toFixed(2);
-    const yearlySavingsRm  = +(dailySavingsRm * 365).toFixed(2);
+    const RM_PER_KWH    = 0.218;
+    const RM_PER_LITRE  = 0.002;
 
-    const waterSavedToday  = Math.max(0, tradWater - waterUsed);
-    const waterSavePct     = Math.round((waterSavedToday / tradWater) * 100);
+    const waterUsed  = metrics.waterLiters ?? 0.5;
+    const energyUsed = metrics.energyKwh   ?? 0.1;
+
+    const vertCostToday = waterUsed  * RM_PER_LITRE + energyUsed  * RM_PER_KWH;
+    const tradCostToday = tradWater  * RM_PER_LITRE + tradEnergyPerDay * RM_PER_KWH;
+    const dailySavingsRm = Math.max(0, tradCostToday - vertCostToday);
+
+    const waterSavedToday = Math.max(0, tradWater - waterUsed);
+    const waterSavePct    = Math.round((waterSavedToday / tradWater) * 100);
 
     const ruleBasedSummary = {
-      waterStatus: waterUsed < tradWater * 0.3 ? 'excellent'
-                 : waterUsed < tradWater * 0.5 ? 'good'
-                 : waterUsed < tradWater * 0.8 ? 'average'
-                 : 'above_target',
-      waterSavedL:        +waterSavedToday.toFixed(1),
+      waterStatus:
+        waterUsed < tradWater * 0.3 ? 'excellent' :
+        waterUsed < tradWater * 0.5 ? 'good'      :
+        waterUsed < tradWater * 0.8 ? 'average'   : 'above_target',
+
+      waterSavedL:       +waterSavedToday.toFixed(1),
       waterSavePct,
-      monthlySavingsL:    Math.round(waterSavedToday * 30),
-      yearlyWaterSavedL:  Math.round(waterSavedToday * 365),
-      dailySavingsRm:     +dailySavingsRm.toFixed(2),
-      monthlySavingsRm,
-      yearlySavingsRm,
-      todayTradCost:      +tradCostToday.toFixed(2),
-      todayVertCost:      +vertCostToday.toFixed(2),
+      monthlySavingsL:   Math.round(waterSavedToday * 30),
+      yearlyWaterSavedL: Math.round(waterSavedToday * 365),
+
+      dailySavingsRm:   +dailySavingsRm.toFixed(2),
+      monthlySavingsRm: +(dailySavingsRm * 30).toFixed(2),
+      yearlySavingsRm:  +(dailySavingsRm * 365).toFixed(2),
+
+      todayTradCost: +tradCostToday.toFixed(2),
+      todayVertCost: +vertCostToday.toFixed(2),
     };
 
-    /* ── 4. Groq AI narrative (real API call) ── */
-    const cropSummary = plantData.map(p =>
-      `${p.name}: traditional ${p.traditional.waterPerDayL}L/day water & ${p.traditional.energyKwhPerDay}kWh/day energy → ` +
-      `vertical ${p.vertical.waterPerDayL}L/day & ${p.vertical.energyKwhPerDay}kWh/day ` +
-      `(${p.waterSavePct}% water saved, ${p.energySavePct}% energy saved, grows ${p.growDaysFaster} days faster)`
-    ).join('; ');
+    /* ─── 7. AI narrative  ──────────────────── */
 
-    const systemPrompt = `You are an agricultural sustainability analyst for SeedDown vertical farm in Malaysia.
-You compare vertical farming data to FAO/USDA traditional outdoor farming benchmarks.
-Be data-driven, cite exact numbers, use Malaysian context. Max 90 words. Plain prose, no bullet points.`;
+    let aiNarrative = aiNarrativeEarly;
 
-    const userPrompt =
-`Crops: ${plantKeys.join(', ')}
-
-FAO benchmark vs vertical system:
-${cropSummary}
-
-Today's sensor data:
-- Water used: ${waterUsed.toFixed(1)}L (traditional: ${tradWater}L → saved ${ruleBasedSummary.waterSavedL}L = ${waterSavePct}%)
-- Energy used: ${energyUsed.toFixed(3)}kWh (traditional: ${tradEnergyPerDay}kWh)
-- Cost today: RM${vertCostToday.toFixed(2)} vs traditional RM${tradCostToday.toFixed(2)} → saved RM${dailySavingsRm.toFixed(2)}
-- Monthly projection: RM${monthlySavingsRm} saved, ${ruleBasedSummary.monthlySavingsL}L water conserved
-
-Write 2-3 sentences:
-1. Name crops with exact savings % from the data above
-2. Put the monthly water saving in a relatable Malaysian context (household usage, swimming pool, etc.)
-3. One forward-looking insight about scaling or environmental impact
-
-Plain prose only, no bullets, no markdown.`;
-
-    let aiNarrative = null;
-    try {
-      aiNarrative = await callGroq(systemPrompt, userPrompt);
-    } catch (e) {
-      console.warn('[consumptionRoutes] Groq failed:', e.message);
-    }
-
-    /* ── 5. Fallback if Groq unavailable ── */
     if (!aiNarrative) {
-      aiNarrative = `Your vertical ${primary.name.toLowerCase()} farm used only ${waterUsed.toFixed(1)}L today compared to ${tradWater}L required outdoors — a ${waterSavePct}% saving backed by FAO AQUASTAT data. That ${ruleBasedSummary.monthlySavingsL}L monthly saving equals roughly ${Math.round(ruleBasedSummary.monthlySavingsL / 200)} days of an average Malaysian household's water supply. At RM${monthlySavingsRm}/month in combined utility savings, your farm becomes more cost-competitive with every additional rack you add.`;
+      const aiGrowNote = plantData[0] && plantData[0].aiGrowDays
+        ? ` AI predicts your ${primary.name.toLowerCase()} will mature in ${plantData[0].aiGrowDays} days (benchmark: ${primary.vertical.growDays} days).`
+        : '';
+      aiNarrative =
+        `Your vertical farm used ${waterUsed.toFixed(1)}L today vs ${tradWater}L in traditional farming — a ${waterSavePct}% reduction.` +
+        aiGrowNote +
+        ` Monthly water savings of ${ruleBasedSummary.monthlySavingsL}L represent significant environmental benefit.`;
     }
+
+    /* ─── 8. Respond ────────────────────────────────────── */
 
     res.json({
       plantData,
       aiNarrative,
       ruleBasedSummary,
-      idealWaterZone:          { min: avgIdealMin, max: avgIdealMax, mid: Math.round((avgIdealMin + avgIdealMax) / 2) },
-      traditionalEnergyPerDay: tradEnergyPerDay,  // ← used by frontend energy chart reference line
+
+      idealWaterZone: {
+        min: avgIdealMin,
+        max: avgIdealMax,
+        mid: Math.round((avgIdealMin + avgIdealMax) / 2),
+      },
+
+      traditionalEnergyPerDay: tradEnergyPerDay,
+
+      // Extra context for frontend
+      sensorStats: hasSensors ? sensorStats : null,
+      hasSensorData: hasSensors,
+      aiGrowDaysComputed: plantData.some(p => p.aiGrowDays !== null),
     });
 
   } catch (err) {

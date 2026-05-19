@@ -1,16 +1,15 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast }  from '../utils/toast.js';
 import { AppState }   from '../store.js';
-import { initFirebase, getAuth, loadUserData } from '../utils/firebase.js';
 
-/* ── GUEST DEMO ACCOUNT (real Firebase account) ── */
+/* ── GUEST DEMO ACCOUNT (real backend account) ── */
 const GUEST_EMAIL    = 'demo@seeddown.com';
 const GUEST_PASSWORD = 'seeddown2026';
 
-async function _initFirebase() {
-    await initFirebase();
-    return getAuth();
-}
+// 动态解析后端 API 地址
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
 
 export function render() {
     const container = document.getElementById('screenContainer');
@@ -214,18 +213,23 @@ function _bindEvents() {
         pw.type = pw.type === 'password' ? 'text' : 'password';
     });
 
+    // 忘记密码逻辑 -> 改为对接自建后端
     document.getElementById('forgotBtn').addEventListener('click', async () => {
         const email = document.getElementById('loginEmail').value.trim();
         if (!email) { _showError('Enter your email first.'); return; }
         try {
-            const auth = await _initFirebase();
-            await auth.sendPasswordResetEmail(email);
-            showToast('success', '📧 Reset email sent! Check your inbox.');
+            const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            showToast('success', '📧 Reset link request processed. Check your inbox if registered.');
         } catch (err) {
-            _showError(_friendlyError(err.code));
+            _showError('Unable to send reset request.');
         }
     });
 
+    // 登录 / 注册核心逻辑 -> 全盘接上自建 Node.js JWT 后端
     document.getElementById('loginBtn').addEventListener('click', async () => {
         const email    = document.getElementById('loginEmail').value.trim();
         const password = document.getElementById('loginPassword').value;
@@ -244,28 +248,47 @@ function _bindEvents() {
         _clearError();
 
         try {
-            const auth = await _initFirebase();
             if (isRegister) {
-                await auth.createUserWithEmailAndPassword(email, password);
-                showToast('success', '🎉 Account created!');
+                // 1. 调用后端注册接口
+                const res = await fetch(`${API_BASE}/api/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, mode: selectedMode })
+                });
+                const data = await res.json();
+                if (!res.ok || data.ok === false) throw new Error(data.error || 'Registration failed');
+                
+                showToast('success', '🎉 Account created! Please sign in.');
+                document.getElementById('tabLogin').click(); // 自动跳回 Sign In 选项卡
             } else {
-                await auth.signInWithEmailAndPassword(email, password);
+                // 2. 调用后端登录接口
+                const res = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (!res.ok || data.ok === false) throw new Error(data.error || 'Invalid email or password');
+
+                // 保存后端下发的 JWT Token
+                localStorage.setItem('token', data.token);
+                
+                // 模拟一个合规的 User 结构传给 _onLoginSuccess
+                const mockFirebaseUser = { uid: data.user.email, email: data.user.email };
+                await _onLoginSuccess(data.user.mode, mockFirebaseUser, false);
             }
-            await _onLoginSuccess(selectedMode, auth.currentUser, false);
         } catch (err) {
-            _showError(_friendlyError(err.code));
+            _showError(err.message || 'Something went wrong. Please try again.');
         } finally {
             _setLoading(false);
         }
     });
 
-    /* ── Guest — prompts for password, then silently signs into demo@seeddown.com ── */
+/* ── Guest 模式 ── */
     document.getElementById('guestBtn').addEventListener('click', async () => {
         _clearError();
         
         const guestInput = prompt('Enter Demo Access Code to continue as Guest:');
-        
-        // Check if user clicked Cancel or left it blank
         if (guestInput === null) return; 
         
         if (guestInput !== GUEST_PASSWORD) {
@@ -276,32 +299,59 @@ function _bindEvents() {
         _setLoading(true);
         
         try {
-            const auth = await _initFirebase();
-            await auth.signInWithEmailAndPassword(GUEST_EMAIL, GUEST_PASSWORD);
-            await _onLoginSuccess(selectedMode, auth.currentUser, true);
-        } catch (err) {
-            // If demo account doesn't exist yet, create it
-            if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-                try {
-                    const auth2 = await _initFirebase();
-                    await auth2.createUserWithEmailAndPassword(GUEST_EMAIL, GUEST_PASSWORD);
-                    await _onLoginSuccess(selectedMode, auth2.currentUser, true);
-                } catch (createErr) {
-                    console.warn('[LoginPage] Guest account creation failed:', createErr);
-                    showToast('error', 'Demo mode unavailable. Please sign in.');
-                }
-            } else {
-                showToast('error', 'Could not load demo. Please try again.');
-                console.warn('[LoginPage] Guest login error:', err);
+            // 1. 先尝试直接登录 Demo 账号
+            let res = await fetch(`${API_BASE}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: GUEST_EMAIL, password: GUEST_PASSWORD })
+            });
+            let data = await res.json();
+
+            // 2. 如果后端说 "User not found" (代表新数据库还没这个账号)，就自动帮它注册！
+            if (!res.ok && data.error === "User not found") {
+                console.log('[LoginPage] Demo account missing. Auto-creating...');
+                const regRes = await fetch(`${API_BASE}/api/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: GUEST_EMAIL, password: GUEST_PASSWORD, mode: selectedMode })
+                });
+                
+                if (!regRes.ok) throw new Error('Failed to auto-create demo account');
+
+                // 创建成功后，再次尝试 Login
+                res = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: GUEST_EMAIL, password: GUEST_PASSWORD })
+                });
+                data = await res.json();
             }
+
+            // 3. 最后检查登入结果
+            if (!res.ok || data.ok === false) {
+                throw new Error(data.error || 'Guest login failed');
+            }
+
+            localStorage.setItem('token', data.token);
+            
+            const mockFirebaseUser = { uid: data.user.email, email: data.user.email };
+            await _onLoginSuccess(selectedMode, mockFirebaseUser, true);
+            
+        } catch (err) {
+            showToast('error', 'Demo mode unavailable. Please sign in or register.');
+            console.warn('[LoginPage] Guest login error:', err);
         } finally {
             _setLoading(false);
         }
     });
 }
 
-/* ── ON LOGIN SUCCESS — load Firestore data into localStorage ── */
+/* ── ON LOGIN SUCCESS — 改成去你的 Node.js 后端拉取用户专属农场数据 ── */
 async function _onLoginSuccess(mode, user, isGuest) {
+    // 每次登入强制洗空旧缓存，完美防污染
+    localStorage.removeItem('user_farms');
+    localStorage.removeItem('farm_profile');
+    
     AppState.mode      = mode;
     AppState.isGuest   = isGuest;
     AppState.uid       = user.uid;
@@ -311,25 +361,23 @@ async function _onLoginSuccess(mode, user, isGuest) {
         : (user.displayName || user.email?.split('@')[0] || 'Farmer');
     localStorage.setItem('seeddown_mode', mode);
 
-    // Load all user data from Firestore → write into localStorage
+    // 从你的自建 Node.js 后端抓取 ownerId 属于当前用户的专属 Farms 列表
     try {
-        const { loadUserData } = await import('../utils/firebase.js');
-        const data = await loadUserData(user.uid);
-        if (data) {
-            if (data.farms?.length) {
-                localStorage.setItem('user_farms', JSON.stringify(data.farms));
-            }
-            if (data.globalProfile) {
-                localStorage.setItem('farm_profile', JSON.stringify(data.globalProfile));
-            }
-            if (data.farmProfiles) {
-                Object.entries(data.farmProfiles).forEach(([farmId, profile]) => {
-                    localStorage.setItem(`farm_profile_${farmId}`, JSON.stringify(profile));
-                });
-            }
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${API_BASE}/api/farms`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` } // 附带刚拿到的 Bearer Token
+        });
+        const data = await res.json();
+        
+        if (data.ok && data.farms?.length) {
+            localStorage.setItem('user_farms', JSON.stringify(data.farms));
+        } else {
+            localStorage.setItem('user_farms', JSON.stringify([]));
         }
     } catch (e) {
-        console.warn('[LoginPage] Could not load Firestore data:', e);
+        console.warn('[LoginPage] Could not load backend data, fallback to empty:', e);
+        localStorage.setItem('user_farms', JSON.stringify([]));
     }
 
     const greeting = isGuest ? '👀 Welcome, Guest!' : `👋 Welcome, ${AppState.userName}!`;
@@ -358,18 +406,4 @@ function _showError(msg) {
 function _clearError() {
     const el = document.getElementById('loginError');
     if (el) el.style.display = 'none';
-}
-
-function _friendlyError(code) {
-    const map = {
-        'auth/user-not-found':         'No account found with this email.',
-        'auth/wrong-password':         'Incorrect password. Try again.',
-        'auth/email-already-in-use':   'This email is already registered.',
-        'auth/invalid-email':          'Please enter a valid email address.',
-        'auth/weak-password':          'Password must be at least 6 characters.',
-        'auth/too-many-requests':      'Too many attempts. Please try again later.',
-        'auth/network-request-failed': 'Network error. Check your connection.',
-        'auth/invalid-credential':     'Invalid email or password.',
-    };
-    return map[code] || 'Something went wrong. Please try again.';
 }

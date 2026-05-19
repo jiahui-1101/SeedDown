@@ -1,3 +1,4 @@
+//  app.js 
 const express = require('express');
 const cors = require('cors');
 const { connectDB } = require('./src/config/db');
@@ -24,10 +25,14 @@ function getLegacyDeviceCommand(req, res) {
   return getDeviceCommand(req, res);
 }
 
+// ─── 【新增这一行：挂载 Auth 路由】 ───
+app.use('/api/auth', require('./src/routes/authRoutes'));
+
 app.use('/api/sensors', sensorRoutes);
 app.use('/api/iot', sensorRoutes);
 app.post('/api/sensor-data', createSensorReading);
 app.get('/api/device-command', getLegacyDeviceCommand);
+
 app.use('/api/farms', require('./src/routes/farmRoutes'));
 app.use('/api/devices', require('./src/routes/deviceRoutes'));
 app.use('/api/ai', require('./src/routes/aiRoutes'));
@@ -42,4 +47,3 @@ app.get('/', (req, res) =>
 );
 
 module.exports = app;
-
