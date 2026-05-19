@@ -1,11 +1,17 @@
 /* ============================================================
-   DiseaseAnalysisPage.js — AI Disease Analysis (v3 — Hybrid Confidence)
+   DiseaseAnalysisPage.js — AI Disease Analysis (v4 — New UX)
    Confidence tiers:
      ≥ 80%  → Confirmed   → Green  → IoT block shown
      60–79% → Uncertain   → Yellow → Q&A follow-up shown
      < 60%  → Low         → Red    → Q&A follow-up shown
-   No-image first pass: HARD CAP ≤ 69% (always triggers Q&A)
+   No-image first pass: backend caps ≤ 69% (always triggers Q&A)
    Refine pass: +18% bonus → almost always crosses 80%
+
+   Changes v4:
+   - getPlantedCrops() reads ALL farms + BASE_CROPS fallback
+   - Removed 69%-cap warning banner from UI
+   - Brain loading animation → results rendered in a NEW screen
+   - Follow-up Q&A always shown unless confidence ≥ 90%
    ============================================================ */
    import { showScreen } from '../utils/navigation.js';
 
@@ -14,27 +20,59 @@
        ? 'http://localhost:3000'
        : window.location.origin;
    
+   /* ── BASE_CROPS fallback (mirrors AddPlantModal.js) ── */
+   const BASE_CROPS = [
+     { emoji:'🥬', name:'Lettuce',  species:'lettuce'  },
+     { emoji:'🌿', name:'Spinach',  species:'spinach'  },
+     { emoji:'🌱', name:'Basil',    species:'basil'    },
+     { emoji:'🍅', name:'Tomato',   species:'tomato'   },
+     { emoji:'🥒', name:'Cucumber', species:'cucumber' },
+     { emoji:'🥕', name:'Carrot',   species:'carrot'   },
+     { emoji:'🥬', name:'Cabbage',  species:'cabbage'  },
+     { emoji:'🍆', name:'Eggplant', species:'eggplant' },
+   ];
+   
    /* ── Helpers ── */
    function getPlantedCrops() {
      const seen = new Set(), result = [];
+   
      function add(name, emoji) {
        if (!name) return;
        const key = name.toLowerCase().trim();
        if (seen.has(key)) return;
        seen.add(key);
-       result.push({ name: name.charAt(0).toUpperCase() + name.slice(1), emoji: emoji || emojiFor(name), species: key.replace(/\s+/g, '_') });
+       result.push({
+         name: name.charAt(0).toUpperCase() + name.slice(1),
+         emoji: emoji || emojiFor(name),
+         species: key.replace(/\s+/g, '_'),
+       });
      }
+   
      try {
+       // Read ALL farms, not just current
        const farms = JSON.parse(localStorage.getItem('user_farms') || '[]');
-       const farm  = window.AppState?.currentFarm
-                  || farms.find(f => f.id === window.AppState?.currentFarmId)
-                  || farms[farms.length - 1];
-       if (farm) {
-         (farm.plants || []).forEach(p => typeof p === 'string' ? add(p) : add(p.name || p.species, p.emoji));
-         (farm.zones  || []).forEach(z => (z.plants || []).forEach(p => typeof p === 'string' ? add(p) : add(p.name || p.species, p.emoji)));
-       }
-       (window.AppState?.tiles || []).forEach(t => { if (t.name && t.status !== 'empty') add(t.name, t.plant); });
+       farms.forEach(farm => {
+         (farm.plants || []).forEach(p =>
+           typeof p === 'string' ? add(p) : add(p.name || p.species, p.emoji)
+         );
+         (farm.zones || []).forEach(z =>
+           (z.plants || []).forEach(p =>
+             typeof p === 'string' ? add(p) : add(p.name || p.species, p.emoji)
+           )
+         );
+       });
+   
+       // AppState tiles (beginner mode)
+       (window.AppState?.tiles || []).forEach(t => {
+         if (t.name && t.status !== 'empty') add(t.name, t.plant);
+       });
      } catch (_) {}
+   
+     // If nothing found from user farms, fall back to BASE_CROPS
+     if (!result.length) {
+       BASE_CROPS.forEach(c => add(c.name, c.emoji));
+     }
+   
      return result;
    }
    
@@ -49,17 +87,20 @@
      if (k.includes('spinach'))    return '🍃';
      if (k.includes('basil') || k.includes('mint') || k.includes('cilantro')) return '🌿';
      if (k.includes('bean'))       return '🫘';
+     if (k.includes('eggplant'))   return '🍆';
      return '🌱';
    }
    
    /* ── Confidence tier helper ── */
    function confTier(pct) {
-     if (pct >= 80) return { label: 'Confirmed',   color: '#10B981', bg: '#D1FAE5', bar: '#10B981', icon: '✅' };
-     if (pct >= 60) return { label: 'Uncertain',   color: '#F59E0B', bg: '#FEF3C7', bar: '#F59E0B', icon: '🔶' };
+     if (pct >= 80) return { label: 'Confirmed',    color: '#10B981', bg: '#D1FAE5', bar: '#10B981', icon: '✅' };
+     if (pct >= 60) return { label: 'Uncertain',    color: '#F59E0B', bg: '#FEF3C7', bar: '#F59E0B', icon: '🔶' };
      return              { label: 'Low Confidence', color: '#EF4444', bg: '#FEE2E2', bar: '#EF4444', icon: '🔴' };
    }
    
-   /* ── Render page ── */
+   /* ══════════════════════════════════════════
+      SCREEN 1: Input form
+   ══════════════════════════════════════════ */
    export function render() {
      const container = document.getElementById('screenContainer');
      const crops      = getPlantedCrops();
@@ -83,13 +124,9 @@
    
          <!-- Photo upload -->
          <div style="background:white;border-radius:16px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
-           <div style="font-weight:700;font-size:.88rem;color:#374151;margin-bottom:4px;">
+           <div style="font-weight:700;font-size:.88rem;color:#374151;margin-bottom:12px;">
              📷 Upload Plant Photo
              <span style="font-size:.72rem;color:#9CA3AF;font-weight:400;"> (Optional — raises confidence)</span>
-           </div>
-           <div style="font-size:.72rem;color:#F59E0B;background:#FFFBEB;border:1px solid #FDE68A;
-                       border-radius:8px;padding:7px 10px;margin-bottom:12px;line-height:1.4;">
-             ⚠️ Without a photo, AI confidence is capped at <strong>69%</strong> and follow-up questions will be required.
            </div>
    
            <div id="dropZone"
@@ -119,7 +156,6 @@
          <div style="background:white;border-radius:16px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
            <div style="font-weight:700;font-size:.88rem;color:#374151;margin-bottom:12px;">🌱 Which Plant? <span style="color:#EF4444;">*</span></div>
    
-           ${crops.length ? `
            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;" id="cropChips">
              ${crops.map(p => `
                <button class="crop-chip" onclick="window._daSelectCrop('${p.name}')"
@@ -130,7 +166,6 @@
                </button>`).join('')}
            </div>
            <div style="font-size:.72rem;color:#9CA3AF;text-align:center;margin-bottom:10px;">— or type below —</div>
-           ` : `<div style="font-size:.78rem;color:#9CA3AF;margin-bottom:10px;">No plants detected from your farm. Type the plant name below.</div>`}
    
            <input id="plantNameInput" type="text" placeholder="e.g. Lettuce, Basil, Tomato"
                   style="width:100%;padding:11px 14px;border-radius:10px;
@@ -142,7 +177,7 @@
          <details style="background:white;border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
            <summary style="padding:16px 18px;font-weight:700;font-size:.88rem;color:#374151;
                             cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;">
-             ⚙️ Add Farm Context <span style="font-size:.72rem;color:#9CA3AF;font-weight:400;">(optional — improves text-only diagnosis)</span>
+             ⚙️ Add Farm Context <span style="font-size:.72rem;color:#9CA3AF;font-weight:400;">(optional — improves diagnosis)</span>
            </summary>
            <div style="padding:0 18px 18px;display:flex;flex-direction:column;gap:10px;">
              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -179,8 +214,6 @@
                         box-shadow:0 4px 14px rgba(16,185,129,.3);">
            🔬 Analyse with AI
          </button>
-   
-         <div id="resultArea"></div>
        </div>
      </div>`;
    
@@ -190,8 +223,10 @@
      });
    }
    
-   /* ── Photo state ── */
+   /* ── Persistent state across screens ── */
    let _b64 = null, _mime = 'image/jpeg';
+   let _cachedPlantName = '';
+   let _cachedFarmContext = {};
    
    function _loadFile(file) {
      if (file.size > 8 * 1024 * 1024) { alert('Image too large (max 8 MB)'); return; }
@@ -237,55 +272,124 @@
    window._daNewUploadMime = 'image/jpeg';
    
    /* ══════════════════════════════════════════
+      SCREEN 2: Brain loading animation
+   ══════════════════════════════════════════ */
+   function showBrainLoading(isRefine) {
+     const container = document.getElementById('screenContainer');
+     container.innerHTML = `
+     <div id="brainLoadScreen" class="screen active"
+          style="min-height:100vh;background:#f4f6f8;display:flex;flex-direction:column;
+                 align-items:center;justify-content:center;padding:40px 24px;text-align:center;">
+   
+       <style>
+         @keyframes brainPulse {
+           0%,100% { transform: scale(1);   filter: drop-shadow(0 0 18px #10B981aa); }
+           50%      { transform: scale(1.1); filter: drop-shadow(0 0 36px #10B981ff); }
+         }
+         @keyframes orbit1 {
+           from { transform: rotate(0deg)   translateX(60px) rotate(0deg);   }
+           to   { transform: rotate(360deg) translateX(60px) rotate(-360deg);}
+         }
+         @keyframes orbit2 {
+           from { transform: rotate(120deg)  translateX(80px) rotate(-120deg); }
+           to   { transform: rotate(480deg)  translateX(80px) rotate(-480deg); }
+         }
+         @keyframes orbit3 {
+           from { transform: rotate(240deg)  translateX(50px) rotate(-240deg); }
+           to   { transform: rotate(600deg)  translateX(50px) rotate(-600deg); }
+         }
+         @keyframes fadeInUp {
+           from { opacity:0; transform:translateY(20px); }
+           to   { opacity:1; transform:translateY(0);    }
+         }
+         @keyframes dotBlink {
+           0%,100% { opacity:.2; } 50% { opacity:1; }
+         }
+         .brain-dot-1 { animation: dotBlink 1.2s ease-in-out 0s   infinite; }
+         .brain-dot-2 { animation: dotBlink 1.2s ease-in-out .4s  infinite; }
+         .brain-dot-3 { animation: dotBlink 1.2s ease-in-out .8s  infinite; }
+       </style>
+   
+       <!-- Orbital animation wrapper -->
+       <div style="position:relative;width:200px;height:200px;margin-bottom:36px;">
+   
+         <!-- Orbiting particles -->
+         <div style="position:absolute;top:50%;left:50%;width:0;height:0;">
+           <div style="animation:orbit1 2.4s linear infinite;position:absolute;">
+             <div style="width:10px;height:10px;background:#10B981;border-radius:50%;
+                         box-shadow:0 0 12px #10B981;"></div>
+           </div>
+         </div>
+         <div style="position:absolute;top:50%;left:50%;width:0;height:0;">
+           <div style="animation:orbit2 3.2s linear infinite;position:absolute;">
+             <div style="width:7px;height:7px;background:#34D399;border-radius:50%;
+                         box-shadow:0 0 8px #34D399;"></div>
+           </div>
+         </div>
+         <div style="position:absolute;top:50%;left:50%;width:0;height:0;">
+           <div style="animation:orbit3 1.8s linear infinite;position:absolute;">
+             <div style="width:6px;height:6px;background:#6EE7B7;border-radius:50%;
+                         box-shadow:0 0 6px #6EE7B7;"></div>
+           </div>
+         </div>
+   
+         <!-- Brain emoji, centred and pulsing -->
+         <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                     font-size:5rem;line-height:1;
+                     animation:brainPulse 2s ease-in-out infinite;">🧠</div>
+       </div>
+   
+       <!-- Text -->
+       <div style="animation:fadeInUp .6s ease both;">
+         <div style="font-size:1.25rem;font-weight:800;color:#1f2937;margin-bottom:8px;letter-spacing:.01em;">
+           ${isRefine ? 'Refining diagnosis…' : 'Analysing your plant…'}
+         </div>
+         <div style="font-size:.84rem;color:#059669;margin-bottom:24px;">
+           ${isRefine ? 'Incorporating your answers into the model' : 'SeedDown AI is reading symptoms & patterns'}
+         </div>
+         <div style="display:flex;gap:8px;justify-content:center;align-items:center;">
+           <div class="brain-dot-1" style="width:10px;height:10px;background:#10B981;border-radius:50%;"></div>
+           <div class="brain-dot-2" style="width:10px;height:10px;background:#10B981;border-radius:50%;"></div>
+           <div class="brain-dot-3" style="width:10px;height:10px;background:#10B981;border-radius:50%;"></div>
+         </div>
+       </div>
+   
+       <div style="margin-top:48px;font-size:.72rem;color:#9CA3AF;animation:fadeInUp .6s ease .4s both;">
+         This usually takes 5–10 seconds
+       </div>
+     </div>`;
+   }
+   
+   /* ══════════════════════════════════════════
       CORE: Submit for analysis
    ══════════════════════════════════════════ */
    window._daRun = async function (answers = {}) {
-     const plantName = document.getElementById('plantNameInput').value.trim();
+     // Read from DOM if on the form screen; otherwise use cached values from first run
+     const plantNameEl = document.getElementById('plantNameInput');
+     if (plantNameEl) {
+       _cachedPlantName = plantNameEl.value.trim();
+       _cachedFarmContext = {
+         temperature:    document.getElementById('ctxTemp')?.value  || null,
+         humidity:       document.getElementById('ctxHumid')?.value || null,
+         daysSincePlant: document.getElementById('ctxDays')?.value  || null,
+         notes:          document.getElementById('ctxNotes')?.value || null,
+       };
+     }
+   
+     const plantName   = _cachedPlantName;
+     const farmContext = _cachedFarmContext;
+   
      if (!plantName) { alert('Please select or type the plant name.'); return; }
    
-     const farmContext = {
-       temperature:    document.getElementById('ctxTemp')?.value  || null,
-       humidity:       document.getElementById('ctxHumid')?.value || null,
-       daysSincePlant: document.getElementById('ctxDays')?.value  || null,
-       notes:          document.getElementById('ctxNotes')?.value || null,
-     };
-   
-     // Guard: must have at least a photo OR some text context
      const hasContext = farmContext.notes || farmContext.temperature || farmContext.humidity;
-     if (!_b64 && !hasContext) {
+     const isRefine = Object.keys(answers).length > 0;
+     if (!_b64 && !hasContext && !isRefine) {
        alert('Please either upload a plant photo OR describe symptoms in Farm Context — the AI needs something to work with.');
        return;
      }
    
-     const isRefine   = Object.keys(answers).length > 0;
-     const btn        = document.getElementById('analyseBtn');
-     const resultArea = document.getElementById('resultArea');
-   
-     btn.disabled    = true;
-     btn.style.opacity = '.65';
-     btn.innerText   = isRefine ? '🔄 Re-analysing…' : '🔬 Analysing…';
-   
-     const loadMsg = _b64
-       ? 'AI is examining your plant photo…'
-       : 'AI is analysing your symptoms & farm context…';
-     const subMsg  = _b64
-       ? 'Vision model active — takes 5–10 seconds'
-       : 'Text model active · confidence will be capped at 69% without a photo';
-   
-     resultArea.innerHTML = `
-       <div style="background:white;border-radius:16px;padding:28px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.05);">
-         <div style="font-size:2.2rem;margin-bottom:12px;">🧠</div>
-         <div style="font-weight:700;color:#111;margin-bottom:6px;">${isRefine ? 'Refining diagnosis with your answers…' : loadMsg}</div>
-         <div style="font-size:.8rem;color:#9CA3AF;">${subMsg}</div>
-         <div id="ldots" style="margin-top:14px;font-size:1.4rem;letter-spacing:6px;color:#10B981;">· · ·</div>
-       </div>`;
-   
-     const dotStates = ['· · ·','● · ·','· ● ·','· · ●'];
-     let di = 0;
-     const dint = setInterval(() => {
-       const el = document.getElementById('ldots');
-       if (el) el.innerText = dotStates[di++ % 4]; else clearInterval(dint);
-     }, 380);
+     // Switch to brain loading screen
+     showBrainLoading(isRefine);
    
      try {
        const res = await fetch(`${API_BASE}/api/ai/disease-analysis`, {
@@ -300,43 +404,65 @@
            answers,
          }),
        });
-       clearInterval(dint);
+   
        if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Server error'); }
        renderResult(await res.json(), plantName);
      } catch (err) {
-       clearInterval(dint);
-       resultArea.innerHTML = `
-         <div style="background:white;border-radius:16px;padding:20px;border-left:4px solid #EF4444;box-shadow:0 2px 8px rgba(0,0,0,.05);">
-           <div style="font-weight:700;color:#DC2626;margin-bottom:6px;">⚠️ Analysis failed</div>
-           <div style="font-size:.84rem;color:#4B5563;">${err.message}</div>
-         </div>`;
-     } finally {
-       btn.disabled    = false;
-       btn.style.opacity = '1';
-       btn.innerText   = '🔬 Analyse with AI';
+       renderError(err.message, plantName);
      }
    };
    
+   /* ── Error screen ── */
+   function renderError(message) {
+     const container = document.getElementById('screenContainer');
+     container.innerHTML = `
+     <div class="screen active" style="min-height:100vh;background:#f4f6f8;padding-bottom:90px;">
+       <div style="display:flex;align-items:center;gap:12px;padding:16px 18px;
+                   background:white;border-bottom:1px solid #eee;position:sticky;top:0;z-index:10;
+                   box-shadow:0 2px 8px rgba(0,0,0,.04);">
+         <button onclick="window._daBackToForm()"
+                 style="background:none;border:none;font-size:1.4rem;cursor:pointer;padding:0;color:#374151;">←</button>
+         <div style="font-weight:800;font-size:1.05rem;color:#1f2937;">🧫 AI Disease Analysis</div>
+       </div>
+       <div style="padding:24px 16px;">
+         <div style="background:white;border-radius:16px;padding:24px;border-left:4px solid #EF4444;
+                     box-shadow:0 2px 8px rgba(0,0,0,.05);">
+           <div style="font-weight:800;font-size:1rem;color:#DC2626;margin-bottom:8px;">⚠️ Analysis failed</div>
+           <div style="font-size:.85rem;color:#4B5563;margin-bottom:20px;">${message}</div>
+           <button onclick="window._daBackToForm()"
+                   style="width:100%;padding:12px;border-radius:10px;border:1.5px solid #E5E7EB;
+                          background:white;font-weight:700;font-size:.88rem;cursor:pointer;color:#374151;">
+             ← Try again
+           </button>
+         </div>
+       </div>
+     </div>`;
+   }
+   
+   /* ── Back to form ── */
+   window._daBackToForm = function () {
+     render();
+   };
+   
    /* ══════════════════════════════════════════
-      RENDER RESULT
+      SCREEN 3: Results page
    ══════════════════════════════════════════ */
    function renderResult(data, plantName) {
      const pct  = Math.round((data.confidence || 0) * 100);
      const tier = confTier(pct);
    
      const sv = {
-       low:     { color: '#059669', bg: '#D1FAE5', label: 'Low Risk',   icon: '🟢' },
-       medium:  { color: '#D97706', bg: '#FEF3C7', label: 'Moderate',   icon: '🟡' },
-       high:    { color: '#DC2626', bg: '#FEE2E2', label: 'High Risk',  icon: '🔴' },
-       unknown: { color: '#6B7280', bg: '#F3F4F6', label: 'Unknown',    icon: '⚪' },
+       low:     { color: '#059669', bg: '#D1FAE5', label: 'Low Risk',  icon: '🟢' },
+       medium:  { color: '#D97706', bg: '#FEF3C7', label: 'Moderate',  icon: '🟡' },
+       high:    { color: '#DC2626', bg: '#FEE2E2', label: 'High Risk', icon: '🔴' },
+       unknown: { color: '#6B7280', bg: '#F3F4F6', label: 'Unknown',   icon: '⚪' },
      }[data.severity] || { color: '#6B7280', bg: '#F3F4F6', label: 'Unknown', icon: '⚪' };
    
-     // Section card builder
      const THEMES = {
-       evidence:   { bg: '#F8FAFC', border: '#E2E8F0', icon: '🔍', label: 'Evidence observed',   col: '#374151', check: '🔹' },
-       causes:     { bg: '#FFFBEB', border: '#FDE68A', icon: '⚠️', label: 'Likely causes',        col: '#92400E', check: '🔸' },
-       solutions:  { bg: '#ECFDF5', border: '#A7F3D0', icon: '💊', label: 'Recommended actions',  col: '#065F46', check: '✅' },
-       prevention: { bg: '#EFF6FF', border: '#BFDBFE', icon: '🛡️', label: 'Prevention tips',      col: '#1E40AF', check: '💡' },
+       evidence:   { bg: '#F8FAFC', border: '#E2E8F0', icon: '🔍', label: 'Evidence observed',  col: '#374151', check: '🔹' },
+       causes:     { bg: '#FFFBEB', border: '#FDE68A', icon: '⚠️', label: 'Likely causes',       col: '#92400E', check: '🔸' },
+       solutions:  { bg: '#ECFDF5', border: '#A7F3D0', icon: '💊', label: 'Recommended actions', col: '#065F46', check: '✅' },
+       prevention: { bg: '#EFF6FF', border: '#BFDBFE', icon: '🛡️', label: 'Prevention tips',     col: '#1E40AF', check: '💡' },
      };
    
      function section(key, items) {
@@ -363,7 +489,6 @@
        </div>`;
      }
    
-     // Confidence badge
      const confidenceBadgeHtml = `
        <div style="display:inline-flex;align-items:center;gap:6px;background:${tier.bg};
                    border:1px solid ${tier.color}33;border-radius:20px;padding:4px 12px;">
@@ -397,19 +522,25 @@
          <div id="cameraFeedback" style="margin-top:10px;font-size:.76rem;font-weight:600;display:none;"></div>
        </div>` : '';
    
-     // Follow-up Q&A block (shown when confidence < 80%)
-     const qaBlock = (data.needsMoreInfo && data.followUpQuestions?.length) ? `
+     // Follow-up Q&A: always shown UNLESS confidence ≥ 90%
+     // If backend didn't return questions (e.g. it was "confirmed" at 80-89%), generate defaults
+     const defaultFollowUps = [
+       `Have you noticed any changes in the affected area over the past few days (spreading, shrinking, colour shift)?`,
+       `What are the current temperature and humidity conditions in the growing zone?`,
+       `Are other plants nearby showing similar symptoms?`,
+     ];
+     const followUpQs = (data.followUpQuestions?.length ? data.followUpQuestions : defaultFollowUps);
+     const showQA = pct < 90;
+     const qaBlock = showQA ? `
        <div id="qaBlock" style="padding:16px 18px;background:#FFFBEB;border-top:1px solid #FDE68A;">
          <div style="font-weight:700;font-size:.84rem;color:#92400E;margin-bottom:6px;">
-           🤔 More info needed — confidence is ${pct}% (threshold: 80%)
+           🤔 Help us refine — confidence is ${pct}%
          </div>
          <div style="font-size:.75rem;color:#78350F;margin-bottom:12px;line-height:1.4;">
-           ${data._meta?.isNoImage
-             ? 'No photo was provided. Answering these questions (or uploading a photo) will allow the AI to refine the diagnosis and potentially confirm it.'
-             : 'Image symptoms were ambiguous. Your answers will sharpen the diagnosis.'}
+           Answer the questions below to sharpen the AI diagnosis.
          </div>
    
-         ${data.followUpQuestions.map((q, i) => {
+         ${followUpQs.map((q, i) => {
            const isPhotoQ = /photo|image|picture|照片/i.test(q);
            if (isPhotoQ) {
              return `
@@ -439,7 +570,7 @@
            </div>`;
          }).join('')}
    
-         <button onclick="window._daRefine(${JSON.stringify(data.followUpQuestions).replace(/"/g,'&quot;')})"
+         <button onclick="window._daRefine(${JSON.stringify(followUpQs).replace(/"/g,'&quot;')})"
                  style="width:100%;margin-top:8px;padding:13px;border-radius:10px;border:none;
                         background:linear-gradient(135deg,#F59E0B,#D97706);color:white;font-weight:800;
                         cursor:pointer;font-size:.9rem;box-shadow:0 3px 8px rgba(245,158,11,.25);">
@@ -447,70 +578,88 @@
          </button>
        </div>` : '';
    
-     document.getElementById('resultArea').innerHTML = `
-     <div style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.07);">
+     const container = document.getElementById('screenContainer');
+     container.innerHTML = `
+     <div class="screen active" style="min-height:100vh;background:#f4f6f8;padding-bottom:90px;">
    
-       <!-- Severity header -->
-       <div style="padding:18px;background:${sv.bg};">
-         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
-           <div style="flex:1;">
-             <div style="font-size:.68rem;color:${sv.color};font-weight:700;letter-spacing:.08em;margin-bottom:3px;">
-               DIAGNOSIS · ${plantName.toUpperCase()}
-             </div>
-             <div style="font-weight:900;font-size:1.05rem;color:#111;line-height:1.3;">${data.condition}</div>
-             <div style="margin-top:8px;">${confidenceBadgeHtml}</div>
-           </div>
-           <div style="text-align:center;flex-shrink:0;">
-             <div style="font-size:1.8rem;">${sv.icon}</div>
-             <div style="font-size:.68rem;font-weight:700;color:${sv.color};margin-top:1px;">${sv.label}</div>
-           </div>
-         </div>
-       </div>
-   
-       <!-- Confidence bar -->
-       <div style="padding:14px 18px;border-bottom:1px solid #F3F4F6;">
-         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
-           <span style="font-size:.73rem;font-weight:700;color:#9CA3AF;">AI Confidence</span>
-           <span style="font-size:.82rem;font-weight:800;color:${tier.color};">${pct}%</span>
-         </div>
-         <div style="background:#F3F4F6;border-radius:8px;height:8px;overflow:hidden;">
-           <div style="height:100%;width:${pct}%;background:${tier.bar};border-radius:8px;transition:width .7s ease;"></div>
-         </div>
-         ${data.confidenceExplanation ? `<div style="font-size:.71rem;color:#9CA3AF;margin-top:5px;line-height:1.4;">${data.confidenceExplanation}</div>` : ''}
-       </div>
-   
-       <!-- Treatment time -->
-       <div style="margin:14px 18px 0;padding:12px 14px;background:#F0FDF4;border:1px solid #BBF7D0;
-                   border-radius:10px;display:flex;align-items:center;gap:10px;">
-         <span style="font-size:1.4rem;">⏳</span>
+       <!-- Header -->
+       <div style="display:flex;align-items:center;gap:12px;padding:16px 18px;
+                   background:white;border-bottom:1px solid #eee;position:sticky;top:0;z-index:10;
+                   box-shadow:0 2px 8px rgba(0,0,0,.04);">
+         <button onclick="window._daBackToForm()"
+                 style="background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;padding:0;color:#374151;">←</button>
          <div>
-           <div style="font-size:.72rem;color:#166534;font-weight:700;letter-spacing:.03em;">ESTIMATED TREATMENT TIME</div>
-           <div style="font-weight:800;font-size:.95rem;color:#14532D;">${data.treatmentDuration}</div>
+           <div style="font-weight:800;font-size:1.05rem;color:#1f2937;">🧫 Diagnosis Results</div>
+           <div style="font-size:0.72rem;color:#9CA3AF;">SeedDown AI · Hybrid Confidence Engine</div>
          </div>
        </div>
    
-       <!-- 4-quadrant grid -->
-       <div style="padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:stretch;">
-         ${section('evidence',   data.evidence)}
-         ${section('causes',     data.likelyCauses)}
-         ${section('solutions',  data.solutions)}
-         ${section('prevention', data.prevention)}
-       </div>
+       <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+         <div style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.07);">
    
-       ${iotBlock}
-       ${qaBlock}
+           <!-- Severity header -->
+           <div style="padding:18px;background:${sv.bg};">
+             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+               <div style="flex:1;">
+                 <div style="font-size:.68rem;color:${sv.color};font-weight:700;letter-spacing:.08em;margin-bottom:3px;">
+                   DIAGNOSIS · ${plantName.toUpperCase()}
+                 </div>
+                 <div style="font-weight:900;font-size:1.05rem;color:#111;line-height:1.3;">${data.condition}</div>
+                 <div style="margin-top:8px;">${confidenceBadgeHtml}</div>
+               </div>
+               <div style="text-align:center;flex-shrink:0;">
+                 <div style="font-size:1.8rem;">${sv.icon}</div>
+                 <div style="font-size:.68rem;font-weight:700;color:${sv.color};margin-top:1px;">${sv.label}</div>
+               </div>
+             </div>
+           </div>
    
-       <!-- Scan again -->
-       <div style="padding:14px 18px;border-top:1px solid #F3F4F6;">
-         <button onclick="window._daClear();document.getElementById('resultArea').innerHTML='';window.scrollTo(0,0);"
-                 style="width:100%;padding:11px;border-radius:10px;border:1.5px solid #E5E7EB;
-                        background:white;font-weight:700;font-size:.88rem;cursor:pointer;color:#374151;">
-           📷 Scan another plant
-         </button>
+           <!-- Confidence bar -->
+           <div style="padding:14px 18px;border-bottom:1px solid #F3F4F6;">
+             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+               <span style="font-size:.73rem;font-weight:700;color:#9CA3AF;">AI Confidence</span>
+               <span style="font-size:.82rem;font-weight:800;color:${tier.color};">${pct}%</span>
+             </div>
+             <div style="background:#F3F4F6;border-radius:8px;height:8px;overflow:hidden;">
+               <div style="height:100%;width:${pct}%;background:${tier.bar};border-radius:8px;transition:width .7s ease;"></div>
+             </div>
+             ${data.confidenceExplanation ? `<div style="font-size:.71rem;color:#9CA3AF;margin-top:5px;line-height:1.4;">${data.confidenceExplanation}</div>` : ''}
+           </div>
+   
+           <!-- Treatment time -->
+           <div style="margin:14px 18px 0;padding:12px 14px;background:#F0FDF4;border:1px solid #BBF7D0;
+                       border-radius:10px;display:flex;align-items:center;gap:10px;">
+             <span style="font-size:1.4rem;">⏳</span>
+             <div>
+               <div style="font-size:.72rem;color:#166534;font-weight:700;letter-spacing:.03em;">ESTIMATED TREATMENT TIME</div>
+               <div style="font-weight:800;font-size:.95rem;color:#14532D;">${data.treatmentDuration}</div>
+             </div>
+           </div>
+   
+           <!-- 4-quadrant grid -->
+           <div style="padding:16px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:stretch;">
+             ${section('evidence',   data.evidence)}
+             ${section('causes',     data.likelyCauses)}
+             ${section('solutions',  data.solutions)}
+             ${section('prevention', data.prevention)}
+           </div>
+   
+           ${iotBlock}
+           ${qaBlock}
+   
+           <!-- Analyse another -->
+           <div style="padding:14px 18px;border-top:1px solid #F3F4F6;">
+             <button onclick="window._daBackToForm()"
+                     style="width:100%;padding:11px;border-radius:10px;border:1.5px solid #E5E7EB;
+                            background:white;font-weight:700;font-size:.88rem;cursor:pointer;color:#374151;">
+               📷 Analyse another plant
+             </button>
+           </div>
+         </div>
        </div>
      </div>`;
    
-     document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+     window.scrollTo(0, 0);
    }
    
    /* ── IoT permission handlers ── */
@@ -548,10 +697,9 @@
        document.getElementById(`fqa_photo_preview_${index}`).src = e.target.result;
        document.getElementById(`fqa_photo_preview_wrap_${index}`).style.display = 'block';
        const btn = document.getElementById(`fqa_upload_btn_${index}`);
-       btn.innerHTML     = `✅ Photo attached (${(file.size / 1024).toFixed(1)} KB) — tap to change`;
-       btn.style.background    = '#FEF3C7';
-       btn.style.borderStyle   = 'solid';
-       // Auto-fill hidden value so it counts as an answer
+       btn.innerHTML         = `✅ Photo attached (${(file.size / 1024).toFixed(1)} KB) — tap to change`;
+       btn.style.background  = '#FEF3C7';
+       btn.style.borderStyle = 'solid';
        const hidden = document.getElementById(`fqa_${index}`);
        if (hidden) hidden.value = '[New Photo Attached]';
      };
@@ -575,12 +723,6 @@
      if (window._daNewUploadB64) {
        _b64  = window._daNewUploadB64;
        _mime = window._daNewUploadMime;
-       const prev = document.getElementById('imgPreview');
-       if (prev) prev.src = `data:${_mime};base64,${_b64}`;
-       const wrap = document.getElementById('imgPreviewWrap');
-       if (wrap) wrap.style.display = 'block';
-       const dz = document.getElementById('dropZone');
-       if (dz) dz.style.display = 'none';
        window._daNewUploadB64 = null;
      }
    
