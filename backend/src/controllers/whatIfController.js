@@ -7,21 +7,6 @@ const { getMarketPricesForCrops } = require('../services/marketPriceService');
 
 const CROPS_FILE   = path.join(__dirname, '../../crops_data.json');
 const RECIPES_FILE = path.join(__dirname, '../../garden_recipes.json');
-const VERTICAL_FARMING_RESOURCE_LINKS = [
-  {
-    label: 'Cornell Controlled Environment Agriculture',
-    url: 'https://cea.cals.cornell.edu/',
-  },
-  {
-    label: 'FAO protected cultivation and vertical farming reference',
-    url: 'https://www.fao.org/climate-smart-agriculture-sourcebook/production-resources/module-b1-crops/chapter-b1-3/en/',
-  },
-  {
-    label: 'UKY greens and microgreens labor/post-harvest profile',
-    url: 'https://ccd.uky.edu/resources/crops/vegetables/greens',
-  },
-];
-
 const DEFAULT_ENV_PROFILE = {
   tempIdeal: [18, 28],
   humidityIdeal: [50, 75],
@@ -342,7 +327,7 @@ function environmentPlan({ species, quantity, cropSpec, aiSuitability, sensors, 
       moistureSource: current.moistureSource,
       resourceWaterDemandDelta: impacts.waterChange,
     },
-    sources: profile.sources || VERTICAL_FARMING_RESOURCE_LINKS,
+    sources: profile.sources || [],
   };
 }
 
@@ -622,7 +607,11 @@ exports.getNewPlantImpact = async (req, res) => {
     try {
       aiSuitability = await askAiCropProfile({ species, quantity, currentCrops, sensors, cropSpec });
     } catch (err) {
-      console.warn('[WhatIf] AI species profile skipped:', err.message);
+      console.warn('[WhatIf] AI species profile failed:', err.message);
+      return res.status(503).json({
+        error: 'AI crop profile unavailable',
+        message: 'New plant suitability needs an AI-generated crop profile with source links. Configure GROQ_API_KEY, GEMINI_API_KEY_2, or GEMINI_API_KEY and try again.',
+      });
     }
 
     if (aiSuitability && aiSuitability.suitable === false) {
@@ -709,7 +698,7 @@ Write one short operational care sentence only. Do not include any numbers, perc
       warnings,
       insight,
       analysis: aiSuitability,
-      resourceLinks: [...VERTICAL_FARMING_RESOURCE_LINKS, ...(plan.sources || [])],
+      resourceLinks: normaliseResourceLinks(aiSuitability?.resourceLinks || plan.sources),
     });
 
   } catch (err) {
@@ -727,40 +716,8 @@ exports.newPlantAiAnalysis = async (req, res) => {
       return res.status(400).json({ error: 'species is required' });
     }
 
-    const temp     = sensors?.temp     ?? 28;
-    const humid    = sensors?.humid    ?? 68;
-    const light    = sensors?.light    ?? 82;
-    const water    = sensors?.water    ?? 45;
-    const nutrient = sensors?.nutrient ?? 78;
-
     const cropSpec = findCrop(species);
-
-    const prompt = `You are an agricultural AI expert for SeedDown indoor vertical farm.
-Species requested: ${species} (${quantity || 1} plants)
-Current crops in farm: ${currentCrops?.join(', ') || 'mixed vegetables'}
-Current sensors: Humidity ${humid}%, Light ${light}%, Moisture ${water}%, Nutrients ${nutrient}%
-Projected after adding: Humidity ${projected.humid}%, Moisture ${projected.water}%, Nutrients ${projected.nutrient}%
-${cropSpec ? `Known crop data: growth days ${cropSpec.growthDays}, water needs ${cropSpec.waterNeeds}, light needs ${cropSpec.lightNeeds}` : `No crop data found for "${species}" in database — use general knowledge.`}
-
-Respond in valid JSON only. No markdown, no explanation outside the JSON.
-{
-  "suitable": true or false,
-  "compatibilityScore": 0-100,
-  "reason": "one sentence why suitable or not",
-  "careAdvice": "one sentence on how to care for this plant in this environment",
-  "warnings": ["array of warning strings, empty array if none"],
-  "estimatedHarvestDays": number or null
-}`;
-
-    const raw = await askText('', prompt, 300);
-
-    let parsed;
-    try {
-      const clean = raw.replace(/```json|```/g, '').trim();
-      parsed = JSON.parse(clean);
-    } catch {
-      return res.status(500).json({ error: 'AI returned invalid JSON', raw });
-    }
+    const parsed = await askAiCropProfile({ species, quantity, currentCrops, sensors, cropSpec });
 
     res.json({
       species,

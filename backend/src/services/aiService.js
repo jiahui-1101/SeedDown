@@ -168,10 +168,18 @@ async function analyzePlantImage({ image, mediaType, targetPlant }) {
   return parsePlantRecognition(rawText);
 }
 
-async function chatWithAdvisor(messages, gardenState) {
-  const system = `You are Sprout, the AI garden advisor for SeedDown.
-Help with crop care, harvest timing, recipes, sensor readings, and vertical farming.
-Be friendly, concise, and practical. Use 2-3 sentences.
+async function chatWithAdvisor(messages, gardenState, mode = 'beginner') {
+  const system = mode === 'commercial'
+    ? `You are SeedDown's commercial vertical farming operations AI.
+You are embedded inside a professional Farm Command Center dashboard used by farm managers and agronomists.
+Your role: deliver precise, data-driven insights on yield optimisation, zone-level sensor anomalies, energy efficiency, ROI, disease risk, and crop scheduling.
+Be direct and technical. Prioritise actionable recommendations. Use concise bullet points or short paragraphs. Avoid casual tone.
+Do not explain basic concepts unless asked. Assume the user understands farming terminology.
+Current farm state: ${JSON.stringify(gardenState)}`
+    : `You are Sprout, the friendly AI garden advisor for SeedDown.
+You help home growers and beginners with crop care, watering schedules, harvest timing, recipe ideas, and reading their sensor data.
+Be warm, encouraging, and easy to understand. Avoid jargon. Use simple language and 2-3 short sentences per reply.
+Celebrate small wins and keep the user motivated. If something is wrong, explain it gently and tell them exactly what to do.
 Current garden: ${JSON.stringify(gardenState)}`;
 
   const normalized = [
@@ -182,7 +190,7 @@ Current garden: ${JSON.stringify(gardenState)}`;
     })),
   ];
 
-  return runTextMessages(normalized, 512);
+  return runTextMessages(normalized, mode === 'commercial' ? 768 : 512);
 }
 
 async function forecastYieldAndRecipes(plantedCrop, cropSpec, recipes, days) {

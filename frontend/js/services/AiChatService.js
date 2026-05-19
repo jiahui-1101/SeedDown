@@ -136,7 +136,8 @@ export function initAiChat() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: text,
-                    history: chatHistory
+                    history: chatHistory,
+                    mode: 'beginner'
                 })
             });
 
@@ -161,6 +162,24 @@ export function initAiChat() {
 
     document.getElementById('aiSend').addEventListener('click', handleSend);
     input.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
+
+    // Hide the floating FAB when the commercial screen is active (it has its own embedded chat)
+    function syncFabVisibility() {
+        const onCommercial = !!document.getElementById('commercialScreen');
+        fab.style.display = onCommercial ? 'none' : '';
+        if (onCommercial && isOpen) {
+            isOpen = false;
+            windowDiv.style.display = 'none';
+        }
+    }
+
+    // Watch for DOM changes so we react when pages are swapped in/out
+    const _fabObserver = new MutationObserver(syncFabVisibility);
+    _fabObserver.observe(document.getElementById('screenContainer') || document.body, {
+        childList: true,
+        subtree: false,
+    });
+    syncFabVisibility(); // run once on init
 }
 
 /*

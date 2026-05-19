@@ -383,12 +383,12 @@ function applySensorReading(r) {
     setText('pro-co2', co2 ? co2 + ' ppm' : '--');
 }
 async function fetchAIGlobalAdvice(currentData) {
-    const prompt = `You are SeedDown's commercial farm AI. Current sensor data: ${JSON.stringify(currentData)}. Give one concise operations insight about risk, yield, energy, or automation.`;
+    const prompt = `Current sensor data: ${JSON.stringify(currentData)}. Give one concise operations insight about risk, yield, energy, or automation.`;
     try {
         const res = await fetch(`${API_BASE}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: prompt }),
+            body: JSON.stringify({ message: prompt, mode: 'commercial' }),
         });
         const result = await res.json();
         setText('ai-overview-text', result.reply || result.response || 'Farm is operating normally.');
@@ -407,11 +407,18 @@ async function sendCommercialChat() {
 
     try {
         const farm = getCurrentFarm();
-        const prompt = `SeedDown commercial farm context: ${JSON.stringify({ farm, sensors: AppState.sensors })}\nUser question: ${message}`;
         const res = await fetch(`${API_BASE}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: prompt }),
+            body: JSON.stringify({
+                message,
+                history: chatMessages
+                    .filter(m => m.role !== 'ai' || m.text !== 'Thinking...')
+                    .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }))
+                    .slice(-10),
+                mode: 'commercial',
+                gardenState: { farm, sensors: AppState.sensors },
+            }),
         });
         const result = await res.json();
         replaceLastAi(result.reply || result.response || 'I could not generate a recommendation yet.');
@@ -1157,6 +1164,3 @@ function ensureCommercialCommandStyles() {
     `;
     document.head.appendChild(style);
 }
-
-
-

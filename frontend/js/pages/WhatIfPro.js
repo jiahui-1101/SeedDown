@@ -71,21 +71,6 @@ const MARKET_SOURCE_LINKS = [
   },
 ];
 
-const VERTICAL_FARMING_RESOURCE_LINKS = [
-  {
-    label: 'Cornell Controlled Environment Agriculture',
-    url: 'https://cea.cals.cornell.edu/',
-  },
-  {
-    label: 'FAO protected cultivation / vertical farming reference',
-    url: 'https://www.fao.org/climate-smart-agriculture-sourcebook/production-resources/module-b1-crops/chapter-b1-3/en/',
-  },
-  {
-    label: 'UKY greens and microgreens labor/post-harvest profile',
-    url: 'https://ccd.uky.edu/resources/crops/vegetables/greens',
-  },
-];
-
 // Fallback crop catalog — used ONLY when no farm is planted yet.
 // When a real farm exists, planted crops override this entirely.
 const PRO_CROPS_FALLBACK = [
@@ -1418,7 +1403,7 @@ function _applyNpSuitabilityVisibility(sp) {
   document.getElementById('pro-impact-card')?.classList.toggle('pro-hidden', hideDetails);
 }
 
-function _resourceLinksHtml(links = VERTICAL_FARMING_RESOURCE_LINKS) {
+function _resourceLinksHtml(links = []) {
   return `
     <div class="pro-source-row" style="margin-top:8px;">
       ${links.map(link => `
@@ -1600,7 +1585,6 @@ function _npRender() {
 }
 
 // Calls the backend AI route with real sensor data and farm context.
-// Falls back to a rule-based message if the API is unreachable.
 async function _fetchNpAdvisor(sp, qty, zones) {
   const aiEl = document.getElementById('pro-np-ai');
   const aiBox = document.getElementById('pro-np-ai-box');
@@ -1611,7 +1595,6 @@ async function _fetchNpAdvisor(sp, qty, zones) {
 
   const sensors   = _sensorSnapshot || await fetchSensorData();
   const zoneNames = zones.map(z => `${z.crop} (${z.fill}% full)`).join(', ');
-  const warnings  = sp.dir.filter(d => d === 'warn').length;
 
   try {
     const res = await fetch(`${API_BASE}/api/whatif/newplant`, {
@@ -1635,41 +1618,18 @@ async function _fetchNpAdvisor(sp, qty, zones) {
 
     aiEl.className   = '';
     const calcHtml = unsuitable ? '' : _advisorCalcHtml(data.environmentPlan);
-    aiEl.innerHTML = _esc(text || _fallbackAdvisorNote(sp, warnings))
+    aiEl.innerHTML = _esc(text || 'AI analysis complete.')
       + calcHtml
-      + (unsuitable ? _resourceLinksHtml(data.resourceLinks || VERTICAL_FARMING_RESOURCE_LINKS) : '');
+      + (unsuitable && data.resourceLinks?.length ? _resourceLinksHtml(data.resourceLinks) : '');
     _applyNpSuitabilityVisibility(sp);
   } catch {
     _npAiAnalysis = { species: sp.id, data: null };
     _npAiUnsuitable = false;
     if (aiBox) aiBox.className = 'pro-ai-inline warn';
     aiEl.className   = '';
-    aiEl.textContent = _fallbackAdvisorNote(sp, warnings);
+    aiEl.textContent = 'AI crop advisor is unavailable. Suitability, source links, and crop-specific ranges require the backend AI profile service.';
     _applyNpSuitabilityVisibility(sp);
   }
-}
-
-// Rule-based fallback when the API is unavailable.
-function _fallbackAdvisorNote(sp, warnings) {
-  const notes = {
-    spinach:    'Spinach co-exists well with leafy crops. No special zone separation needed. Harvest outer leaves first to extend the crop window.',
-    mint:       'Mint spreads aggressively — use physical root barriers between neighbouring zones. Harvest before flowering to maintain leaf quality.',
-    chili:      'Chili needs more heat and light than most indoor crops. Raise your grow-light intensity in the target zone before introduction.',
-    cucumber:   'Cucumbers are water-heavy. Scale your pump duty cycle proportionally and ensure good airflow to prevent powdery mildew.',
-    strawberry: 'Strawberries prefer cooler temperatures — position away from heat lamp clusters. Use end-row positions in the coldest zone.',
-    kale:       'Kale is cold-tolerant and a strong companion for lettuce rows. Harvest outer leaves regularly to encourage continuous growth.',
-    broccoli:   'Space broccoli at least 30 cm apart for airflow. Monitor for aphids in high-humidity zones.',
-    celery:     'Celery has very high water demand — schedule irrigation before adding rows to avoid moisture stress.',
-    pepper:     'Bell peppers need consistent temperatures above 20°C. Avoid placing near air vents or cooling zones.',
-    tomato:     'Tomatoes do best with deep watering every 2–3 days and benefit from calcium supplementation to prevent blossom end rot.',
-    basil:      'Basil is low-impact and an excellent companion for tomatoes. Pinch flower heads to keep leaves productive longer.',
-    kangkung:   'Kangkung is fast-growing and low-maintenance. Keep soil consistently moist and harvest young shoots for best flavour.',
-    petai:      'Petai grows well in warm, humid conditions. Ensure good airflow to prevent fungal issues at the base.',
-  };
-  const base = notes[sp.id] || 'Monitor environment for 48 hours after introduction and adjust humidity if readings exceed safe thresholds.';
-  return warnings > 0
-    ? `⚠ Adding ${_npQty} rows of ${sp.name} triggers ${warnings} resource warning(s). Review flagged parameters before planting. ${base}`
-    : `✅ ${_npQty} rows of ${sp.name} — resource impact within acceptable range. ${base}`;
 }
 
 /* ─────────────────────────────────────────────
