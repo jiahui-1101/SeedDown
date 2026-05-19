@@ -27,7 +27,7 @@
 
   Zone: Zone A | Plant: Tomato | Goal: Maximum Yield
   Test guide:
-  - Turn POT1 (Soil) high        -> WATER_ON
+  - Turn POT1 (Soil) low         -> WATER_ON
   - Lower LDR light level        -> LIGHT_ON
   - Turn POT3 (pH) to extreme    -> PH_WARNING
   - Raise MQ-2 gas reading       -> FAN_ON + BUZZER + GAS_ALERT
@@ -36,6 +36,16 @@
 */
 
 #include <DHTesp.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <LittleFS.h>
+
+const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_PASSWORD = "";
+const char* BACKEND_BASE_URL = "https://nextlevelfarm.onrender.com";
+const char* DEVICE_ID = "dev_com_zone_demo";
+const char* DEVICE_TOKEN = "PASTE_DEVICE_TOKEN_HERE";
+const int DEFAULT_INTERVAL_SECONDS = 2;
 
 const char* ZONE_ID = "zone_A";
 
@@ -63,12 +73,13 @@ const int CO2_LED_PIN = 19;
 const int GAS_LED_PIN = 21;
 
 DHTesp dht;
+int offlineQueueCount = 0;
 
 // These thresholds are set by AI in production based on plant x goal.
 const float TEMP_MAX = 28.0;       // Tomato + Maximum Yield: warm upper limit.
 const float HUMIDITY_MIN = 60.0;   // Tomato + Maximum Yield: humidity floor.
-const int SOIL_TRIGGER = 2200;     // Tomato + Maximum Yield: irrigation trigger.
-const int LIGHT_TRIGGER = 1200;    // Tomato + Maximum Yield: high light demand.
+const int SOIL_TRIGGER = 2200;     // Tomato + Maximum Yield: water when soil ADC falls below this dry threshold.
+const int LIGHT_TRIGGER = 1200;    // Tomato + Maximum Yield: turn light on when ADC falls below this dark threshold.
 const float PH_MIN = 5.5;          // Tomato + Maximum Yield: lower pH safety bound.
 const float PH_MAX = 6.5;          // Tomato + Maximum Yield: upper pH safety bound.
 const float EC_MIN = 2.5;          // Tomato + Maximum Yield: minimum nutrient strength.
@@ -102,6 +113,129 @@ int toCO2PPM(int raw) {
 
 String statusLabel(bool warning) {
   return warning ? "WARNING" : "OK";
+}
+
+bool hasDeviceToken() {
+  return strlen(DEVICE_TOKEN) > 0 && String(DEVICE_TOKEN) != "PASTE_DEVICE_TOKEN_HERE";
+}
+
+void connectWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return;
+  Serial.print("[WiFi] Connecting to ");
+  Serial.print(WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  unsigned long started = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - started < 8000) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println(WiFi.status() == WL_CONNECTED ? " connected" : " offline");
+}
+
+String httpPost(String path, String body, bool withToken = true) {
+  if (WiFi.status() != WL_CONNECTED) return "";
+  HTTPClient http;
+  http.begin(String(BACKEND_BASE_URL) + path);
+  http.addHeader("Content-Type", "application/json");
+  if (withToken && hasDeviceToken()) http.addHeader("x-device-token", DEVICE_TOKEN);
+  int status = http.POST(body);
+  String response = http.getString();
+  Serial.printf("[HTTP] POST %s -> %d\n", path.c_str(), status);
+  if (response.length()) Serial.println(response);
+  http.end();
+  return status > 0 && status < 400 ? response : "";
+}
+
+String httpGet(String path, bool withToken = true) {
+  if (WiFi.status() != WL_CONNECTED) return "";
+  HTTPClient http;
+  http.begin(String(BACKEND_BASE_URL) + path);
+  if (withToken && hasDeviceToken()) http.addHeader("x-device-token", DEVICE_TOKEN);
+  int status = http.GET();
+  String response = http.getString();
+  Serial.printf("[HTTP] GET %s -> %d\n", path.c_str(), status);
+  if (response.length()) Serial.println(response);
+  http.end();
+  return status > 0 && status < 400 ? response : "";
+}
+
+void queueOfflineReading(const String& payload) {
+  File file = LittleFS.open("/queue.txt", "a");
+  if (!file) {
+    Serial.println("[Offline] Could not open LittleFS queue");
+    return;
+  }
+  file.println(payload);
+  file.close();
+  offlineQueueCount++;
+  Serial.printf("[Offline] Reading queued in LittleFS (%d RAM count)\n", offlineQueueCount);
+  if (offlineQueueCount % 10 == 0) Serial.println("[Offline] Batch of 10 readings persisted");
+}
+
+void flushOfflineQueue() {
+  if (WiFi.status() != WL_CONNECTED || !LittleFS.exists("/queue.txt")) return;
+  File file = LittleFS.open("/queue.txt", "r");
+  if (!file) return;
+  Serial.println("[Offline] Flushing queued readings...");
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length()) httpPost("/api/sensors", line);
+  }
+  file.close();
+  LittleFS.remove("/queue.txt");
+  offlineQueueCount = 0;
+  Serial.println("[Offline] Queue flushed");
+}
+
+String commandPart(const String& text, int index) {
+  int start = 0;
+  for (int i = 0; i < index; i++) {
+    start = text.indexOf('|', start);
+    if (start < 0) return "";
+    start++;
+  }
+  int end = text.indexOf('|', start);
+  if (end < 0) end = text.length();
+  return text.substring(start, end);
+}
+
+void executeCommand(const String& command) {
+  bool water = command.indexOf("WATER_ON") >= 0;
+  bool light = command.indexOf("LIGHT_ON") >= 0;
+  bool fan = command.indexOf("FAN_ON") >= 0 || command.indexOf("GAS_ALERT") >= 0;
+  bool buzzer = command.indexOf("BUZZER_ON") >= 0 || command.indexOf("GAS_ALERT") >= 0;
+  bool phWarn = command.indexOf("PH_WARNING") >= 0;
+  bool fert = command.indexOf("FERT_ALERT") >= 0;
+  bool co2 = command.indexOf("CO2_LOW") >= 0;
+  bool gas = command.indexOf("GAS_ALERT") >= 0;
+  digitalWrite(WATER_LED_PIN, water ? HIGH : LOW);
+  digitalWrite(LIGHT_LED_PIN, light ? HIGH : LOW);
+  digitalWrite(FAN_LED_PIN, fan ? HIGH : LOW);
+  digitalWrite(BUZZER_LED_PIN, buzzer ? HIGH : LOW);
+  digitalWrite(PH_LED_PIN, phWarn ? HIGH : LOW);
+  digitalWrite(FERT_LED_PIN, fert ? HIGH : LOW);
+  digitalWrite(CO2_LED_PIN, co2 ? HIGH : LOW);
+  digitalWrite(GAS_LED_PIN, gas ? HIGH : LOW);
+  Serial.printf("[Command] WATER=%s LIGHT=%s FAN=%s BUZZER=%s PH=%s FERT=%s CO2=%s GAS=%s\n",
+    water ? "ON" : "off", light ? "ON" : "off", fan ? "ON" : "off", buzzer ? "ON" : "off",
+    phWarn ? "ON" : "off", fert ? "ON" : "off", co2 ? "ON" : "off", gas ? "ON" : "off");
+}
+
+void pollAndExecuteCommand() {
+  String path = String("/api/sensors/command?deviceId=") + DEVICE_ID + "&format=text";
+  String response = httpGet(path);
+  response.trim();
+  if (!response.length()) return;
+  String command = commandPart(response, 0);
+  String interval = commandPart(response, 1);
+  String commandId = commandPart(response, 2);
+  Serial.printf("[Command] Received: %s | interval=%s | id=%s\n", command.c_str(), interval.c_str(), commandId.c_str());
+  executeCommand(command);
+  if (commandId.length()) {
+    String body = String("{\"deviceId\":\"") + DEVICE_ID + "\",\"commandId\":\"" + commandId + "\"}";
+    httpPost("/api/sensors/command-result", body);
+  }
 }
 
 void printBootInfo() {
@@ -147,6 +281,10 @@ void setup() {
   pinMode(GAS_LED_PIN, OUTPUT);
 
   printBootInfo();
+  if (LittleFS.begin(true)) Serial.println("[LittleFS] ready for offline queue");
+  else Serial.println("[LittleFS] failed");
+  connectWiFi();
+  flushOfflineQueue();
   delay(2000);
 }
 
@@ -165,8 +303,8 @@ void loop() {
 
   bool tempHigh = air.temperature > TEMP_MAX;
   bool humidityLow = air.humidity < HUMIDITY_MIN;
-  bool soilDry = soilRaw > SOIL_TRIGGER;
-  bool lightLow = lightRaw > LIGHT_TRIGGER;
+  bool soilDry = soilRaw < SOIL_TRIGGER;
+  bool lightLow = lightRaw < LIGHT_TRIGGER;
   bool phBad = ph < PH_MIN || ph > PH_MAX;
   bool gasDanger = gasRaw > GAS_DANGER;
   bool waterLow = distanceCm > WATER_LOW_CM;
@@ -189,14 +327,14 @@ void loop() {
   Serial.println("========== SeedDown Commercial Zone Node ==========");
   Serial.printf("Zone ID: %s | Plant: Tomato | Goal: Maximum Yield\n", ZONE_ID);
   Serial.println("----- Sensor POST payload fields -----");
-  Serial.printf("{ zone_id: \"%s\", temperature: %.1f, humidity: %.1f, soilRaw: %d, lightRaw: %d, ph: %.2f, gasRaw: %d, ec: %.2f, co2Ppm: %d, waterDistanceCm: %.1f }\n",
+  Serial.printf("{ zoneId: \"%s\", temperature: %.1f, humidity: %.1f, soilRaw: %d, lightRaw: %d, ph: %.2f, gasRaw: %d, ec: %.2f, co2Ppm: %d, waterDistanceCm: %.1f }\n",
                 ZONE_ID, air.temperature, air.humidity, soilRaw, lightRaw, ph, gasRaw, ec, co2, distanceCm);
   Serial.println("----- Sensor Readings -----");
   Serial.printf("Temperature: %.1f degC | Threshold max %.1f | %s\n", air.temperature, TEMP_MAX, statusLabel(tempHigh).c_str());
   Serial.printf("Humidity: %.1f %% | Threshold min %.1f | %s\n", air.humidity, HUMIDITY_MIN, statusLabel(humidityLow).c_str());
   Serial.printf("Water Distance HC-SR04: %.1f cm | Threshold > %.1f | %s\n", distanceCm, WATER_LOW_CM, statusLabel(waterLow).c_str());
-  Serial.printf("Soil POT1 raw: %d | Trigger > %d | %s\n", soilRaw, SOIL_TRIGGER, statusLabel(soilDry).c_str());
-  Serial.printf("Light LDR real sensor raw: %d | Trigger > %d | %s\n", lightRaw, LIGHT_TRIGGER, statusLabel(lightLow).c_str());
+  Serial.printf("Soil POT1 raw: %d | Trigger < %d | %s\n", soilRaw, SOIL_TRIGGER, statusLabel(soilDry).c_str());
+  Serial.printf("Light LDR real sensor raw: %d | Trigger < %d | %s\n", lightRaw, LIGHT_TRIGGER, statusLabel(lightLow).c_str());
   Serial.printf("pH POT3 raw: %d | pH %.2f | Range %.1f-%.1f | %s\n", phRaw, ph, PH_MIN, PH_MAX, statusLabel(phBad).c_str());
   Serial.printf("Gas MQ-2 real sensor raw: %d | Danger > %d | %s\n", gasRaw, GAS_DANGER, statusLabel(gasDanger).c_str());
   Serial.printf("EC POT5 raw: %d | EC %.2f ms/cm | Range %.1f-%.1f | %s\n", ecRaw, ec, EC_MIN, EC_MAX, statusLabel(ecBad).c_str());
@@ -213,5 +351,33 @@ void loop() {
   Serial.printf("GAS_ALERT: %s\n", gasDanger ? "ON" : "off");
   Serial.println("===================================================");
 
-  delay(2000);
+  String payload = String("{\"deviceId\":\"") + DEVICE_ID + "\"" +
+    ",\"zoneId\":\"" + ZONE_ID + "\"" +
+    ",\"packageLevel\":\"zone_pro\"" +
+    ",\"temperature\":" + String(air.temperature, 2) +
+    ",\"humidity\":" + String(air.humidity, 2) +
+    ",\"waterDistanceCm\":" + String(distanceCm, 2) +
+    ",\"soilRaw\":" + soilRaw +
+    ",\"lightRaw\":" + lightRaw +
+    ",\"phRaw\":" + phRaw +
+    ",\"ph\":" + String(ph, 2) +
+    ",\"gasRaw\":" + gasRaw +
+    ",\"ecRaw\":" + ecRaw +
+    ",\"ec\":" + String(ec, 2) +
+    ",\"co2Raw\":" + co2Raw +
+    ",\"co2Ppm\":" + co2 +
+    ",\"intervalSeconds\":" + DEFAULT_INTERVAL_SECONDS +
+    "}";
+
+  connectWiFi();
+  if (WiFi.status() == WL_CONNECTED) {
+    flushOfflineQueue();
+    String response = httpPost("/api/sensors", payload);
+    if (response.length()) pollAndExecuteCommand();
+    else queueOfflineReading(payload);
+  } else {
+    queueOfflineReading(payload);
+  }
+
+  delay(DEFAULT_INTERVAL_SECONDS * 1000);
 }

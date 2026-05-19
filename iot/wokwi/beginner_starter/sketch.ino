@@ -17,12 +17,22 @@
 
   Plant: Lettuce | Goal: Eco Save
   Test guide:
-  - Turn POT1 (Soil) high   -> WATER_ON Blue LED lights
+  - Turn POT1 (Soil) low    -> WATER_ON Blue LED lights
   - Lower LDR light level    -> LIGHT_ON Yellow LED lights
   - Drag DHT22 temp > 25C   -> BUZZER Red LED lights
 */
 
 #include <DHTesp.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <LittleFS.h>
+
+const char* WIFI_SSID = "Wokwi-GUEST";
+const char* WIFI_PASSWORD = "";
+const char* BACKEND_BASE_URL = "https://nextlevelfarm.onrender.com";
+const char* DEVICE_ID = "dev_bgn_str_demo";
+const char* DEVICE_TOKEN = "PASTE_DEVICE_TOKEN_HERE";
+const int DEFAULT_INTERVAL_SECONDS = 2;
 
 // Real sensors
 const int DHT_PIN = 15;
@@ -37,15 +47,131 @@ const int LIGHT_LED_PIN = 4;
 const int BUZZER_LED_PIN = 17;
 
 DHTesp dht;
+int offlineQueueCount = 0;
 
 // These thresholds are set by AI in production based on plant x goal.
 const float TEMP_MAX = 25.0;       // Lettuce + Eco Save: avoid heat stress.
 const float HUMIDITY_MIN = 55.0;   // Lettuce + Eco Save: minimum safe humidity.
-const int SOIL_TRIGGER = 3000;     // Lettuce + Eco Save: water only when soil is dry.
-const int LIGHT_TRIGGER = 1500;    // Lettuce + Eco Save: simulated low-light trigger.
+const int SOIL_TRIGGER = 3000;     // Lettuce + Eco Save: water when soil ADC falls below this dry threshold.
+const int LIGHT_TRIGGER = 1500;    // Lettuce + Eco Save: turn light on when ADC falls below this dark threshold.
 
 String statusLabel(bool warning) {
   return warning ? "WARNING" : "OK";
+}
+
+bool hasDeviceToken() {
+  return strlen(DEVICE_TOKEN) > 0 && String(DEVICE_TOKEN) != "PASTE_DEVICE_TOKEN_HERE";
+}
+
+void connectWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return;
+  Serial.print("[WiFi] Connecting to ");
+  Serial.print(WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  unsigned long started = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - started < 8000) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println(WiFi.status() == WL_CONNECTED ? " connected" : " offline");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("[WiFi] IP: ");
+    Serial.println(WiFi.localIP());
+  }
+}
+
+String httpPost(String path, String body, bool withToken = true) {
+  if (WiFi.status() != WL_CONNECTED) return "";
+  HTTPClient http;
+  http.begin(String(BACKEND_BASE_URL) + path);
+  http.addHeader("Content-Type", "application/json");
+  if (withToken && hasDeviceToken()) http.addHeader("x-device-token", DEVICE_TOKEN);
+  int status = http.POST(body);
+  String response = http.getString();
+  Serial.printf("[HTTP] POST %s -> %d\n", path.c_str(), status);
+  if (response.length()) Serial.println(response);
+  http.end();
+  return status > 0 && status < 400 ? response : "";
+}
+
+String httpGet(String path, bool withToken = true) {
+  if (WiFi.status() != WL_CONNECTED) return "";
+  HTTPClient http;
+  http.begin(String(BACKEND_BASE_URL) + path);
+  if (withToken && hasDeviceToken()) http.addHeader("x-device-token", DEVICE_TOKEN);
+  int status = http.GET();
+  String response = http.getString();
+  Serial.printf("[HTTP] GET %s -> %d\n", path.c_str(), status);
+  if (response.length()) Serial.println(response);
+  http.end();
+  return status > 0 && status < 400 ? response : "";
+}
+
+void queueOfflineReading(const String& payload) {
+  File file = LittleFS.open("/queue.txt", "a");
+  if (!file) {
+    Serial.println("[Offline] Could not open LittleFS queue");
+    return;
+  }
+  file.println(payload);
+  file.close();
+  offlineQueueCount++;
+  Serial.printf("[Offline] Reading queued in LittleFS (%d RAM count)\n", offlineQueueCount);
+  if (offlineQueueCount % 10 == 0) Serial.println("[Offline] Batch of 10 readings persisted");
+}
+
+void flushOfflineQueue() {
+  if (WiFi.status() != WL_CONNECTED || !LittleFS.exists("/queue.txt")) return;
+  File file = LittleFS.open("/queue.txt", "r");
+  if (!file) return;
+  Serial.println("[Offline] Flushing queued readings...");
+  while (file.available()) {
+    String line = file.readStringUntil('\n');
+    line.trim();
+    if (line.length()) httpPost("/api/sensors", line);
+  }
+  file.close();
+  LittleFS.remove("/queue.txt");
+  offlineQueueCount = 0;
+  Serial.println("[Offline] Queue flushed");
+}
+
+String commandPart(const String& text, int index) {
+  int start = 0;
+  for (int i = 0; i < index; i++) {
+    start = text.indexOf('|', start);
+    if (start < 0) return "";
+    start++;
+  }
+  int end = text.indexOf('|', start);
+  if (end < 0) end = text.length();
+  return text.substring(start, end);
+}
+
+void executeCommand(const String& command) {
+  bool water = command.indexOf("WATER_ON") >= 0;
+  bool light = command.indexOf("LIGHT_ON") >= 0;
+  bool buzzer = command.indexOf("BUZZER_ON") >= 0 || command.indexOf("GAS_ALERT") >= 0;
+  digitalWrite(WATER_LED_PIN, water ? HIGH : LOW);
+  digitalWrite(LIGHT_LED_PIN, light ? HIGH : LOW);
+  digitalWrite(BUZZER_LED_PIN, buzzer ? HIGH : LOW);
+  Serial.printf("[Command] WATER=%s LIGHT=%s BUZZER=%s\n", water ? "ON" : "off", light ? "ON" : "off", buzzer ? "ON" : "off");
+}
+
+void pollAndExecuteCommand() {
+  String path = String("/api/sensors/command?deviceId=") + DEVICE_ID + "&format=text";
+  String response = httpGet(path);
+  response.trim();
+  if (!response.length()) return;
+  String command = commandPart(response, 0);
+  String interval = commandPart(response, 1);
+  String commandId = commandPart(response, 2);
+  Serial.printf("[Command] Received: %s | interval=%s | id=%s\n", command.c_str(), interval.c_str(), commandId.c_str());
+  executeCommand(command);
+  if (commandId.length()) {
+    String body = String("{\"deviceId\":\"") + DEVICE_ID + "\",\"commandId\":\"" + commandId + "\"}";
+    httpPost("/api/sensors/command-result", body);
+  }
 }
 
 void printBootInfo() {
@@ -78,6 +204,10 @@ void setup() {
   digitalWrite(BUZZER_LED_PIN, LOW);
 
   printBootInfo();
+  if (LittleFS.begin(true)) Serial.println("[LittleFS] ready for offline queue");
+  else Serial.println("[LittleFS] failed");
+  connectWiFi();
+  flushOfflineQueue();
   delay(2000);
 }
 
@@ -88,8 +218,8 @@ void loop() {
 
   bool tempWarning = air.temperature > TEMP_MAX;
   bool humidityWarning = air.humidity < HUMIDITY_MIN;
-  bool soilDry = soilRaw > SOIL_TRIGGER;
-  bool lightLow = lightRaw > LIGHT_TRIGGER;
+  bool soilDry = soilRaw < SOIL_TRIGGER;
+  bool lightLow = lightRaw < LIGHT_TRIGGER;
 
   digitalWrite(WATER_LED_PIN, soilDry ? HIGH : LOW);
   digitalWrite(LIGHT_LED_PIN, lightLow ? HIGH : LOW);
@@ -103,9 +233,9 @@ void loop() {
                 air.temperature, TEMP_MAX, statusLabel(tempWarning).c_str());
   Serial.printf("Humidity: %.1f %% | Threshold min %.1f | %s\n",
                 air.humidity, HUMIDITY_MIN, statusLabel(humidityWarning).c_str());
-  Serial.printf("Soil Moisture POT1 raw: %d | Trigger > %d | %s\n",
+  Serial.printf("Soil Moisture POT1 raw: %d | Trigger < %d | %s\n",
                 soilRaw, SOIL_TRIGGER, statusLabel(soilDry).c_str());
-  Serial.printf("Light LDR real sensor raw: %d | Trigger > %d | %s\n",
+  Serial.printf("Light LDR real sensor raw: %d | Trigger < %d | %s\n",
                 lightRaw, LIGHT_TRIGGER, statusLabel(lightLow).c_str());
 
   Serial.println("----- Output Status -----");
@@ -114,5 +244,24 @@ void loop() {
   Serial.printf("BUZZER / Alarm Red LED: %s\n", tempWarning ? "ON" : "off");
   Serial.println("===============================================");
 
-  delay(2000);
+  String payload = String("{\"deviceId\":\"") + DEVICE_ID + "\"" +
+    ",\"packageLevel\":\"starter\"" +
+    ",\"temperature\":" + String(air.temperature, 2) +
+    ",\"humidity\":" + String(air.humidity, 2) +
+    ",\"soilRaw\":" + soilRaw +
+    ",\"lightRaw\":" + lightRaw +
+    ",\"intervalSeconds\":" + DEFAULT_INTERVAL_SECONDS +
+    "}";
+
+  connectWiFi();
+  if (WiFi.status() == WL_CONNECTED) {
+    flushOfflineQueue();
+    String response = httpPost("/api/sensors", payload);
+    if (response.length()) pollAndExecuteCommand();
+    else queueOfflineReading(payload);
+  } else {
+    queueOfflineReading(payload);
+  }
+
+  delay(DEFAULT_INTERVAL_SECONDS * 1000);
 }
