@@ -61,7 +61,7 @@ export const CommercialFarmCanvas = {
     slotPlants: [],
     sensorSnapshot: {},
 
-    init(selector) {
+    init(selector, farmOverride = null) {
         this.destroy();
         this.installHandlers();
         ensureCommercialStyles();
@@ -71,7 +71,7 @@ export const CommercialFarmCanvas = {
         this.parent = this.canvas.parentElement;
         if (!this.parent) return;
 
-        this.farm = getCurrentFarm();
+        this.farm = farmOverride || getCurrentFarm();
         this.rack = resolveRack(this.farm);
         this.slotPlants = resolveSlotPlants(this.farm, this.rack);
         this.sensorSnapshot = getSensorSnapshot();
@@ -325,6 +325,8 @@ export const CommercialFarmCanvas = {
             status: 'empty',
         };
 
+        this.addZoneFootprint(tower, config, towerIndex);
+
         const columnMat = new THREE.MeshStandardMaterial({ color: 0xe9edf0, roughness: 0.34, metalness: 0.18 });
         const supportMat = new THREE.MeshStandardMaterial({ color: 0x26342d, roughness: 0.5, metalness: 0.4 });
         const column = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.12, 3.2, 22), columnMat);
@@ -367,9 +369,11 @@ export const CommercialFarmCanvas = {
         }
 
         tower.userData.status = towerStatus(tower.userData.plants);
+        this.addZoneStatusStrip(tower, tower.userData.status);
+
         const label = this.createTextSprite(String(config.label || `ZONE ${zoneLetter}`).toUpperCase(), {
-            bg: 'rgba(9,18,13,.88)',
-            fg: '#a3e635',
+            bg: 'rgba(255,255,255,.92)',
+            fg: '#14532d',
             border: '#315d3e',
             font: '900 30px Inter, system-ui, sans-serif',
         });
@@ -379,6 +383,86 @@ export const CommercialFarmCanvas = {
 
         this.farmGroup.add(tower);
         this.interactiveRoots.push(tower);
+    },
+
+    addZoneFootprint(tower, config, towerIndex) {
+        const zoneLetter = String.fromCharCode(65 + towerIndex);
+        const padMat = new THREE.MeshStandardMaterial({
+            color: 0xf3faf4,
+            roughness: 0.72,
+            metalness: 0.02,
+        });
+        const borderMat = new THREE.MeshStandardMaterial({
+            color: 0x1f7a42,
+            roughness: 0.48,
+            metalness: 0.18,
+        });
+        const shadowMat = new THREE.MeshStandardMaterial({
+            color: 0xb7c8bb,
+            roughness: 0.82,
+            metalness: 0.02,
+            transparent: true,
+            opacity: 0.55,
+        });
+
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.035, 2.04), padMat);
+        pad.position.y = 0.022;
+        pad.receiveShadow = true;
+        tower.add(pad);
+
+        const shadow = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.004, 2.2), shadowMat);
+        shadow.position.y = 0.002;
+        shadow.receiveShadow = true;
+        tower.add(shadow);
+
+        const bars = [
+            { x: 0, z: 1.04, sx: 1.92, sz: 0.035 },
+            { x: 0, z: -1.04, sx: 1.92, sz: 0.035 },
+            { x: 0.96, z: 0, sx: 0.035, sz: 2.04 },
+            { x: -0.96, z: 0, sx: 0.035, sz: 2.04 },
+        ];
+        bars.forEach(bar => {
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(bar.sx, 0.035, bar.sz), borderMat);
+            rail.position.set(bar.x, 0.06, bar.z);
+            rail.castShadow = true;
+            tower.add(rail);
+        });
+
+        const idPlate = this.createTextSprite(`ZONE ${zoneLetter}`, {
+            bg: 'rgba(20,83,45,.92)',
+            fg: '#f7fee7',
+            font: '900 24px Inter, system-ui, sans-serif',
+        });
+        idPlate.position.set(-0.62, 0.14, 0.98);
+        idPlate.scale.set(0.26, 0.09, 1);
+        tower.add(idPlate);
+
+        const crop = String(config.crop || tower.userData?.crop || '').split(',')[0]?.trim();
+        if (crop) {
+            const cropPlate = this.createTextSprite(crop.toUpperCase().slice(0, 18), {
+                bg: 'rgba(255,255,255,.9)',
+                fg: '#166534',
+                font: '900 22px Inter, system-ui, sans-serif',
+            });
+            cropPlate.position.set(0.38, 0.14, 0.98);
+            cropPlate.scale.set(0.34, 0.085, 1);
+            tower.add(cropPlate);
+        }
+    },
+
+    addZoneStatusStrip(tower, status) {
+        const color = statusColor(status || 'healthy');
+        const mat = new THREE.MeshStandardMaterial({
+            color,
+            emissive: color,
+            emissiveIntensity: status === 'empty' ? 0.08 : 0.34,
+            roughness: 0.34,
+            metalness: 0.1,
+        });
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.028, 0.055), mat);
+        strip.position.set(0, 0.105, -1.05);
+        strip.castShadow = true;
+        tower.add(strip);
     },
 
     addPod(tower, angle, y, plant, slotIndex, level, side) {
@@ -423,44 +507,42 @@ export const CommercialFarmCanvas = {
 
     addDigitalTwinDevices(towers) {
         const farmDevices = [
-            { key: 'co2', label: 'CO2 Sensor', value: `${Number(this.sensorSnapshot.co2Ppm || 800)} ppm`, type: 'sensor', x: -6.9, y: 1.1, z: 5.25, color: 0x38bdf8 },
-            { key: 'reservoir', label: 'Water Reservoir', value: `${Number(this.sensorSnapshot.waterDistanceCm || 0)} cm`, type: 'sensor', x: -5.65, y: 0.9, z: 5.25, color: 0x0ea5e9 },
-            { key: 'gas', label: 'MQ-2 Gas Sensor', value: `${Number(this.sensorSnapshot.gasRaw || 0)} raw`, type: 'sensor', x: -4.4, y: 0.9, z: 5.25, color: statusColor(Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 'danger' : 'healthy') },
-            { key: 'power', label: 'Power Meter', value: `${Number(this.sensorSnapshot.energyKwh || 5.1).toFixed(1)} kWh`, type: 'sensor', x: 4.4, y: 0.9, z: 5.25, color: 0xf59e0b },
-            { key: 'main_fan', label: 'Main Ventilation Fan', value: Number(this.sensorSnapshot.temperature || 25) > 30 ? 'active' : 'standby', type: 'output', x: 5.65, y: 0.9, z: 5.25, color: 0x64748b },
-            { key: 'emergency_buzzer', label: 'Emergency Buzzer', value: Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 'alert' : 'ready', type: 'output', x: 6.9, y: 0.9, z: 5.25, color: Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 0xef4444 : 0x84cc16 },
+            { key: 'co2', label: 'CO2 Sensor', value: `${Number(this.sensorSnapshot.co2Ppm || 800)} ppm`, type: 'sensor', kind: 'co2', x: -7.25, y: 2.35, z: -5.95, color: 0x38bdf8 },
+            { key: 'reservoir', label: 'Water Reservoir', value: `${Number(this.sensorSnapshot.waterDistanceCm || 0)} cm`, type: 'sensor', kind: 'reservoir', x: -6.8, y: 0.55, z: 5.35, color: 0x0ea5e9 },
+            { key: 'gas', label: 'MQ-2 Gas Sensor', value: `${Number(this.sensorSnapshot.gasRaw || 0)} raw`, type: 'sensor', kind: 'gas', x: -5.25, y: 0.72, z: 5.55, color: statusColor(Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 'danger' : 'healthy') },
+            { key: 'power', label: 'Power Meter', value: `${Number(this.sensorSnapshot.energyKwh || 5.1).toFixed(1)} kWh`, type: 'sensor', kind: 'power', x: 0.9, y: 1.45, z: 5.42, color: 0xf59e0b },
+            { key: 'main_fan', label: 'Main Ventilation Fan', value: Number(this.sensorSnapshot.temperature || 25) > 30 ? 'active' : 'standby', type: 'output', kind: 'fan', x: 7.55, y: 2.85, z: -5.9, color: 0x64748b },
+            { key: 'emergency_buzzer', label: 'Emergency Buzzer', value: Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 'alert' : 'ready', type: 'output', kind: 'buzzer', x: 1.72, y: 1.34, z: 5.52, color: Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 0xef4444 : 0x84cc16 },
         ];
         farmDevices.forEach(device => this.addDeviceMarker(device));
 
         const zoneDevices = [
-            { key: 'dht11', label: 'DHT11 Temp/Humid', type: 'sensor', color: 0x22c55e },
-            { key: 'soil', label: 'Soil Moisture', type: 'sensor', color: 0x8b5a2b },
-            { key: 'ldr', label: 'LDR Light', type: 'sensor', color: 0xfacc15 },
-            { key: 'ph', label: 'pH Sensor', type: 'sensor', color: 0xa855f7 },
-            { key: 'ec', label: 'EC Sensor', type: 'sensor', color: 0x14b8a6 },
-            { key: 'flow', label: 'YF-S201 Flow', type: 'sensor', color: 0x38bdf8 },
-            { key: 'pump', label: 'Water Pump', type: 'output', color: 0x0ea5e9 },
-            { key: 'grow_light', label: 'LED Grow Light', type: 'output', color: 0xdd88ff },
-            { key: 'zone_fan', label: 'Zone Fan', type: 'output', color: 0x64748b },
-            { key: 'active_buzzer', label: 'Active Buzzer', type: 'output', color: 0xf97316 },
-            { key: 'camera', label: 'Camera', type: 'sensor', color: 0x111827 },
+            { key: 'dht11', label: 'DHT11 Temp/Humid', type: 'sensor', kind: 'dht', color: 0x22c55e, dx: -0.66, y: 1.72, dz: -0.32 },
+            { key: 'soil', label: 'Soil Moisture', type: 'sensor', kind: 'soil', color: 0x8b5a2b, dx: 0.36, y: 0.29, dz: 0.53 },
+            { key: 'ldr', label: 'LDR Light', type: 'sensor', kind: 'ldr', color: 0xfacc15, dx: 0.32, y: 3.38, dz: -0.42 },
+            { key: 'ph', label: 'pH Sensor', type: 'sensor', kind: 'probe', color: 0xa855f7, dx: -0.42, y: 0.72, dz: 0.66 },
+            { key: 'ec', label: 'EC Sensor', type: 'sensor', kind: 'probe', color: 0x14b8a6, dx: -0.18, y: 0.68, dz: 0.74 },
+            { key: 'flow', label: 'YF-S201 Flow', type: 'sensor', kind: 'flow', color: 0x38bdf8, dx: 0.58, y: 0.58, dz: 0.42 },
+            { key: 'pump', label: 'Water Pump', type: 'output', kind: 'pump', color: 0x0ea5e9, dx: 0.82, y: 0.22, dz: 0.78 },
+            { key: 'grow_light', label: 'LED Grow Light', type: 'output', kind: 'lightbar', color: 0xdd88ff, dx: 0, y: 3.92, dz: 0 },
+            { key: 'zone_fan', label: 'Zone Fan', type: 'output', kind: 'fan', color: 0x64748b, dx: -0.9, y: 2.18, dz: 0.12 },
+            { key: 'active_buzzer', label: 'Active Buzzer', type: 'output', kind: 'buzzer', color: 0xf97316, dx: 0.78, y: 1.78, dz: -0.58 },
+            { key: 'camera', label: 'Camera', type: 'sensor', kind: 'camera', color: 0x111827, dx: -0.72, y: 3.08, dz: 0.68 },
         ];
 
         towers.forEach((tower, towerIndex) => {
             const zoneId = tower.zoneId || tower.userData?.id || `zone_${String.fromCharCode(65 + towerIndex)}`;
             const zoneLabel = tower.label || tower.userData?.label || `Zone ${String.fromCharCode(65 + towerIndex)}`;
-            zoneDevices.forEach((device, index) => {
-                const angle = (Math.PI * 2 * index) / zoneDevices.length;
-                const radius = 0.92 + (index % 2) * 0.18;
+            zoneDevices.forEach(device => {
                 this.addDeviceMarker({
                     ...device,
                     scope: 'zone',
                     zoneId,
                     zoneLabel,
                     value: zoneDeviceValue(device.key, this.sensorSnapshot),
-                    x: tower.x + Math.cos(angle) * radius,
-                    y: 0.22 + (index % 3) * 0.08,
-                    z: tower.z + Math.sin(angle) * radius,
+                    x: tower.x + device.dx,
+                    y: device.y,
+                    z: tower.z + device.dz,
                     compact: true,
                 });
             });
@@ -482,32 +564,165 @@ export const CommercialFarmCanvas = {
             status: deviceStatus(device),
         };
 
-        const body = new THREE.Mesh(
-            device.compact ? new THREE.SphereGeometry(0.07, 12, 8) : new THREE.BoxGeometry(0.22, 0.18, 0.14),
-            new THREE.MeshStandardMaterial({
-                color: device.color,
-                emissive: device.color,
-                emissiveIntensity: device.type === 'output' ? 0.28 : 0.16,
-                roughness: 0.44,
-                metalness: 0.16,
-            })
-        );
-        body.castShadow = true;
-        body.userData.root = group;
-        group.add(body);
-
-        const labelText = device.compact ? shortDeviceLabel(device.key) : device.label.replace(/\s+/g, '\n');
-        const tag = this.createTextSprite(labelText, {
-            bg: 'rgba(255,255,255,.9)',
-            fg: '#0f172a',
-            font: '900 26px Inter, system-ui, sans-serif',
+        this.addDeviceShape(group, device);
+        group.traverse(child => {
+            if (child.isMesh || child.isSprite) child.userData.root = group;
         });
-        tag.position.set(0, device.compact ? 0.17 : 0.24, 0);
-        tag.scale.set(device.compact ? 0.22 : 0.34, device.compact ? 0.09 : 0.13, 1);
-        group.add(tag);
+
+        const showTag = !device.compact || ['camera', 'pump', 'grow_light', 'zone_fan'].includes(device.key);
+        if (showTag) {
+            const labelText = device.compact ? shortDeviceLabel(device.key) : device.label.replace(/\s+/g, '\n');
+            const tag = this.createTextSprite(labelText, {
+                bg: 'rgba(255,255,255,.92)',
+                fg: '#0f172a',
+                font: '900 24px Inter, system-ui, sans-serif',
+            });
+            tag.position.set(0, device.compact ? 0.17 : 0.24, 0);
+            tag.scale.set(device.compact ? 0.2 : 0.34, device.compact ? 0.08 : 0.13, 1);
+            group.add(tag);
+        } else {
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(0.11, 0.006, 8, 22),
+                new THREE.MeshStandardMaterial({
+                    color: device.color,
+                    emissive: device.color,
+                    emissiveIntensity: 0.18,
+                    roughness: 0.3,
+                    metalness: 0.2,
+                })
+            );
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.02;
+            group.add(ring);
+        }
 
         this.scene.add(group);
         this.interactiveRoots.push(group);
+    },
+
+    addDeviceShape(group, device) {
+        const mat = new THREE.MeshStandardMaterial({
+            color: device.color,
+            emissive: device.color,
+            emissiveIntensity: device.type === 'output' ? 0.24 : 0.1,
+            roughness: 0.42,
+            metalness: 0.16,
+        });
+        const dark = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.48, metalness: 0.36 });
+        const white = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.52, metalness: 0.04 });
+
+        const add = mesh => {
+            mesh.castShadow = true;
+            group.add(mesh);
+            return mesh;
+        };
+
+        if (device.kind === 'fan') {
+            add(new THREE.Mesh(new THREE.TorusGeometry(device.scope === 'zone' ? 0.13 : 0.24, 0.015, 8, 32), dark));
+            for (let i = 0; i < 4; i++) {
+                const blade = add(new THREE.Mesh(new THREE.BoxGeometry(device.scope === 'zone' ? 0.22 : 0.38, 0.035, 0.014), mat));
+                blade.rotation.z = i * Math.PI / 4;
+                blade.userData.isFanBlade = true;
+            }
+            return;
+        }
+
+        if (device.kind === 'buzzer') {
+            const base = add(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.035, 18), dark));
+            base.position.y = -0.025;
+            const dome = add(new THREE.Mesh(new THREE.SphereGeometry(0.095, 18, 10), mat));
+            dome.scale.y = 0.58;
+            dome.position.y = 0.045;
+            return;
+        }
+
+        if (device.kind === 'camera') {
+            const body = add(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.11, 0.12), dark));
+            body.rotation.y = -0.35;
+            const lens = add(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.045, 16), mat));
+            lens.rotation.x = Math.PI / 2;
+            lens.position.set(0.045, 0, 0.075);
+            const mount = add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.24, 8), dark));
+            mount.position.y = -0.15;
+            return;
+        }
+
+        if (device.kind === 'lightbar') {
+            const bar = add(new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.045, 0.08), dark));
+            const led = add(new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.022, 0.042), mat));
+            led.position.y = -0.035;
+            return;
+        }
+
+        if (device.kind === 'soil') {
+            add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.055, 0.07), white));
+            [-0.035, 0.035].forEach(x => {
+                const prong = add(new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.22, 6), mat));
+                prong.position.set(x, -0.12, 0);
+            });
+            return;
+        }
+
+        if (device.kind === 'probe') {
+            const handle = add(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.03, 0.2, 12), mat));
+            handle.rotation.z = 0.35;
+            const tip = add(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.24, 8), dark));
+            tip.position.y = -0.2;
+            tip.rotation.z = 0.35;
+            return;
+        }
+
+        if (device.kind === 'flow') {
+            const pipe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.36, 12), mat));
+            pipe.rotation.z = Math.PI / 2;
+            add(new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.012, 8, 20), white));
+            return;
+        }
+
+        if (device.kind === 'pump') {
+            const body = add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.18, 18), mat));
+            body.rotation.z = Math.PI / 2;
+            const outlet = add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.2, 10), dark));
+            outlet.rotation.z = Math.PI / 2;
+            outlet.position.x = 0.15;
+            return;
+        }
+
+        if (device.kind === 'reservoir') {
+            const tank = add(new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.42, 22), mat));
+            tank.position.y = 0.12;
+            const sensor = add(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.055, 0.12), dark));
+            sensor.position.y = 0.38;
+            return;
+        }
+
+        if (device.kind === 'power') {
+            const panel = add(new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.045), dark));
+            const screen = add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.09, 0.012), mat));
+            screen.position.z = 0.03;
+            return;
+        }
+
+        if (device.kind === 'gas' || device.kind === 'dht' || device.kind === 'co2') {
+            const box = add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.13, 0.07), device.kind === 'dht' ? white : mat));
+            for (let i = 0; i < 3; i++) {
+                const slit = add(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.008, 0.01), dark));
+                slit.position.set(0, -0.035 + i * 0.035, 0.043);
+            }
+            return;
+        }
+
+        if (device.kind === 'ldr') {
+            add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.025, 22), mat));
+            const cap = add(new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 8), mat));
+            cap.position.y = 0.035;
+            return;
+        }
+
+        add(new THREE.Mesh(
+            device.compact ? new THREE.SphereGeometry(0.07, 12, 8) : new THREE.BoxGeometry(0.22, 0.18, 0.14),
+            mat
+        ));
     },
 
     addPlantCluster(parent, x, y, z, plant) {
@@ -1226,14 +1441,47 @@ function resolveSlotPlants(field, rack) {
 }
 
 function commercialZones(field) {
-    const zones = Array.isArray(field?.zones) ? field.zones : Array.isArray(field?.commercialStructure?.zones) ? field.commercialStructure.zones : [];
-    return zones
-        .map((zone, index) => ({
-            ...zone,
-            zone_id: zone.zone_id || zone.id || `zone_${String.fromCharCode(65 + index)}`,
-            name: zone.name || `Zone ${String.fromCharCode(65 + index)}`,
-        }))
-        .filter(zone => zone.zone_id || zone.name);
+    const sourceZones = Array.isArray(field?.zones) ? field.zones : Array.isArray(field?.commercialStructure?.zones) ? field.commercialStructure.zones : [];
+    if (sourceZones.length) {
+        return sourceZones
+            .map((zone, index) => ({
+                ...zone,
+                zone_id: zone.zone_id || zone.id || `zone_${String.fromCharCode(65 + index)}`,
+                name: zone.name || `Zone ${String.fromCharCode(65 + index)}`,
+            }))
+            .filter(zone => zone.zone_id || zone.name);
+    }
+
+    const plants = Array.isArray(field?.plants) ? field.plants : [];
+    const zoneMap = new Map();
+    plants.forEach((plant, index) => {
+        const rawId = plant.zoneId || plant.zone_id || plant.zone || plant.area;
+        if (!rawId) return;
+        const zoneId = String(rawId);
+        if (!zoneMap.has(zoneId)) {
+            zoneMap.set(zoneId, {
+                zone_id: zoneId,
+                name: plant.zoneName || `Zone ${String.fromCharCode(65 + zoneMap.size)}`,
+                crop: plant.name || plant.species || 'Mixed crops',
+                plants: [],
+            });
+        }
+        const zone = zoneMap.get(zoneId);
+        const plantName = plant.name || plant.species || `Plant ${index + 1}`;
+        if (!zone.plants.includes(plantName)) zone.plants.push(plantName);
+        zone.crop = zone.plants.join(', ');
+    });
+    if (zoneMap.size) return [...zoneMap.values()];
+
+    if (field?.accountMode === 'commercial' || field?.viewMode === 'commercial') {
+        return [{
+            zone_id: 'zone_A',
+            name: field?.name ? `${field.name} Zone` : 'Zone A',
+            crop: field?.targetPlant || 'Commercial crops',
+            plants: field?.targetPlant ? String(field.targetPlant).split(',').map(item => item.trim()).filter(Boolean) : ['Commercial crops'],
+        }];
+    }
+    return [];
 }
 
 function zoneMatchesPlant(zone, plant) {
@@ -1879,5 +2127,6 @@ function ensureCommercialStyles() {
     `;
     document.head.appendChild(style);
 }
+
 
 
