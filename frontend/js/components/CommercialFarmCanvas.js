@@ -269,6 +269,26 @@ export const CommercialFarmCanvas = {
     },
 
     createTowerLayout() {
+        const zones = commercialZones(this.farm);
+        if (zones.length) {
+            const cols = Math.ceil(Math.sqrt(zones.length));
+            const rowCount = Math.ceil(zones.length / cols);
+            const spacingX = 2.65;
+            const spacingZ = 3.1;
+            const startX = -((cols - 1) * spacingX) / 2;
+            const startZ = -((rowCount - 1) * spacingZ) / 2;
+            return zones.map((zone, index) => ({
+                x: startX + (index % cols) * spacingX,
+                z: startZ + Math.floor(index / cols) * spacingZ,
+                zoneIndex: index,
+                row: Math.floor(index / cols),
+                col: index % cols,
+                zoneId: zone.zone_id || zone.id || `zone_${String.fromCharCode(65 + index)}`,
+                label: zone.name || `Zone ${String.fromCharCode(65 + index)}`,
+                crop: zone.crop || (Array.isArray(zone.plants) ? zone.plants.join(', ') : '') || 'Mixed crops',
+            }));
+        }
+
         const desired = Math.max(6, Math.min(10, Math.ceil(this.rack.total / 2)));
         const positions = [];
         const cols = Math.ceil(desired / 2);
@@ -296,8 +316,9 @@ export const CommercialFarmCanvas = {
         tower.position.set(config.x, 0, config.z);
         tower.userData = {
             isTower: true,
-            id: `zone-${zoneLetter}`,
-            label: `Zone ${zoneLetter}`,
+            id: config.zoneId || `zone-${zoneLetter}`,
+            label: config.label || `Zone ${zoneLetter}`,
+            crop: config.crop || 'Mixed crops',
             zoneIndex: towerIndex,
             plants: [],
             status: 'empty',
@@ -315,9 +336,10 @@ export const CommercialFarmCanvas = {
         base.castShadow = true;
         tower.add(base);
 
+        const layoutCount = this.createTowerLayout().length;
         const slotsForTower = this.slotPlants
             .map((plant, index) => ({ plant, index }))
-            .filter(item => item.plant && indexToTower(item.index, this.rack, towerIndex, this.createTowerLayout().length));
+            .filter(item => item.plant && plantBelongsToTower(item.plant, item.index, this.rack, towerIndex, layoutCount, config));
 
         const levels = 8;
         const bowlsPerLevel = 4;
@@ -344,7 +366,7 @@ export const CommercialFarmCanvas = {
         }
 
         tower.userData.status = towerStatus(tower.userData.plants);
-        const label = this.createTextSprite(`ZONE ${zoneLetter}`, {
+        const label = this.createTextSprite(String(config.label || `ZONE ${zoneLetter}`).toUpperCase(), {
             bg: 'rgba(9,18,13,.88)',
             fg: '#a3e635',
             border: '#315d3e',
@@ -1038,6 +1060,16 @@ function loadSavedFarms() {
 }
 
 function resolveRack(field) {
+    if (commercialZones(field).length) {
+        const zoneCount = commercialZones(field).length;
+        return {
+            id: 'commercial-zones',
+            label: `${zoneCount}-Zone Commercial Farm`,
+            tiers: zoneCount,
+            slotsPerTier: 12,
+            total: Math.max(12, zoneCount * 12),
+        };
+    }
     const rawRack = String(field?.rackTypeId || field?.rackType || field?.rackLabel || '').toLowerCase();
     if (rawRack.includes('2')) return RACK_OPTIONS['2-tier'];
     if (rawRack.includes('4')) return RACK_OPTIONS['4-tier'];
@@ -1051,13 +1083,30 @@ function resolveRack(field) {
 
 function resolveSlotPlants(field, rack) {
     const sourcePlants = Array.isArray(field?.plants) ? field.plants : [];
-    const slots = Array(rack.total).fill(null);
+    const zones = commercialZones(field);
+    const commercialTotal = zones.length ? Math.max(rack.total, zones.length * 12, sourcePlants.length * 3) : rack.total;
+    const slots = Array(commercialTotal).fill(null);
     const used = new Set();
 
-    sourcePlants.forEach(plant => {
+    sourcePlants.forEach((plant, plantOrder) => {
+        if (zones.length && plant.zoneId) {
+            const zoneIndex = zones.findIndex(zone => zoneMatchesPlant(zone, plant));
+            const zoneStart = Math.max(0, zoneIndex) * 12;
+            const count = Math.max(1, Number.parseInt(plant.slots || plant.count || 1, 10) || 1);
+            for (let i = 0; i < count; i++) {
+                const index = firstFreeSlotInRange(slots, used, zoneStart, zoneStart + 12) ?? firstFreeSlot(slots, used);
+                if (index === -1 || index === null || index === undefined) return;
+                slots[index] = normalizePlant(plant, index, rack, field);
+                slots[index].zoneId = plant.zoneId;
+                slots[index].zoneName = plant.zoneName || zones[zoneIndex]?.name || plant.zoneId;
+                used.add(index);
+            }
+            return;
+        }
+
         if (plant.slotIndex !== undefined && plant.slotIndex !== null) {
             const index = Number(plant.slotIndex);
-            if (Number.isInteger(index) && index >= 0 && index < rack.total) {
+            if (Number.isInteger(index) && index >= 0 && index < slots.length) {
                 slots[index] = normalizePlant(plant, index, rack, field);
                 used.add(index);
             }
@@ -1080,6 +1129,35 @@ function resolveSlotPlants(field, rack) {
         slots[i] = normalizePlant({ name: field?.targetPlant || 'Plant', status: 'healthy' }, i, rack, field);
     }
     return slots;
+}
+
+function commercialZones(field) {
+    const zones = Array.isArray(field?.zones) ? field.zones : Array.isArray(field?.commercialStructure?.zones) ? field.commercialStructure.zones : [];
+    return zones
+        .map((zone, index) => ({
+            ...zone,
+            zone_id: zone.zone_id || zone.id || `zone_${String.fromCharCode(65 + index)}`,
+            name: zone.name || `Zone ${String.fromCharCode(65 + index)}`,
+        }))
+        .filter(zone => zone.zone_id || zone.name);
+}
+
+function zoneMatchesPlant(zone, plant) {
+    const plantZone = String(plant.zoneId || plant.zone_id || plant.zone || '').toLowerCase();
+    return plantZone && (
+        plantZone === String(zone.zone_id || '').toLowerCase()
+        || plantZone === String(zone.id || '').toLowerCase()
+        || plantZone === String(zone.name || '').toLowerCase()
+    );
+}
+
+function firstFreeSlotInRange(slots, used, start, end) {
+    const safeStart = Math.max(0, start);
+    const safeEnd = Math.min(slots.length, end);
+    for (let i = safeStart; i < safeEnd; i++) {
+        if (!slots[i] && !used.has(i)) return i;
+    }
+    return null;
 }
 
 function normalizePlant(plant, index, rack, field) {
@@ -1160,6 +1238,16 @@ function speciesConfig(plant) {
 function indexToTower(index, rack, towerIndex, towerCount) {
     if (Number.isNaN(index)) return false;
     return index % towerCount === towerIndex || Math.floor(index / Math.max(1, rack.slotsPerTier)) === towerIndex;
+}
+
+function plantBelongsToTower(plant, index, rack, towerIndex, towerCount, config = {}) {
+    if (plant?.zoneId && config.zoneId) {
+        return String(plant.zoneId).toLowerCase() === String(config.zoneId).toLowerCase();
+    }
+    if (plant?.zoneName && config.label) {
+        return String(plant.zoneName).toLowerCase() === String(config.label).toLowerCase();
+    }
+    return indexToTower(index, rack, towerIndex, towerCount);
 }
 
 function makeLine(a, b, material) {

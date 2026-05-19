@@ -1,4 +1,4 @@
-import{a as u,s as H}from"./index-BU24oGnM.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";const z=window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1"?"http://localhost:3000":window.location.origin;let h=[],L="";const _=`
+import{a as u,s as H}from"./index-DZrsI_8o.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";const z=window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1"?"http://localhost:3000":window.location.origin;let h=[],L="";const _=`
 <style id="visitsTabStyle">
 /* ── animations ── */
 @keyframes bugWiggle {

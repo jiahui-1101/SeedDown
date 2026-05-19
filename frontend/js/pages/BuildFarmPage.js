@@ -650,7 +650,9 @@ function buildCommercialPreviewFarm() {
             plants.push({
                 name: plant,
                 species: plant,
-                slots: 3,
+                slots: Math.max(3, Math.ceil(12 / Math.max(1, zonePlants.length))),
+                zoneId: zone.zone_id,
+                zoneName: zone.name,
                 slotIndex: zoneIndex + plantIndex * Math.max(1, zones.length),
                 status: commercialZoneThresholds[zone.zone_id] ? 'healthy' : 'warning',
             });
@@ -2864,8 +2866,9 @@ async function createCommercialFarm() {
             species: String(plant).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
             emoji: emojiForName(plant),
             zoneId: zone.zone_id,
+            zoneName: zone.name,
             tier: index + 1,
-            slots: 1,
+            slots: Math.max(3, Math.ceil(12 / Math.max(1, (zone.plants || []).length || 1))),
         }))),
         rackType: 'commercial-multi-zone',
         viewMode: 'commercial',
