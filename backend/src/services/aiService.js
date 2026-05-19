@@ -168,16 +168,6 @@ async function analyzePlantImage({ image, mediaType, targetPlant }) {
   return parsePlantRecognition(rawText);
 }
 
-async function analyzePlantDisease({ image, mediaType, plantName, plantSpecies, farmContext = {}, answers = {} }) {
-  const rawText = await runVisionPrompt({
-    image,
-    mediaType,
-    prompt: plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }),
-    maxTokens: 1200,
-  });
-  return parseDiseaseAnalysis(rawText, plantName);
-}
-
 async function chatWithAdvisor(messages, gardenState) {
   const system = `You are Sprout, the AI garden advisor for SeedDown.
 Help with crop care, harvest timing, recipes, sensor readings, and vertical farming.
@@ -260,39 +250,6 @@ Rules:
 - return raw JSON only`;
 }
 
-function plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }) {
-  const context = JSON.stringify({ plantName, plantSpecies, farmContext, answers }, null, 2);
-  return `You are SeedDown's commercial vertical farming plant health analyst.
-Analyse the uploaded plant photo using the known plant context below.
-
-Known context:
-${context}
-
-Return ONLY valid JSON, no markdown fences, no preamble:
-
-{
-  "plant": "Plant name",
-  "condition": "Most likely disease or stress condition",
-  "severity": "low | medium | high | unknown",
-  "confidence": 0.78,
-  "confidenceExplanation": "Short explanation of why this confidence was selected",
-  "evidence": ["visible symptom or contextual clue"],
-  "likelyCauses": ["cause 1", "cause 2"],
-  "solutions": ["specific action 1", "specific action 2", "specific action 3"],
-  "prevention": ["future prevention step 1", "future prevention step 2"],
-  "needsMoreInfo": false,
-  "followUpQuestions": []
-}
-
-Rules:
-- Use the known plant species strongly, because recognition happened earlier.
-- If the photo is unclear, symptoms are not visible, or multiple diseases look similar, set confidence below 0.55, needsMoreInfo true, and ask 3 concise follow-up questions.
-- If it looks like environmental stress instead of infection, say so clearly.
-- Do not claim certainty. Keep recommendations practical for indoor vertical farming.
-- confidence must be from 0.0 to 1.0.
-- return raw JSON only.`;
-}
-
 function parsePlantRecognition(rawText) {
   const parsed = JSON.parse(stripJson(rawText, '{"plants":[]}'));
   parsed.plants = sanitizePlants(parsed.plants || []);
@@ -368,21 +325,98 @@ function labelRackType(rackType) {
   }[rackType] || '3-Tier Vertical Rack';
 }
 
-function parseDiseaseAnalysis(rawText, fallbackPlant = 'Plant') {
+async function analyzePlantDisease({ image, mediaType, plantName, plantSpecies, farmContext = {}, answers = {} }) {
+  const prompt = plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers });
+
+  let rawText;
+
+  if (image && image.trim() !== '') {
+    rawText = await runVisionPrompt({
+      image,
+      mediaType,
+      prompt,
+      maxTokens: 1200,
+    });
+  } else {
+    const noImageSystemPrompt = "You are SeedDown's commercial vertical farming plant health analyst. Respond ONLY with valid JSON, no markdown.";
+    const noImageUserMsg = `[NO IMAGE PROVIDED BY USER - DIAGNOSE BASED ON CONTEXT ONLY]\n\n${prompt}`;
+
+    rawText = await askText(noImageSystemPrompt, noImageUserMsg, 1200);
+  }
+
+  return parseDiseaseAnalysis(rawText, plantName, !image);
+}
+
+function plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }) {
+  const context = JSON.stringify({ plantName, plantSpecies, farmContext, answers }, null, 2);
+  return `Analyse the plant health state using the known plant context below. 
+If an image is available (queried via vision), inspect it. If NO image is provided, base your entire clinical judgment on the symptoms text and farm context parameters.
+
+Known context:
+${context}
+
+Return ONLY valid JSON, no markdown fences, no preamble:
+{
+  "plant": "Plant name",
+  "condition": "Most likely disease or stress condition",
+  "severity": "low | medium | high | unknown",
+  "confidence": 0.55,
+  "confidenceExplanation": "Short explanation of why this confidence was selected",
+  "evidence": ["visible symptom or contextual clue"],
+  "likelyCauses": ["cause 1", "cause 2"],
+  "solutions": ["specific action 1", "specific action 2", "specific action 3"],
+  "prevention": ["future prevention step 1", "future prevention step 2"],
+  "treatmentDuration": "Estimated time needed to cure (e.g., '5-7 days')",
+  "needsMoreInfo": true,
+  "followUpQuestions": []
+}
+
+Rules:
+- If NO image is provided, your max confidence should not exceed 0.65 because you cannot visually confirm symptoms. Set needsMoreInfo to true and provide follow-up questions to help the user inspect the plant manually.
+- Do not claim certainty. Keep recommendations practical for indoor vertical farming.
+- return raw JSON only.`;
+}
+
+function parseDiseaseAnalysis(rawText, fallbackPlant = 'Plant', isNoImage = false) {
   const parsed = JSON.parse(stripJson(rawText, '{}'));
-  const confidence = Math.min(1, Math.max(0, parseFloat(parsed.confidence) || 0));
+  let confidence = Math.min(1, Math.max(0, parseFloat(parsed.confidence) || 0));
+  
+  // No-image mode is capped because symptoms cannot be visually confirmed.
+  if (isNoImage && confidence > 0.65) {
+    confidence = 0.65;
+  }
+
+  // Ask follow-up questions when confidence is low or no image was provided.
+  const needsMoreInfo = Boolean(parsed.needsMoreInfo) || confidence < 0.80 || isNoImage;
+
+  // Use model questions first, then fill gaps with practical checks.
+  let finalQuestions = sanitizeStringList(parsed.followUpQuestions).slice(0, 4);
+
+  if (needsMoreInfo && finalQuestions.length === 0) {
+    if (isNoImage) {
+      finalQuestions.push("Could you please provide a photo of the affected area?");
+    }
+
+    finalQuestions.push(
+      "Observe closely: do the spots eventually dry out, become brittle, and easily crack to form small holes (shot-holes)?",
+      "Do the spots feature concentric rings on their surface, similar to the rings of a tree?",
+      "Did these symptoms first appear on the older leaves at the bottom of the plant, or did they appear all over the plant (including new leaves and fruits) at the same time?"
+    );
+  }
+
   return {
     plant: parsed.plant || fallbackPlant || 'Plant',
     condition: parsed.condition || 'Unable to confirm plant disease from this image',
     severity: ['low', 'medium', 'high', 'unknown'].includes(parsed.severity) ? parsed.severity : 'unknown',
     confidence,
-    confidenceExplanation: parsed.confidenceExplanation || 'Confidence is based on image clarity, visible symptoms, and match with the known plant profile.',
+    confidenceExplanation: parsed.confidenceExplanation || (isNoImage ? 'Diagnosis made without image analysis; purely based on parameters.' : 'Confidence check.'),
     evidence: sanitizeStringList(parsed.evidence),
     likelyCauses: sanitizeStringList(parsed.likelyCauses),
     solutions: sanitizeStringList(parsed.solutions),
     prevention: sanitizeStringList(parsed.prevention),
-    needsMoreInfo: Boolean(parsed.needsMoreInfo) || confidence < 0.55,
-    followUpQuestions: sanitizeStringList(parsed.followUpQuestions).slice(0, 4),
+    treatmentDuration: parsed.treatmentDuration || 'Undetermined duration',
+    needsMoreInfo,
+    followUpQuestions: finalQuestions,
   };
 }
 
