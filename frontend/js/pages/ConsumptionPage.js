@@ -76,7 +76,10 @@ export function render() {
         </div>
 
         <div style="background:#FFFFFF; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
-          <div style="color:#1E293B; font-weight:700; margin-bottom:12px;">⚡ Energy Usage (last 24h)</div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+             <div style="color:#1E293B; font-weight:700;">⚡ Energy Usage (last 24h)</div>
+             <div id="energy-trad-badge" style="display:none; font-size:0.65rem; background:#FEE2E2; color:#B91C1C; padding:4px 8px; border-radius:12px; font-weight:700; border:1px solid #FECACA;"></div>
+          </div>
           <div style="position:relative; width:100%; height:160px;">
             <canvas id="con-energy-chart" style="position:absolute; top:0; left:0; width:100% !important; height:100% !important;"></canvas>
           </div>
@@ -84,8 +87,8 @@ export function render() {
 
         <div style="background:#FFFFFF; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-            <div style="color:#1E293B; font-weight:700;">🌾 vs Traditional Farming</div>
-            <span style="font-size:0.65rem;color:#64748B;font-weight:600; background:#F1F5F9; padding:2px 8px; border-radius:8px;">FAO/USDA Benchmark</span>
+            <div style="color:#1E293B; font-weight:800; font-size:1.05rem;">🌾 AI Traditional Farming Compare</div>
+            <span style="font-size:0.65rem;color:#64748B;font-weight:600; background:#F1F5F9; padding:4px 8px; border-radius:8px;">FAO/USDA Data</span>
           </div>
 
           <div id="con-monthly-savings" style="
@@ -99,11 +102,11 @@ export function render() {
           ">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
               <span style="font-size:1.1rem;">🤖</span>
-              <span style="font-weight:700;color:#1E293B;font-size:0.85rem;">AI Sustainability Insight</span>
+              <span style="font-weight:700;color:#1E293B;font-size:0.85rem;">Groq AI Sustainability Insight</span>
               <div id="con-trad-spinner" style="width:14px;height:14px;border:2px solid #BFDBFE; border-top-color:#2563EB;border-radius:50%; animation:spin 0.8s linear infinite;"></div>
             </div>
             <div id="con-trad-text" style="color:#475569;font-size:0.8rem;line-height:1.6;">
-              Requesting agricultural analysis from backend...
+              Fetching real-world agricultural data from backend...
             </div>
           </div>
         </div>
@@ -113,7 +116,7 @@ export function render() {
           <div id="con-breakdown" style="display:flex; flex-direction:column; gap:12px;"></div>
         </div>
 
-        <div style="background:#FFFFFF; border-radius:16px; padding:16px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <div style="background:#FFFFFF; border-radius:16px; padding:16px; margin-bottom:12px; border:1px solid #E2E8F0; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
           <div style="color:#1E293B; font-weight:700; margin-bottom:12px;">💡 AI Eco Tips</div>
           <div id="con-ai-tips" style="display:flex; flex-direction:column; gap:8px;"></div>
         </div>
@@ -203,14 +206,26 @@ async function _fetchBackendAnalysis(metrics, readings) {
     if (!res.ok) throw new Error('Backend route failed');
     const data = await res.json();
     
-    // 1. Update UI from Rule-Based Summary
     const summary = data.ruleBasedSummary;
-    _el('con-water-vs').textContent  = `↓ ${summary.waterSavePct}% vs traditional`;
-    _el('con-co2').textContent       = `${summary.waterSavedL} L saved`; 
+    const plantData = data.plantData?.[0] || {};
     
-    // Light theme optimized Grade Colors
+    // Calculate REAL cost savings (Traditional vs Vertical)
+    const tradWaterPerDay = plantData.traditional?.waterPerDayL || 60;
+    const tradEnergyPerDay = plantData.traditional?.energyKwhPerKg || 3.0;
+    
+    // Water cost = approx RM 0.002 per Litre
+    const dailyTradCost = (tradWaterPerDay * 0.002) + (tradEnergyPerDay * RM_PER_KWH);
+    const dailyVertCost = (metrics.waterLiters * 0.002) + metrics.costRm;
+    
+    // Avoid negative savings if vertical is somehow more expensive overall
+    const monthlyRmSaved = Math.max(0, (dailyTradCost - dailyVertCost) * 30).toFixed(2);
+    
+    // 1. Update UI from Rule-Based Summary
+    _el('con-water-vs').textContent  = `↓ ${summary.waterSavePct || Math.round((1 - metrics.waterLiters/tradWaterPerDay)*100)}% vs traditional`;
+_el('con-co2').textContent = `${metrics.co2Saved.toFixed(2)} kg`;
+    
     const gradeMap = {
-      'excellent': { l: 'A+', c: '#16A34A', n: 'Ultra-efficient water usage.' },
+      'excellent': { l: 'A+', c: '#16A34A', n: 'Ultra-efficient resource usage.' },
       'good':      { l: 'A',  c: '#2563EB', n: 'Great efficiency, performing well.' },
       'average':   { l: 'B',  c: '#D97706', n: 'Average consumption, room to optimize.' },
       'above_target': { l: 'C', c: '#DC2626', n: 'High consumption detected.' }
@@ -221,42 +236,46 @@ async function _fetchBackendAnalysis(metrics, readings) {
     _el('con-grade-note').textContent = grade.n;
     _el('con-grade-note').style.color = grade.c;
 
-    // 2. Update Monthly Savings
-    if (summary.monthlySavingsL > 0) {
-      const mSavEl = _el('con-monthly-savings');
-      mSavEl.style.display = 'block';
-      mSavEl.innerHTML = `
-        <div style="font-size:0.7rem;font-weight:800;color:#15803D;letter-spacing:0.08em;margin-bottom:12px;">📈 MONTHLY PROJECTION</div>
-        <div style="display:flex; justify-content:space-around;">
-          <div style="text-align:center;">
-            <div style="font-size:1.4rem;font-weight:800;color:#2563EB;">${summary.monthlySavingsL}L</div>
-            <div style="font-size:0.65rem;font-weight:600;color:#64748B;margin-top:2px;">water saved</div>
-          </div>
-          <div style="text-align:center;">
-            <div style="font-size:1.4rem;font-weight:800;color:#16A34A;">${summary.yearlyWaterSavedL}L</div>
-            <div style="font-size:0.65rem;font-weight:600;color:#64748B;margin-top:2px;">yearly projection</div>
-          </div>
+    // 2. 💰 Update Monthly Savings (Show RM Saved Clearly!)
+    const mSavEl = _el('con-monthly-savings');
+    mSavEl.style.display = 'block';
+    mSavEl.innerHTML = `
+      <div style="font-size:0.75rem;font-weight:800;color:#15803D;letter-spacing:0.08em;margin-bottom:12px;">📈 MONTHLY AI PROJECTION VS TRADITIONAL</div>
+      <div style="display:flex; justify-content:space-around;">
+        <div style="text-align:center;">
+          <div style="font-size:1.6rem;font-weight:900;color:#2563EB;">${summary.monthlySavingsL || Math.round((tradWaterPerDay - metrics.waterLiters)*30)}L</div>
+          <div style="font-size:0.7rem;font-weight:600;color:#64748B;margin-top:2px;">Water Saved</div>
         </div>
-      `;
-    }
+        <div style="text-align:center;">
+          <div style="font-size:1.6rem;font-weight:900;color:#16A34A;">RM ${monthlyRmSaved}</div>
+          <div style="font-size:0.7rem;font-weight:600;color:#64748B;margin-top:2px;">Cost Saved</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:1.6rem;font-weight:900;color:#0D9488;">${summary.yearlyWaterSavedL || Math.round((tradWaterPerDay - metrics.waterLiters)*365)}L</div>
+          <div style="font-size:0.7rem;font-weight:600;color:#64748B;margin-top:2px;">Yearly Projection</div>
+        </div>
+      </div>
+    `;
 
-    // 3. Render Chart WITH Ideal Zone from backend
-    _renderCharts(readings, data.idealWaterZone);
+    // 3. Render Chart WITH Ideal Zone AND Energy AI Limit
+    // Convert daily traditional energy to per-hour limit proxy
+    const idealEnergyLimit = (tradEnergyPerDay / 24).toFixed(2); 
+    _renderCharts(readings, data.idealWaterZone, idealEnergyLimit);
 
     // 4. Update AI Narrative
     _el('con-trad-spinner').style.display = 'none';
-    _el('con-trad-text').textContent = data.aiNarrative;
+    _el('con-trad-text').textContent = data.aiNarrative || "AI Analysis completed based on FAO benchmark data.";
 
   } catch (err) {
     console.error('Failed to get analysis:', err);
     _el('con-trad-spinner').style.display = 'none';
-    _el('con-trad-text').textContent = "Failed to load AI agricultural data.";
-    _renderCharts(readings, { min: 60, max: 80 }); 
+    _el('con-trad-text').textContent = "Failed to load AI agricultural data. Showing standard estimates.";
+    _renderCharts(readings, { min: 60, max: 80 }, 0.15); // fallback
   }
 }
 
-/* ── UPDATED CHART FUNCTION (Includes Ideal Zone) ── */
-async function _renderCharts(readings, idealZone) {
+/* ── UPDATED CHART FUNCTION (Includes Ideal Zone & Energy Line) ── */
+async function _renderCharts(readings, idealZone, idealEnergyLimit) {
   if (!window.Chart) {
     await new Promise((resolve) => {
       const s = document.createElement('script');
@@ -275,10 +294,9 @@ async function _renderCharts(readings, idealZone) {
   const energyData = readings.map(r => {
     const lr = r.lightRaw ?? r.light ?? 2000;
     const t  = r.temperature ?? 25;
-    return ((lr < 1500 ? WATTS_LIGHT : 0) + (t > 28 ? WATTS_FAN : 0)) / 10;
+    return ((lr < 1500 ? WATTS_LIGHT : 0) + (t > 28 ? WATTS_FAN : 0)) / 1000; // Wh to kWh per reading
   }).reverse();
 
-  // Light theme chart configs
   const chartDefaults = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
@@ -288,66 +306,72 @@ async function _renderCharts(readings, idealZone) {
     }
   };
 
-  // Show Ideal Badge
+  // Water Chart (Ideal Zone Background)
   if (idealZone) {
     const badge = _el('ideal-zone-badge');
     badge.style.display = 'block';
-    badge.textContent = `Ideal: ${idealZone.min}% - ${idealZone.max}%`;
+    badge.textContent = `AI Ideal: ${idealZone.min}% - ${idealZone.max}%`;
   }
-
-  // Water Chart with Ideal Background
   const wCtx = document.getElementById('con-water-chart');
   if (wCtx && wCtx._chart) wCtx._chart.destroy();
-  
-  const datasets = [{
-    label: 'Actual Water Level',
-    data: waterData,
-    borderColor: '#2563EB',
-    backgroundColor: 'transparent',
+  const waterDatasets = [{
+    label: 'Actual Water Level', data: waterData, borderColor: '#2563EB', backgroundColor: 'transparent',
     tension: 0.4, pointRadius: 2, borderWidth: 2, zIndex: 10
   }];
-
   if (idealZone) {
-    datasets.push({
-      label: 'Ideal Max',
-      data: Array(labels.length).fill(idealZone.max),
-      borderColor: 'rgba(22, 163, 74, 0.4)',
-      borderDash: [5, 5], borderWidth: 1, pointRadius: 0,
-      fill: '+1', // Fill down to Ideal Min
-      backgroundColor: 'rgba(22, 163, 74, 0.1)'
+    waterDatasets.push({
+      label: 'Ideal Max', data: Array(labels.length).fill(idealZone.max), borderColor: 'rgba(22, 163, 74, 0.4)',
+      borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: '+1', backgroundColor: 'rgba(22, 163, 74, 0.1)'
     });
-    datasets.push({
-      label: 'Ideal Min',
-      data: Array(labels.length).fill(idealZone.min),
-      borderColor: 'rgba(22, 163, 74, 0.4)',
+    waterDatasets.push({
+      label: 'Ideal Min', data: Array(labels.length).fill(idealZone.min), borderColor: 'rgba(22, 163, 74, 0.4)',
       borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: false
     });
   }
-
   wCtx._chart = new window.Chart(wCtx, {
-    type: 'line',
-    data: { labels, datasets },
+    type: 'line', data: { labels, datasets: waterDatasets },
     options: { ...chartDefaults, scales: { ...chartDefaults.scales, y: { ...chartDefaults.scales.y, min: 0, max: 100 } } }
   });
 
-  // Energy chart
+  // Energy Chart (Ideal Limit Line)
+  if (idealEnergyLimit) {
+    const badge = _el('energy-trad-badge');
+    badge.style.display = 'block';
+    badge.textContent = `AI Target Limit: < ${idealEnergyLimit} kWh`;
+  }
   const eCtx = document.getElementById('con-energy-chart');
-  if (eCtx) {
-    if (eCtx._chart) eCtx._chart.destroy();
-    eCtx._chart = new window.Chart(eCtx, {
+  if (eCtx && eCtx._chart) eCtx._chart.destroy();
+  
+  const energyDatasets = [
+    {
       type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          data: energyData,
-          backgroundColor: energyData.map(v => v > 5 ? 'rgba(217, 119, 6, 0.8)' : 'rgba(251, 191, 36, 0.6)'),
-          borderColor: energyData.map(v => v > 5 ? '#D97706' : '#F59E0B'),
-          borderWidth: 1, borderRadius: 4,
-        }]
-      },
-      options: { ...chartDefaults }
+      label: 'Energy (kWh)',
+      data: energyData,
+      backgroundColor: energyData.map(v => v > idealEnergyLimit ? 'rgba(220, 38, 38, 0.7)' : 'rgba(217, 119, 6, 0.8)'), // Red if over limit
+      borderColor: energyData.map(v => v > idealEnergyLimit ? '#B91C1C' : '#D97706'),
+      borderWidth: 1, borderRadius: 4,
+      order: 2
+    }
+  ];
+
+  if (idealEnergyLimit) {
+    energyDatasets.push({
+      type: 'line',
+      label: 'AI Ideal Limit',
+      data: Array(labels.length).fill(idealEnergyLimit),
+      borderColor: '#EF4444',
+      borderDash: [4, 4],
+      borderWidth: 2,
+      pointRadius: 0,
+      fill: false,
+      order: 1
     });
   }
+
+  eCtx._chart = new window.Chart(eCtx, {
+    data: { labels, datasets: energyDatasets },
+    options: { ...chartDefaults }
+  });
 }
 
 /* ── HELPER METRICS ── */
