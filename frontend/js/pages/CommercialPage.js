@@ -1,6 +1,6 @@
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
-import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=zone-driven-2';
+import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=commercial-polish-1';
 import { openAddPlantModal } from '../components/AddPlantModal.js';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -107,6 +107,7 @@ export function render() {
                             ${featureButton('whatif', '🔮', 'What-If')}
                             ${featureButton('control', '🎛️', 'Control')}
                             ${featureButton('disease', '🧫', 'Disease')}
+                            ${featureButton('camera', '📷', 'Camera')}
                             ${featureButton('consumption', '⚡', 'ESG')}
                             ${featureButton('alerts', '🚨', 'Alerts')}
                             <button id="assignDeviceBtn" class="ops-tool-btn" type="button"><span>📡</span><strong>Assign Device</strong></button>
@@ -167,6 +168,10 @@ function bindEvents() {
             if (feature === 'whatif') showScreen('whatif-pro');
             else if (feature === 'control') showScreen('control');
             else if (feature === 'disease') showScreen('disease');
+            else if (feature === 'camera') {
+                initProDashboard();
+                openZoneCameraModal();
+            }
             else showScreen('feature', { feature, from: 'dash-c' });
         });
     });
@@ -203,7 +208,7 @@ function toggleOpsPanel() {
 
 function initCommercialFarm() {
     setTimeout(() => {
-        CommercialFarmCanvas.init('commercialFarmCanvas');
+        CommercialFarmCanvas.init('commercialFarmCanvas', getCurrentFarm());
         moveCommercialCommandStyleToTop();
         forceCommercialCanvasFullScreen();
         CommercialFarmCanvas.setCameraFrame?.(false);
@@ -521,6 +526,78 @@ async function assignCommercialDevice() {
     }
 }
 
+function openZoneCameraModal() {
+    const existing = document.getElementById('zoneCameraOverlay');
+    if (existing) existing.remove();
+
+    const farm = getCurrentFarm();
+    const zones = commercialZonesForFarm(farm);
+    const zone = zones.find(item => item.id === selectedZoneId) || zones[0];
+    const image = farm?.photoPreview || farm?.image || farm?.thumbnail || '';
+    const reading = zoneSnapshots[zone?.id] || null;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'zoneCameraOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:95;background:rgba(15,23,42,.48);display:flex;align-items:center;justify-content:center;padding:18px;';
+    overlay.innerHTML = `
+        <div style="width:min(780px,100%);max-height:92vh;overflow:hidden;background:#fff;border-radius:24px;box-shadow:0 28px 90px rgba(15,23,42,.32);display:flex;flex-direction:column;">
+            <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:16px 18px;border-bottom:1px solid #e5e7eb;">
+                <div>
+                    <div style="font-size:10px;font-weight:950;color:#15803d;text-transform:uppercase;letter-spacing:.1em;">Zone camera live view</div>
+                    <strong id="cameraZoneTitle" style="font-size:19px;color:#17231b;">${escapeHTML(zone?.label || 'Zone Camera')}</strong>
+                    <div id="cameraTimestamp" style="font-size:12px;color:#64748b;margin-top:4px;">Live snapshot · ${new Date().toLocaleTimeString()}</div>
+                </div>
+                <button id="cameraClose" style="width:36px;height:36px;border:none;border-radius:12px;background:#f1f5f9;font-size:18px;font-weight:900;cursor:pointer;">×</button>
+            </div>
+
+            <div style="padding:16px;overflow:auto;">
+                <div style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(220px,.65fr);gap:14px;">
+                    <div id="cameraFeed" style="position:relative;min-height:360px;border-radius:20px;overflow:hidden;background:${image ? `url(${image}) center/cover` : 'linear-gradient(135deg,#dcfce7,#f8fafc)'};border:1px solid #dbe7dc;">
+                        ${!image ? cameraPlaceholder(zone) : ''}
+                        <div style="position:absolute;left:12px;top:12px;display:flex;gap:7px;align-items:center;background:rgba(15,23,42,.66);color:#fff;border-radius:999px;padding:7px 10px;font-size:11px;font-weight:900;">
+                            <span style="width:7px;height:7px;background:#22c55e;border-radius:50%;box-shadow:0 0 12px #22c55e;"></span>
+                            LIVE CAMERA
+                        </div>
+                        <div style="position:absolute;right:12px;bottom:12px;background:rgba(255,255,255,.86);border:1px solid rgba(255,255,255,.7);border-radius:14px;padding:9px 10px;color:#17231b;font-size:12px;font-weight:900;">
+                            ${escapeHTML(zone?.crop || 'Mixed crops')}
+                        </div>
+                    </div>
+
+                    <div style="display:flex;flex-direction:column;gap:10px;">
+                        <label style="display:block;">
+                            <span style="font-size:10px;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">Select zone</span>
+                            <select id="cameraZoneSelect" style="width:100%;margin-top:6px;padding:12px;border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc;outline:none;font-weight:900;color:#17231b;">
+                                ${zones.map(item => `<option value="${escapeAttr(item.id)}" ${item.id === zone?.id ? 'selected' : ''}>${escapeHTML(item.label)} · ${escapeHTML(item.crop)}</option>`).join('')}
+                            </select>
+                        </label>
+                        ${cameraMetric('Temp', reading?.temperature !== undefined ? `${Number(reading.temperature).toFixed(1)}C` : '--')}
+                        ${cameraMetric('Humidity', reading?.humidity !== undefined ? `${reading.humidity}%` : '--')}
+                        ${cameraMetric('Light', reading?.lightRaw ?? '--')}
+                        ${cameraMetric('Plant count', `${zone?.planted ?? plantCount(farm)} plants`)}
+                        <button id="cameraCaptureBtn" style="margin-top:4px;padding:13px;border:none;border-radius:14px;background:#166534;color:#fff;font-weight:950;cursor:pointer;">Capture latest frame</button>
+                        <div id="cameraStatus" style="font-size:12px;color:#64748b;line-height:1.45;">Camera feed uses the latest farm photo / camera snapshot attached to this commercial farm. Each zone camera can be checked before running disease analysis.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById('cameraClose')?.addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
+    document.getElementById('cameraCaptureBtn')?.addEventListener('click', () => {
+        document.getElementById('cameraTimestamp').textContent = `Live snapshot · ${new Date().toLocaleTimeString()}`;
+        document.getElementById('cameraStatus').textContent = 'Latest camera frame captured for review. Use Disease Analysis if this zone looks unhealthy.';
+    });
+    document.getElementById('cameraZoneSelect')?.addEventListener('change', event => {
+        selectedZoneId = event.target.value;
+        AppState.currentZoneId = selectedZoneId;
+        overlay.remove();
+        updateZoneSelectionUI();
+        openZoneCameraModal();
+    });
+}
+
 function upsertCommercialDevice(devices, nextDevice) {
     return [
         ...devices.filter(device =>
@@ -612,7 +689,7 @@ function buildCommercialZones(farm, rack) {
         });
         const device = devices.find(item => normalizeZoneId(item.zoneId || item.zone) === base.id);
         const crop = dominantCrop(zonePlants) || base.crop;
-        const planted = zonePlants.length;
+        const planted = zonePlants.reduce((sum, plant) => sum + (Number.parseInt(plant.slots || plant.count || 1, 10) || 1), 0);
 
         return {
             ...base,
@@ -709,6 +786,29 @@ function featureButton(feature, icon, label) {
     return '<button class="com-feat ops-tool-btn" data-feature="' + feature + '" type="button"><span>' + icon + '</span><strong>' + label + '</strong></button>';
 }
 
+function cameraMetric(label, value) {
+    return `
+        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:11px 12px;">
+            <div style="font-size:10px;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">${escapeHTML(label)}</div>
+            <strong style="display:block;margin-top:4px;color:#047857;font-size:16px;">${escapeHTML(value)}</strong>
+        </div>
+    `;
+}
+
+function cameraPlaceholder(zone) {
+    const crop = zone?.crop || 'Mixed crops';
+    return `
+        <div style="position:absolute;inset:0;display:grid;place-items:center;padding:28px;">
+            <div style="width:min(420px,92%);aspect-ratio:4/3;border-radius:22px;background:linear-gradient(180deg,#ecfdf5,#dbeafe);border:1px solid rgba(22,101,52,.16);box-shadow:inset 0 0 0 8px rgba(255,255,255,.38);display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:24px;">
+                ${Array.from({ length: 12 }, (_, index) => `
+                    <div style="border-radius:999px;background:${index % 3 === 0 ? '#22c55e' : index % 3 === 1 ? '#16a34a' : '#84cc16'};box-shadow:0 12px 24px rgba(22,101,52,.18);"></div>
+                `).join('')}
+            </div>
+            <div style="position:absolute;bottom:22px;left:22px;right:22px;text-align:center;color:#166534;font-size:13px;font-weight:900;">Simulated live field frame · ${escapeHTML(crop)}</div>
+        </div>
+    `;
+}
+
 function getCurrentFarm() {
     const saved = loadSavedFarms();
     return AppState.currentFarm
@@ -730,7 +830,9 @@ function resolveRack(farm) {
 }
 
 function plantCount(farm) {
-    if (Array.isArray(farm?.plants)) return farm.plants.length;
+    if (Array.isArray(farm?.plants)) {
+        return farm.plants.reduce((sum, plant) => sum + (Number.parseInt(plant.slots || plant.count || 1, 10) || 1), 0);
+    }
     return Number.parseInt(farm?.plants, 10) || Number.parseInt(farm?.plantSlots, 10) || 0;
 }
 
@@ -754,6 +856,10 @@ function escapeHTML(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+function escapeAttr(value) {
+    return escapeHTML(value);
 }
 
 function ensureCommercialCommandStyles() {
@@ -1157,6 +1263,7 @@ function ensureCommercialCommandStyles() {
     `;
     document.head.appendChild(style);
 }
+
 
 
 
