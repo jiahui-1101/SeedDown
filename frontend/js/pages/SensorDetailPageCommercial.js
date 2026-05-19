@@ -19,8 +19,13 @@ const SENSOR_META = {
 export async function render(params = {}) {
     const sensorKey = params.key || params.sensor || 'temp';
     const meta = SENSOR_META[sensorKey] || SENSOR_META.temp;
-    const sensorName = params.name || meta.label || 'Sensor';
-    const isCommercial = params.from === 'dash-c' || AppState.mode === 'commercial';
+    
+    // 💡 动态决定页面顶部的标题名字
+    let displayName = meta.label || 'Sensor';
+    if (params.zoneId === 'overall') displayName = 'Overall Farm';
+    else if (params.zoneId) displayName = params.zoneId.replace('_', ' ').toUpperCase();
+
+    const isCommercial = params.from === 'dash-c' || params.from === 'zone-detail' || AppState.mode === 'commercial';
     const backTarget = params.from || (isCommercial ? 'dash-c' : 'home');
     const container = document.getElementById('screenContainer');
 
@@ -35,22 +40,19 @@ export async function render(params = {}) {
                     <button id="detailBackBtn" style="width:42px;height:42px;border-radius:14px;border:1px solid ${theme.border};background:${theme.surface};box-shadow:${theme.buttonShadow};font-size:1.25rem;font-weight:900;color:${theme.text};cursor:pointer;flex-shrink:0;">←</button>
                     <div style="min-width:0;">
                         <div style="font-size:10px;font-weight:950;letter-spacing:.12em;text-transform:uppercase;color:${theme.accent};">${isCommercial ? 'Commercial Sensor' : 'Live Sensor'}</div>
-                        <div style="font-weight:900;font-size:1.12rem;color:${theme.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(sensorName)} Analysis</div>
+                        <div style="font-weight:900;font-size:1.12rem;color:${theme.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(displayName)} Analysis</div>
                     </div>
                 </div>
-                <button id="openModalBtn" style="background:${theme.soft};color:${theme.accentDark};border:1px solid ${theme.softBorder};padding:10px 14px;border-radius:14px;font-size:0.75rem;font-weight:900;cursor:pointer;white-space:nowrap;">
-                    Set Preference
-                </button>
             </div>
 
             <div style="flex:1;overflow-y:auto;padding:0 20px 20px 20px;">
                 <div style="display:grid;grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);gap:16px;margin-bottom:16px;">
                     <section style="background:${theme.surface};border:1px solid ${theme.border};border-radius:24px;padding:22px;box-shadow:${theme.shadow};">
-                        <div style="font-size:0.72rem;font-weight:950;color:${theme.muted};text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">Current Reading</div>
-                        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
-                            <span style="font-size:2.45rem;font-weight:950;color:${theme.accent};line-height:1;">${escapeHTML(historyRows[0].val)}</span>
-                            <span style="font-size:1rem;font-weight:800;color:${theme.muted};">${escapeHTML(meta.unit)}</span>
-                        </div>
+<div style="font-size:0.72rem;font-weight:950;color:${theme.muted};text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">Overall Status</div>
+<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+    <span style="font-size:2.45rem;font-weight:950;color:${historyRows[0].status === 'Normal' ? theme.accent : '#dc2626'};line-height:1;">${historyRows[0].status === 'Normal' ? 'Normal' : 'Unnormal'}</span>
+</div>
+                        
                         <div style="margin-top:14px;display:inline-flex;align-items:center;gap:8px;background:${historyRows[0].status === 'Normal' ? theme.soft : '#fef2f2'};color:${historyRows[0].status === 'Normal' ? theme.accentDark : '#dc2626'};border:1px solid ${historyRows[0].status === 'Normal' ? theme.softBorder : '#fecaca'};padding:7px 11px;border-radius:999px;font-size:0.75rem;font-weight:900;">
                             <span style="width:7px;height:7px;border-radius:999px;background:currentColor;display:inline-block;"></span>${historyRows[0].status}
                         </div>
@@ -75,8 +77,49 @@ export async function render(params = {}) {
                     </section>
                 </div>
 
+                <section style="background:${theme.surface};border:1px solid ${theme.border};border-radius:24px;padding:22px;box-shadow:${theme.shadow};margin-bottom:16px;">
+                    ${historyRows[0].status === 'Normal' ? `
+                        <div style="font-size:0.72rem;font-weight:950;color:#16a34a;text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;display:flex;align-items:center;gap:6px;">
+                            <span style="width:8px;height:8px;border-radius:50%;background:#16a34a;display:inline-block;"></span> All Zones Nominal · Select to Inspect
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+                            ${getCommercialZones().map(z => `
+    <button class="drill-zone-btn" data-zone="${z.id}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;border-radius:16px;border:1px solid ${theme.border};background:#f8fafc;cursor:pointer;transition:all 0.2s;gap:6px;outline:none;">
+        <span style="font-size:0.9rem;font-weight:900;color:${theme.text};">${z.label}</span>
+        <span style="background:${theme.soft};color:${theme.accentDark};padding:2px 8px;border-radius:999px;font-size:0.65rem;font-weight:900;">Normal</span>
+    </button>
+`).join('')}
+                        </div>
+                    ` : `
+                        <div style="font-size:0.72rem;font-weight:950;color:#dc2626;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                            <span style="width:8px;height:8px;border-radius:50%;background:#dc2626;display:inline-block;"></span> Anomaly Root-Cause Isolation
+                        </div>
+                        <div style="font-size:0.8rem;color:${theme.muted};margin-bottom:14px;font-weight:700;">Overall variance breached. Locate the anomalous sub-node below:</div>
+                        
+                        <div style="display:flex;flex-direction:column;gap:10px;">
+                            ${getCommercialZones().map((z, idx) => {
+    const isCulprit = idx === 1;
+    return `
+        <div class="drill-zone-btn" data-zone="${z.id}" style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-radius:16px;border:1px solid ${isCulprit ? '#fecaca' : theme.border};background:${isCulprit ? '#fff5f5' : '#f8fafc'};cursor:pointer;transition:all 0.2s;">
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:0.95rem;font-weight:900;color:${theme.text};">${z.label}</span>
+                ${isCulprit ? `<span style="font-size:0.75rem;color:#ef4444;font-weight:950;letter-spacing:0.5px;">[ Culprit Node ]</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span style="background:${isCulprit ? '#fef2f2' : theme.soft};color:${isCulprit ? '#dc2626' : theme.accentDark};border:1px solid ${isCulprit ? '#fecaca' : theme.softBorder};padding:4px 10px;border-radius:999px;font-size:0.7rem;font-weight:900;">
+                    ${isCulprit ? 'Check ⚠️' : 'Normal'}
+                </span>
+                <span style="font-size:1.2rem;color:${isCulprit ? '#dc2626' : theme.accent};font-weight:bold;">→</span>
+            </div>
+        </div>
+    `;
+}).join('')}
+                        </div>
+                    `}
+                </section>
+
                 <section style="background:${theme.surface};border:1px solid ${theme.border};border-radius:24px;padding:22px;box-shadow:${theme.shadow};">
-                    <div style="font-size:0.72rem;font-weight:950;color:${theme.muted};text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Historical Records</div>
+                    <div style="font-size:0.72rem;font-weight:950;color:${theme.muted};text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Macro Timeline Log</div>
                     <div style="display:flex;flex-direction:column;gap:8px;">
                         ${historyRows.map(row => `
                             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:0.9rem;padding:13px 0;border-bottom:1px solid ${theme.line};align-items:center;">
@@ -95,7 +138,7 @@ export async function render(params = {}) {
                 <div style="background:${theme.surface};width:100%;max-width:340px;border-radius:24px;padding:24px;box-shadow:0 24px 70px rgba(15,23,42,.18);border:1px solid ${theme.border};">
                     <div style="font-size:10px;font-weight:950;letter-spacing:.12em;text-transform:uppercase;color:${theme.accent};margin-bottom:6px;">Preference</div>
                     <div style="font-size:1.1rem;font-weight:950;color:${theme.text};margin-bottom:8px;">Set Record Interval</div>
-                    <div style="font-size:0.85rem;color:${theme.muted};margin-bottom:18px;">Set record interval for ${escapeHTML(sensorName)} in hours.</div>
+                    <div style="font-size:0.85rem;color:${theme.muted};margin-bottom:18px;">Set record interval for ${escapeHTML(displayName)} in hours.</div>
                     <input type="number" id="prefInput" value="2" min="1" style="width:100%;box-sizing:border-box;padding:14px;border:1px solid ${theme.border};border-radius:16px;font-weight:900;margin-bottom:18px;background:#f8fafc;color:${theme.text};">
                     <div style="display:flex;gap:12px;">
                         <button id="cancelModalBtn" style="flex:1;padding:13px;border:1px solid ${theme.border};background:#f8fafc;color:${theme.muted};border-radius:16px;font-weight:900;cursor:pointer;">Cancel</button>
@@ -103,10 +146,33 @@ export async function render(params = {}) {
                     </div>
                 </div>
             </div>
+
+            <div id="zoneBreakdownModal" style="display:none;position:absolute;inset:0;background:rgba(15,23,42,.3);z-index:999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px);">
+                <div style="background:${theme.surface};width:100%;max-width:360px;border-radius:24px;padding:24px;box-shadow:0 24px 70px rgba(15,23,42,.18);border:1px solid ${theme.border};">
+                    <div style="font-size:10px;font-weight:950;letter-spacing:.12em;text-transform:uppercase;color:${theme.accent};margin-bottom:6px;">Time Slice Breakdown</div>
+                    <div style="font-size:1.1rem;font-weight:950;color:${theme.text};margin-bottom:4px;" id="breakdownModalTime">At --:--</div>
+                    <div style="font-size:0.85rem;color:${theme.muted};margin-bottom:18px;">Overall Average: <span id="breakdownModalVal" style="font-weight:900;color:${theme.accent};">--</span></div>
+                    
+                    <div style="font-size:0.72rem;font-weight:950;color:${theme.muted};text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;">Select Zone to inspect:</div>
+                    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+                        ${['zone_A', 'zone_B', 'zone_C'].map(z => `
+                            <button class="drill-to-zone-btn" data-zone="${z}" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px;border-radius:14px;border:1px solid ${theme.border};background:#f8fafc;cursor:pointer;transition:all 0.15s;">
+                                <span style="font-weight:900;color:${theme.text};">${z.replace('_', ' ').toUpperCase()}</span>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <span style="background:${theme.soft};color:${theme.accentDark};padding:4px 8px;border-radius:999px;font-size:0.7rem;font-weight:900;">Normal</span>
+                                    <span style="color:${theme.accent};font-weight:bold;">→</span>
+                                </div>
+                            </button>
+                        `).join('')}
+                    </div>
+                    <button id="closeBreakdownBtn" style="width:100%;padding:13px;border:1px solid ${theme.border};background:#f1f5f9;color:${theme.muted};border-radius:16px;font-weight:900;cursor:pointer;">Cancel</button>
+                </div>
+            </div>
         </div>
     `;
 
-    bindEvents({ backTarget, sensorKey, unit: meta.unit });
+    // 💡 记得把 params 传给 bindEvents
+    bindEvents({ backTarget, sensorKey, unit: meta.unit, params });
 }
 
 async function fetchHistory(meta, params = {}) {
@@ -157,10 +223,10 @@ function buildChart(historyRows) {
     return { linePath, areaPath, interactiveSlices };
 }
 
-function bindEvents({ backTarget, sensorKey, unit }) {
-   document.getElementById('detailBackBtn').onclick = () => {
-    if (params?.from === 'zone-detail') {
-        showScreen('zone-detail', params.returnParams || {});
+function bindEvents({ backTarget, sensorKey, unit, params }) {
+ document.getElementById('detailBackBtn').onclick = () => {
+    if (params?.returnParams) {
+        showScreen('zone-detail', params.returnParams);
     } else {
         showScreen(backTarget);
     }
@@ -176,29 +242,85 @@ function bindEvents({ backTarget, sensorKey, unit }) {
         slice.addEventListener('pointerleave', () => tooltip.style.display = 'none');
     });
 
-    const modal = document.getElementById('customModal');
-    document.getElementById('openModalBtn').onclick = () => modal.style.display = 'flex';
-    document.getElementById('cancelModalBtn').onclick = () => modal.style.display = 'none';
+    
+    
 
-    document.getElementById('saveModalBtn').onclick = async () => {
-        const hours = Number(document.getElementById('prefInput').value || 1);
-        try {
-            const res = await fetch(`${API_BASE}/api/sensors/preferences`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    deviceId: params.deviceId || getCurrentFarm()?.deviceId || 'farm_001',
-                    sensorIntervalSeconds: hours * 3600,
-                    sensorType: sensorKey,
-                }),
+    
+
+    // 💡 核心交互：如果是 Overall 页面，点击任何一行历史记录，弹出 Zone 细分选择
+    const breakdownModal = document.getElementById('zoneBreakdownModal');
+    if (breakdownModal) {
+        document.querySelectorAll('.overall-history-row').forEach(row => {
+            row.addEventListener('click', () => {
+                const time = row.getAttribute('data-time');
+                const val = row.getAttribute('data-val');
+                
+                // 把点击的时间和数据动态塞进弹窗的文本里
+                document.getElementById('breakdownModalTime').innerText = `Snapshot at ${time}`;
+                document.getElementById('breakdownModalVal').innerText = `${val} ${unit}`;
+                
+                // 展现弹窗
+                breakdownModal.style.display = 'flex';
             });
-            if (!res.ok) throw new Error('Preference update failed');
-            modal.style.display = 'none';
-            showToast('success', `Interval updated to ${hours}h`);
-        } catch (err) {
-            showToast('error', 'Update failed');
+        });
+
+        // 点击取消按钮关闭弹窗
+        document.getElementById('closeBreakdownBtn').onclick = () => {
+            breakdownModal.style.display = 'none';
+        };
+
+        // 在弹窗里点击具体的 Zone A / B / C 按钮，真正跳转进入该 Zone 的独立历史页面
+        document.querySelectorAll('.drill-to-zone-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetZone = btn.getAttribute('data-zone');
+                breakdownModal.style.display = 'none'; // 关闭弹窗
+                
+                // 层层钻取：刷新成对应 Zone 的专属详情
+                showScreen('sensor-detail', { 
+                    ...params, 
+                    zoneId: targetZone
+                });
+            });
+        });
+    }
+
+    // 💡 动态绑定所有生成的 drill-zone-btn 按钮的点击事件，实现真正的逐层深钻
+  document.querySelectorAll('.drill-zone-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const targetZone = btn.getAttribute('data-zone');
+        showScreen('zone-detail', { 
+            zoneId: targetZone,
+            from: 'overall-farm',
+            returnParams: params,
+        });
+    });
+});
+
+    // 💡 1. 提前定义好哪些传感器是跟着 Zone 走的
+const ZONED_SENSORS = ['light', 'water', 'soil']; 
+
+// 💡 2. 给大屏上的所有卡片绑定点击事件
+document.querySelectorAll('.ops-sensor-grid .sensor-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+        // 假设你的卡片上绑定了传感器的类型，比如 data-type="water"
+        const sensorType = card.getAttribute('data-type'); 
+
+        if (ZONED_SENSORS.includes(sensorType)) {
+            // 🔴 路线 2：如果是区域传感器 (Light, Water, Soil)
+            // 跳转到一个专门显示“所有区域状态”的中转页面（比如叫 zone-overview）
+            // 并把当前想看的传感器类型传过去
+            showScreen('zone-overview', { targetSensor: sensorType });
+            
+        } else {
+            // 🟢 路线 1：如果是全局单点传感器 (Temp, Gas 等)
+            // 直接跳转到历史详情页，查主设备 farm_001 的数据
+            showScreen('sensor-detail', { 
+                sensor: sensorType, 
+                deviceId: 'farm_001' 
+            });
         }
-    };
+    });
+});
 }
 
 function buildSensorQuery(params = {}) {
@@ -253,3 +375,21 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+function getCommercialZones() {
+    try {
+        const farms = JSON.parse(localStorage.getItem('user_farms')) || [];
+        const farm = farms.find(f => f.id === AppState.currentFarmId) || farms[farms.length - 1];
+        const zones = farm?.zones || farm?.commercialStructure?.zones || [];
+        if (zones.length) return zones.map(z => ({
+            id: z.zone_id || z.id,
+            label: z.name || (z.zone_id || z.id || '').replace('_', ' ').toUpperCase(),
+        }));
+    } catch {}
+    return [
+        { id: 'zone_A', label: 'Zone A' },
+        { id: 'zone_B', label: 'Zone B' },
+        { id: 'zone_C', label: 'Zone C' },
+    ];
+}
+
