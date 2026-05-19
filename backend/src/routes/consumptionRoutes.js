@@ -216,37 +216,48 @@ chili: {
 };
 
 /* ══════════════════════════════════════════════════════════════
-   GROQ HELPER
+   GROQ HELPER (WITH TIMEOUT 防卡死)
 ══════════════════════════════════════════════════════════════ */
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 async function callGroq(systemPrompt, userPrompt, maxTokens = 500) {
-  const res = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.1-8b-instant',
-      max_tokens: maxTokens,
-      temperature: 0.4,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userPrompt   },
-      ],
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒 Backend Timeout
 
-  const data = await res.json();
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        max_tokens: maxTokens,
+        temperature: 0.4,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user',   content: userPrompt   },
+        ],
+      }),
+      signal: controller.signal
+    });
 
-  if (!data?.choices?.[0]?.message?.content) {
-    console.warn('[consumptionRoutes] Groq empty response:', JSON.stringify(data).slice(0, 300));
+    clearTimeout(timeoutId);
+    const data = await res.json();
+
+    if (!data?.choices?.[0]?.message?.content) {
+      console.warn('[consumptionRoutes] Groq empty response:', JSON.stringify(data).slice(0, 300));
+      return null;
+    }
+
+    return data.choices[0].message.content.trim();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.warn('[consumptionRoutes] Groq fetch error or timeout:', err.message);
     return null;
   }
-
-  return data.choices[0].message.content.trim();
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -361,42 +372,6 @@ For each crop, predict grow days based on how actual sensor data compares to ide
    Separate call — focused on energy/water savings story.
 ══════════════════════════════════════════════════════════════ */
 
-async function aiSustainabilityNarrative(plantData, metrics, ruleBasedSummary, sensorStats) {
-  const systemPrompt = `
-You are a sustainability analyst for vertical farming operations.
-Write a 3–4 sentence agronomic insight in plain prose.
-Use the exact numbers provided. Do not repeat the question.
-Focus on: what the sensor data reveals, efficiency vs traditional farming, and one actionable recommendation.
-`.trim();
-
-  const cropLines = plantData.map(p =>
-    `${p.name}: AI-predicted grow days = ${p.aiGrowDays ?? p.vertical.growDays} days ` +
-    `(benchmark: ${p.vertical.growDays}d, traditional: ${p.traditional.growDays}d); ` +
-    `water saving: ${p.waterSavePct}%, energy saving: ${p.energySavePct}%`
-  ).join('\n');
-
-  const userPrompt = `
-CROPS:\n${cropLines}
-
-TODAY'S SENSOR SUMMARY:
-- Avg temperature: ${sensorStats?.avgTemp ?? 'N/A'}°C
-- Estimated DLI: ${sensorStats?.DLI ?? 'N/A'} mol/m²/day
-- Water stability: ${sensorStats?.waterStabilityPct ?? 'N/A'}%
-- Water used: ${metrics.waterLiters?.toFixed(2)} L
-- Energy used: ${metrics.energyKwh?.toFixed(3)} kWh
-
-SAVINGS VS TRADITIONAL:
-- Water saved: ${ruleBasedSummary.waterSavedL} L/day (${ruleBasedSummary.waterSavePct}%)
-- Monthly savings: RM${ruleBasedSummary.monthlySavingsRm}
-`.trim();
-
-  try {
-    return await callGroq(systemPrompt, userPrompt, 220);
-  } catch {
-    return null;
-  }
-}
-
 async function aiSustainabilityNarrativeEarly(cropKeys, cropDataMap, sensorStats, metrics) {
   const systemPrompt = `
 You are a sustainability analyst for vertical farming operations.
@@ -433,6 +408,8 @@ router.post('/analysis', async (req, res) => {
       sensorHistory = [],   // NEW: frontend should pass this
     } = req.body;
 
+    const isReal = sensorHistory.length > 0 && sensorHistory.some(r => r.temperature !== undefined && r.temperature !== null);
+
     /* ─── 1. Resolve crops ─────────────────────────────── */
 
     const cropKeys = (plants.length > 0 ? plants : ['lettuce'])
@@ -444,31 +421,28 @@ router.post('/analysis', async (req, res) => {
     const sensorStats = analyseSensorHistory(sensorHistory);
     const hasSensors  = sensorStats !== null;
 
-    /* ─── 3. AI grow day prediction (parallel per crop) ── */
+    /* ─── 3. AI calls (Parallel) ───────────────────────── */
 
-/* ─── 3. 两个 AI 调用并行 ────────────────────────────── */
+    const cropDataMap = {};
+    cropKeys.forEach(key => {
+      cropDataMap[key] = CROP_DB[key] || CROP_DB.default;
+    });
 
-const cropDataMap = {};
-cropKeys.forEach(key => {
-  cropDataMap[key] = CROP_DB[key] || CROP_DB.default;
-});
+    const [allAiResults, aiNarrativeEarly] = await Promise.all([
+      hasSensors
+        ? aiPredictAllCrops(cropKeys, cropDataMap, sensorStats).catch(() => null)
+        : Promise.resolve(null),
+      hasSensors
+        ? aiSustainabilityNarrativeEarly(cropKeys, cropDataMap, sensorStats, metrics).catch(() => null)
+        : Promise.resolve(null),
+    ]);
 
-// 并行跑 grow days + early narrative
-const [allAiResults, aiNarrativeEarly] = await Promise.all([
-  hasSensors
-    ? aiPredictAllCrops(cropKeys, cropDataMap, sensorStats).catch(() => null)
-    : Promise.resolve(null),
-  hasSensors
-    ? aiSustainabilityNarrativeEarly(cropKeys, cropDataMap, sensorStats, metrics).catch(() => null)
-    : Promise.resolve(null),
-]);
-
-const growDayResults = cropKeys.map((key, i) => {
-  if (!allAiResults) return null;
-  const result = allAiResults.find(r => r.key === key) || allAiResults[i];
-  if (!result || result.predictedGrowDays < 10 || result.predictedGrowDays > 200) return null;
-  return result;
-});
+    const growDayResults = cropKeys.map((key, i) => {
+      if (!allAiResults) return null;
+      const result = allAiResults.find(r => r.key === key) || allAiResults[i];
+      if (!result || result.predictedGrowDays < 10 || result.predictedGrowDays > 200) return null;
+      return result;
+    });
 
     /* ─── 4. Build plant data ───────────────────────────── */
 
@@ -491,29 +465,24 @@ const growDayResults = cropKeys.map((key, i) => {
         name:  b.name,
         emoji: b.emoji,
 
-        // Traditional benchmark (FAO/USDA)
         traditional: {
           ...b.traditional,
         },
 
-        // Vertical farm industry benchmark
         vertical: {
           ...b.vertical,
         },
 
-        // YOUR FARM — AI driven from sensor data
         yourFarm: hasSensors && aiGrowDays ? {
           growDays:        aiGrowDays,
           confidence:      ai.confidence,
           growthModifier:  ai.growthModifier,
           keyFactors:      ai.keyFactors,
           agronomicNote:   ai.agronomicNote,
-          // Water/energy are sensor-derived (from metrics)
           waterPerDayL:    +(metrics.waterLiters ?? b.vertical.waterPerDayL).toFixed(3),
           energyKwhPerDay: +(metrics.energyKwh   ?? b.vertical.energyKwhPerDay).toFixed(4),
         } : null,
 
-        // Convenience fields for frontend
         aiGrowDays,
         aiConfidence:   ai?.confidence ?? null,
         aiKeyFactors:   ai?.keyFactors ?? [],
@@ -579,41 +548,17 @@ const growDayResults = cropKeys.map((key, i) => {
 
     /* ─── 7. AI narrative  ──────────────────── */
 
-let aiNarrative = aiNarrativeEarly;
+    let aiNarrative = aiNarrativeEarly;
 
-if (!aiNarrative) {
-  const aiGrowNote = plantData[0].aiGrowDays
-    ? ` AI predicts your ${primary.name.toLowerCase()} will mature in ${plantData[0].aiGrowDays} days (benchmark: ${primary.vertical.growDays} days).`
-    : '';
-  aiNarrative =
-    `Your vertical farm used ${waterUsed.toFixed(1)}L today vs ${tradWater}L in traditional farming — a ${waterSavePct}% reduction.` +
-    aiGrowNote +
-    ` Monthly water savings of ${ruleBasedSummary.monthlySavingsL}L represent significant environmental benefit.`;
-}
-
-    /* ─── 7. AI sustainability narrative ────────────────── 
-
-let aiNarrative = null;
-
-try {
-  aiNarrative = await Promise.race([
-    aiSustainabilityNarrative(plantData, metrics, ruleBasedSummary, sensorStats),
-    new Promise(resolve => setTimeout(() => resolve(null), 4000)) // 4秒超时
-  ]);
-} catch (e) {
-  console.warn('[consumptionRoutes] narrative error:', e.message);
-}
-
-    // Fallback narrative (only if Groq completely failed)
     if (!aiNarrative) {
       const aiGrowNote = plantData[0].aiGrowDays
-        ? ` AI predicts your ${primary.name.toLowerCase()} will mature in ${plantData[0].aiGrowDays} days based on current sensor readings (benchmark: ${primary.vertical.growDays} days).`
+        ? ` AI predicts your ${primary.name.toLowerCase()} will mature in ${plantData[0].aiGrowDays} days (benchmark: ${primary.vertical.growDays} days).`
         : '';
       aiNarrative =
-        `Your vertical farm used ${waterUsed.toFixed(1)}L today vs ${tradWater}L required in traditional farming — a ${waterSavePct}% reduction.` +
+        `Your vertical farm used ${waterUsed.toFixed(1)}L today vs ${tradWater}L in traditional farming — a ${waterSavePct}% reduction.` +
         aiGrowNote +
         ` Monthly water savings of ${ruleBasedSummary.monthlySavingsL}L represent significant environmental benefit.`;
-    }*/
+    }
 
     /* ─── 8. Respond ────────────────────────────────────── */
 

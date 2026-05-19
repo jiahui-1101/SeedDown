@@ -302,6 +302,14 @@ function _bindEvents() {
 
 /* ── ON LOGIN SUCCESS — load Firestore data into localStorage ── */
 async function _onLoginSuccess(mode, user, isGuest) {
+    localStorage.removeItem('user_farms');
+    localStorage.removeItem('farm_profile');
+    // ─── 【新加的 JWT 逻辑】 ───
+    // 假设你的新后端登录接口返回的数据里有 token，把它存进 localStorage
+    if (user.token) { 
+        localStorage.setItem('token', user.token); 
+    }
+    
     AppState.mode      = mode;
     AppState.isGuest   = isGuest;
     AppState.uid       = user.uid;
@@ -328,8 +336,13 @@ async function _onLoginSuccess(mode, user, isGuest) {
                 });
             }
         }
+        else {
+            // 如果是新用户，数据库是空的，确保 localStorage 也是空的
+            localStorage.setItem('user_farms', JSON.stringify([]));
+        }
     } catch (e) {
         console.warn('[LoginPage] Could not load Firestore data:', e);
+        localStorage.setItem('user_farms', JSON.stringify([]));
     }
 
     const greeting = isGuest ? '👀 Welcome, Guest!' : `👋 Welcome, ${AppState.userName}!`;

@@ -537,7 +537,7 @@ async function _loadData() {
 async function _processData(readings, isMock) {
  
   _show('content');
-  _lastReadings = readings;   // ← ADD THIS LINE (save for AI call)
+  _lastReadings = readings;
  
   const metrics = _calcMetrics(readings);
  
@@ -556,45 +556,81 @@ async function _processData(readings, isMock) {
  
   _renderCharts(readings, metrics, { min: 65, max: 80, mid: 72 }, 3.0);
  
-  _fetchAI(metrics, readings);
+  _fetchAI(metrics, readings, isMock);
 }
 
 /* ============================================================
-   FETCH AI
+   FETCH AI (WITH TIMEOUT & MOCK FALLBACK)
 ============================================================ */
-async function _fetchAI(metrics, readings) {
+async function _fetchAI(metrics, readings, isMock) {
+  const allPlants = _getPlants();
 
-  const plants = _getPlants();
+  // Helper for applying fallback UI
+  const applyFallback = (msg) => {
+    _el('con-ai-spinner').style.display = 'none';
+    _el('con-ai-text').textContent = msg;
+    const fallbackPd = allPlants.map(name => _benchmarkFallback(name.toLowerCase().trim()));
+    _allPlantData = fallbackPd;
+    _renderPlantCards(fallbackPd, false);
+    _renderCompBars(fallbackPd, metrics);
+    
+    // Fallback UI for KPIs
+    _el('con-water-vs').textContent   = `vs traditional`;
+    _el('con-energy-vs').textContent  = `vs traditional`;
+    _el('con-cost-saved').textContent = `RM 0.00/day`;
+    _el('con-cost-sub').textContent   = `RM 0.00/mo`;
+  };
+
+  // If Demo Data -> Don't Call AI, direct fallback
+  if (isMock) {
+    console.log('[ConsumptionPage] Demo mode detected, skipping AI.');
+    applyFallback('Demo mode active — showing benchmark data.');
+    return;
+  }
+
+  // Only take first 3 for AI processing to reduce payload, rest will be mock
+  const aiPlants = allPlants.slice(0, 3);
+  const restPlants = allPlants.slice(3);
 
   try {
+    // 8 Seconds Timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     const res = await fetch(`${BASE_URL}/api/consumption/analysis`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        plants,
+        plants: aiPlants, 
         metrics,
         sensorHistory: readings,
       }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const data = await res.json();
 
+    // Combine AI results with mock data for remaining plants
+    const mockPd = restPlants.map(name => _benchmarkFallback(name.toLowerCase().trim()));
+    const combinedPd = [...(data.plantData || []), ...mockPd];
+
     const rb    = data.ruleBasedSummary;
-    const pd    = data.plantData || [];
     const iz    = data.idealWaterZone || { min: 65, max: 80, mid: 72 };
     const tradE = data.traditionalEnergyPerDay || 3.0;
 
     _el('con-water-vs').textContent   = `↓ ${rb.waterSavePct}% vs traditional`;
-    _el('con-energy-vs').textContent  = `↓ ${pd[0]?.energySavePct || 0}% vs traditional`;
+    _el('con-energy-vs').textContent  = `↓ ${combinedPd[0]?.energySavePct || 0}% vs traditional`;
     _el('con-cost-saved').textContent = `RM ${rb.dailySavingsRm.toFixed(2)}/day`;
     _el('con-cost-sub').textContent   = `RM ${rb.monthlySavingsRm}/mo`;
 
     _renderCharts(readings, metrics, iz, tradE);
-    _allPlantData = pd;
-    _renderPlantCards(pd, false);
-    _renderCompBars(pd, metrics);
+    _allPlantData = combinedPd;
+    _renderPlantCards(combinedPd, false);
+    _renderCompBars(combinedPd, metrics);
     _renderMonthlySavings(rb);
 
     if (data.aiGrowDaysComputed && data.sensorStats) {
@@ -608,12 +644,8 @@ async function _fetchAI(metrics, readings) {
 
   } catch (err) {
     console.warn('[ConsumptionPage] AI fetch failed:', err.message);
-    _el('con-ai-spinner').style.display = 'none';
-    _el('con-ai-text').textContent = 'AI analysis unavailable — showing benchmark data.';
-
-    const fallbackPd = plants.map(name => _benchmarkFallback(name.toLowerCase().trim()));
-    _allPlantData = fallbackPd;
-    _renderPlantCards(fallbackPd, false);
+    const isTimeout = err.name === 'AbortError';
+    applyFallback(isTimeout ? 'AI analysis timed out — showing benchmark data.' : 'AI analysis unavailable — showing benchmark data.');
   }
 }
 
@@ -704,6 +736,16 @@ function _renderCharts(
     Number(
       (traditionalEnergyPerDay / 24).toFixed(3)
     );
+
+  // BUG FIX: Moved energySavePct calculation outside the block scope
+  // so it doesn't throw a ReferenceError below during Grade computation
+  const totalEnergy = energyData.reduce((a, b) => a + b, 0);
+  const traditionalTotal = traditionalPerHour * labels.length;
+  
+  const energySavePct = Math.max(
+    0,
+    Math.round((1 - (totalEnergy / (traditionalTotal || 1))) * 100)
+  );
 
   /* ============================================================
      WATER CHART
@@ -873,28 +915,11 @@ function _renderCharts(
   const eEl =
     _el('con-energy-chart');
 
-    const totalEnergy = energyData.reduce((a, b) => a + b, 0);
-const traditionalTotal = traditionalPerHour * labels.length;
-
   if (eEl) {
 
     try {
       eEl._chart?.destroy();
     } catch {}
-
-   // const totalEnergy =
-     // energyData.reduce((a, b) => a + b, 0);
-
-   // const traditionalTotal =
-     // traditionalPerHour * labels.length;
-
-    const energySavePct =
-      Math.max(
-        0,
-        Math.round(
-          (1 - (totalEnergy / traditionalTotal)) * 100
-        )
-      );
 
     _el('energy-trad-badge').style.display =
       'block';
@@ -1020,82 +1045,82 @@ const traditionalTotal = traditionalPerHour * labels.length;
      ECO GRADE
   ============================================================ */
 
-// 5 dimensions, each 0-20 points = 100 max
-let score = 0;
-const breakdown = [];
+  // 5 dimensions, each 0-20 points = 100 max
+  let score = 0;
+  const breakdown = [];
 
-// 1. Water stability (how often in ideal zone)
-const waterScore = Math.round((pct / 100) * 20);
-score += waterScore;
-breakdown.push({ label: '💧 Water Stability', score: waterScore, max: 20, detail: `${pct}% readings in ideal zone` });
+  // 1. Water stability (how often in ideal zone)
+  const waterScore = Math.round((pct / 100) * 20);
+  score += waterScore;
+  breakdown.push({ label: '💧 Water Stability', score: waterScore, max: 20, detail: `${pct}% readings in ideal zone` });
 
-// 2. Energy efficiency vs traditional
-const energyRatio = totalEnergy / (traditionalTotal || 1);
-const energyScore = Math.round(Math.max(0, (1 - energyRatio)) * 20);
-score += energyScore;
-breakdown.push({ label: '⚡ Energy Efficiency', score: energyScore, max: 20, detail: `${energySavePct}% less than traditional` });
+  // 2. Energy efficiency vs traditional
+  const energyRatio = totalEnergy / (traditionalTotal || 1);
+  const energyScore = Math.round(Math.max(0, (1 - energyRatio)) * 20);
+  score += energyScore;
+  breakdown.push({ label: '⚡ Energy Efficiency', score: energyScore, max: 20, detail: `${energySavePct}% less than traditional` });
 
-// 3. Water usage vs traditional
-const waterUsed = metrics.waterLiters;
-const tradWaterPerDay = traditionalEnergyPerDay > 0 ? 55 : 55; // avg traditional
-const waterSaveRatio = Math.max(0, 1 - (waterUsed / tradWaterPerDay));
-const waterUsageScore = Math.round(waterSaveRatio * 20);
-score += waterUsageScore;
-breakdown.push({ label: '🌿 Water Conservation', score: waterUsageScore, max: 20, detail: `${waterUsed.toFixed(1)}L used vs ~${tradWaterPerDay}L traditional` });
+  // 3. Water usage vs traditional
+  const waterUsed = metrics.waterLiters;
+  const tradWaterPerDay = traditionalEnergyPerDay > 0 ? 55 : 55; // avg traditional
+  const waterSaveRatio = Math.max(0, 1 - (waterUsed / tradWaterPerDay));
+  const waterUsageScore = Math.round(waterSaveRatio * 20);
+  score += waterUsageScore;
+  breakdown.push({ label: '🌿 Water Conservation', score: waterUsageScore, max: 20, detail: `${waterUsed.toFixed(1)}L used vs ~${tradWaterPerDay}L traditional` });
 
-// 4. Light hours (more consistent = better)
-const lightScore = Math.round(Math.min(metrics.lightHours / 12, 1) * 20);
-score += lightScore;
-breakdown.push({ label: '☀️ Light Consistency', score: lightScore, max: 20, detail: `${metrics.lightHours}h grow light detected` });
+  // 4. Light hours (more consistent = better)
+  const lightScore = Math.round(Math.min(metrics.lightHours / 12, 1) * 20);
+  score += lightScore;
+  breakdown.push({ label: '☀️ Light Consistency', score: lightScore, max: 20, detail: `${metrics.lightHours}h grow light detected` });
 
-// 5. Temperature control (fewer fan activations = more stable)
-const tempScore = Math.round(Math.max(0, 1 - (metrics.fanHours / 24)) * 20);
-score += tempScore;
-breakdown.push({ label: '🌡️ Temp Control', score: tempScore, max: 20, detail: `${metrics.fanHours}h cooling needed` });
+  // 5. Temperature control (fewer fan activations = more stable)
+  const tempScore = Math.round(Math.max(0, 1 - (metrics.fanHours / 24)) * 20);
+  score += tempScore;
+  breakdown.push({ label: '🌡️ Temp Control', score: tempScore, max: 20, detail: `${metrics.fanHours}h cooling needed` });
 
-// Grade
-let grade, gradeColor, note;
-if      (score >= 88) { grade = 'A+'; gradeColor = '#16A34A'; note = 'Excellent — your farm is operating at peak sustainability'; }
-else if (score >= 75) { grade = 'A';  gradeColor = '#16A34A'; note = 'Very efficient — minor improvements possible'; }
-else if (score >= 62) { grade = 'B+'; gradeColor = '#2563EB'; note = 'Good performance — a few areas to optimise'; }
-else if (score >= 50) { grade = 'B';  gradeColor = '#2563EB'; note = 'Average — review water and energy usage'; }
-else if (score >= 38) { grade = 'C';  gradeColor = '#D97706'; note = 'Below average — action recommended'; }
-else                  { grade = 'D';  gradeColor = '#DC2626'; note = 'Poor — significant inefficiencies detected'; }
+  // Grade
+  let grade, gradeColor, note;
+  if      (score >= 88) { grade = 'A+'; gradeColor = '#16A34A'; note = 'Excellent — your farm is operating at peak sustainability'; }
+  else if (score >= 75) { grade = 'A';  gradeColor = '#16A34A'; note = 'Very efficient — minor improvements possible'; }
+  else if (score >= 62) { grade = 'B+'; gradeColor = '#2563EB'; note = 'Good performance — a few areas to optimise'; }
+  else if (score >= 50) { grade = 'B';  gradeColor = '#2563EB'; note = 'Average — review water and energy usage'; }
+  else if (score >= 38) { grade = 'C';  gradeColor = '#D97706'; note = 'Below average — action recommended'; }
+  else                  { grade = 'D';  gradeColor = '#DC2626'; note = 'Poor — significant inefficiencies detected'; }
 
-_el('con-grade').textContent = grade;
-_el('con-grade').style.color = gradeColor;
-_el('con-grade-note').textContent = `${note} · Score: ${score}/100`;
+  _el('con-grade').textContent = grade;
+  _el('con-grade').style.color = gradeColor;
+  _el('con-grade-note').textContent = `${note} · Score: ${score}/100`;
 
-// Render breakdown bars inside hero card
-const heroCard = _el('con-grade')?.closest('div[style*="linear-gradient"]');
-let breakdownEl = document.getElementById('con-grade-breakdown');
-if (!breakdownEl && heroCard) {
-  breakdownEl = document.createElement('div');
-  breakdownEl.id = 'con-grade-breakdown';
-  breakdownEl.style.cssText = 'margin-top:16px;display:flex;flex-direction:column;gap:8px;text-align:left;';
-  heroCard.appendChild(breakdownEl);
-}
+  // Render breakdown bars inside hero card
+  const heroCard = _el('con-grade')?.closest('div[style*="linear-gradient"]');
+  let breakdownEl = document.getElementById('con-grade-breakdown');
+  if (!breakdownEl && heroCard) {
+    breakdownEl = document.createElement('div');
+    breakdownEl.id = 'con-grade-breakdown';
+    breakdownEl.style.cssText = 'margin-top:16px;display:flex;flex-direction:column;gap:8px;text-align:left;';
+    heroCard.appendChild(breakdownEl);
+  }
 
-if (breakdownEl) {
-  breakdownEl.innerHTML = breakdown.map(b => `
-    <div>
-      <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
-        <span style="font-weight:600;color:#166534;">${b.label}</span>
-        <span style="color:#15803D;font-weight:700;">${b.score}/${b.max}</span>
+  if (breakdownEl) {
+    breakdownEl.innerHTML = breakdown.map(b => `
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
+          <span style="font-weight:600;color:#166534;">${b.label}</span>
+          <span style="color:#15803D;font-weight:700;">${b.score}/${b.max}</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.5);border-radius:100px;height:6px;overflow:hidden;">
+          <div style="
+            width:${(b.score/b.max)*100}%;
+            height:100%;
+            background:#16A34A;
+            border-radius:100px;
+            transition:width 0.8s ease;
+          "></div>
+        </div>
+        <div style="font-size:0.6rem;color:#166534;margin-top:2px;">${b.detail}</div>
       </div>
-      <div style="background:rgba(255,255,255,0.5);border-radius:100px;height:6px;overflow:hidden;">
-        <div style="
-          width:${(b.score/b.max)*100}%;
-          height:100%;
-          background:#16A34A;
-          border-radius:100px;
-          transition:width 0.8s ease;
-        "></div>
-      </div>
-      <div style="font-size:0.6rem;color:#166534;margin-top:2px;">${b.detail}</div>
-    </div>
-  `).join('');
-}
+    `).join('');
+  }
 }
 
 /* ============================================================
@@ -1829,7 +1854,6 @@ function _renderSensorStatsBanner(stats) {
     </div>
   `;
 }
-
 
 function _show(state) {
 

@@ -2919,6 +2919,15 @@ async function createCommercialFarm() {
 
     saved.push(farm);
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
+    if (AppState.uid) {
+        try {
+            // 确保 saveFarmsToFirestore 已经能在这里直接使用
+            await saveFarmsToFirestore(AppState.uid, saved);
+            console.log('[BuildFarm] ✅ Commercial Farm synced to Firebase');
+        } catch (err) {
+            console.error('[BuildFarm] ❌ Failed to sync commercial farm to Firebase', err);
+        }
+    }
 
     AppState.currentFarm = farm;
     AppState.currentFarmId = farm.id;
