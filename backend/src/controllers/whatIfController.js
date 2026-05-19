@@ -44,6 +44,11 @@ function round1(value) {
   return Number.parseFloat(Number(value).toFixed(1));
 }
 
+function roundTo(value, digits = 1, fallback = 0) {
+  const n = finiteNumber(value, fallback);
+  return Number.parseFloat(n.toFixed(digits));
+}
+
 function firstNumber(...values) {
   for (const value of values) {
     const n = finiteNumber(value, null);
@@ -536,11 +541,14 @@ exports.getCostAnalysis = async (req, res) => {
   try {
     const { plant, units, weeks, sensors } = req.body;
 
-    const temp     = sensors?.temp     ?? 28;
-    const humid    = sensors?.humid    ?? 68;
-    const light    = sensors?.light    ?? 82;
-    const water    = sensors?.water    ?? 45;
-    const nutrient = sensors?.nutrient ?? 78;
+    const state = normalizeSensorState(sensors || {});
+    const temp = state.temp;
+    const humid = state.humid;
+    const light = state.light;
+    const water = state.water;
+    const nutrient = state.nutrient;
+    const unitCount = Math.max(1, finiteNumber(units, 1));
+    const weekCount = Math.max(1, finiteNumber(weeks, 4));
 
     // Condition score (calculated, not AI)
     const tempScore     = temp >= 18 && temp <= 28 ? 100 : temp < 18 ? (temp / 18) * 100 : ((40 - temp) / 12) * 100;
@@ -553,15 +561,15 @@ exports.getCostAnalysis = async (req, res) => {
     // Water savings (calculated, not AI)
     const manualWaterPerPlantPerWeek = 3.5;
     const autoWaterPerPlantPerWeek   = water < 40 ? 2.5 : water > 70 ? 0.8 : 1.5;
-    const manualWaterLiters = parseFloat((manualWaterPerPlantPerWeek * units * weeks).toFixed(1));
-    const autoWaterLiters   = parseFloat((autoWaterPerPlantPerWeek   * units * weeks).toFixed(1));
+    const manualWaterLiters = parseFloat((manualWaterPerPlantPerWeek * unitCount * weekCount).toFixed(1));
+    const autoWaterLiters   = parseFloat((autoWaterPerPlantPerWeek   * unitCount * weekCount).toFixed(1));
     const waterSavedLiters  = parseFloat((manualWaterLiters - autoWaterLiters).toFixed(1));
     const waterCostSaved    = parseFloat((waterSavedLiters * 0.042).toFixed(2));
 
     // Energy savings (calculated, not AI)
     const manualLightHrs  = 12;
     const autoLightHrs    = light > 70 ? 6 : light > 40 ? 8 : 10;
-    const energySavedkWh  = parseFloat(((manualLightHrs - autoLightHrs) * 0.04 * weeks * 7).toFixed(2));
+    const energySavedkWh  = parseFloat(((manualLightHrs - autoLightHrs) * 0.04 * weekCount * 7).toFixed(2));
     const energyCostSaved = parseFloat((energySavedkWh * 1.10).toFixed(2));
     const totalSavedRM    = parseFloat((waterCostSaved + energyCostSaved).toFixed(2));
 
@@ -577,8 +585,8 @@ Sentence 1: describe current ${plant} conditions. Sentence 2: mention RM ${total
     res.json({
       conditionScore, conditionLabel,
       manualWaterLiters, autoWaterLiters, waterSavedLiters,
-      manualEnergykWh: parseFloat((manualLightHrs * 0.04 * weeks * 7).toFixed(2)),
-      autoEnergykWh:   parseFloat((autoLightHrs   * 0.04 * weeks * 7).toFixed(2)),
+      manualEnergykWh: parseFloat((manualLightHrs * 0.04 * weekCount * 7).toFixed(2)),
+      autoEnergykWh:   parseFloat((autoLightHrs   * 0.04 * weekCount * 7).toFixed(2)),
       energySavedkWh, waterCostSaved, energyCostSaved, totalSavedRM, insight
     });
 
@@ -600,7 +608,8 @@ exports.getNewPlantImpact = async (req, res) => {
       return res.status(400).json({ error: 'species is required' });
     }
 
-    const scale    = (quantity || 1) / 4;
+    const quantityCount = Math.max(1, finiteNumber(quantity, 1));
+    const scale = quantityCount / 4;
     const cropSpec = findCrop(species);
     let aiSuitability = null;
 
@@ -637,23 +646,26 @@ exports.getNewPlantImpact = async (req, res) => {
       });
     }
 
-    const base     = aiSuitability?.impacts || cropSpec?.impacts || { tempChange:0, humidChange:3, lightChange:1, waterChange:6, nutrientChange:5 };
+    const base = normaliseImpact(
+      aiSuitability?.impacts || cropSpec?.impacts,
+      { tempChange: 0, humidChange: 3, lightChange: 1, waterChange: 6, nutrientChange: 5 }
+    );
 
     const impacts = {
-      tempChange:     parseFloat(Math.min((base.tempChange     || 0) * scale,  8).toFixed(1)),
-      humidChange:    parseFloat(Math.min((base.humidChange    || 0) * scale, 30).toFixed(1)),
-      lightChange:    parseFloat(((base.lightChange    || 0) * scale).toFixed(1)),
-      waterChange:    parseFloat(Math.min((base.waterChange    || 0) * scale, 40).toFixed(1)),
-      nutrientChange: parseFloat(Math.min((base.nutrientChange || 0) * scale, 30).toFixed(1)),
+      tempChange: roundTo(Math.min(base.tempChange * scale, 8)),
+      humidChange: roundTo(Math.min(base.humidChange * scale, 30)),
+      lightChange: roundTo(base.lightChange * scale),
+      waterChange: roundTo(Math.min(base.waterChange * scale, 40)),
+      nutrientChange: roundTo(Math.min(base.nutrientChange * scale, 30)),
     };
 
     const plan = environmentPlan({ species, quantity, cropSpec, aiSuitability, sensors, impacts });
     const projected = {
       temp: plan.temp.target,
       humid: plan.humidity.target,
-      light: parseFloat((plan.current.light + impacts.lightChange).toFixed(1)),
+      light: roundTo(plan.current.light + impacts.lightChange, 1, plan.current.light),
       water: plan.moisture.target,
-      nutrient: parseFloat((plan.current.nutrient + impacts.nutrientChange).toFixed(1)),
+      nutrient: roundTo(plan.current.nutrient + impacts.nutrientChange, 1, plan.current.nutrient),
     };
     const warnings = plan.warnings;
     const deterministicInsight = advisorInsight(species, quantity, plan);
