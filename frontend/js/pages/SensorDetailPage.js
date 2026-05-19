@@ -38,9 +38,6 @@ export async function render(params = {}) {
                         <div style="font-weight:900;font-size:1.12rem;color:${theme.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHTML(sensorName)} Analysis</div>
                     </div>
                 </div>
-                <button id="openModalBtn" style="background:${theme.soft};color:${theme.accentDark};border:1px solid ${theme.softBorder};padding:10px 14px;border-radius:14px;font-size:0.75rem;font-weight:900;cursor:pointer;white-space:nowrap;">
-                    Set Preference
-                </button>
             </div>
 
             <div style="flex:1;overflow-y:auto;padding:0 20px 20px 20px;">
@@ -90,17 +87,6 @@ export async function render(params = {}) {
                     </div>
                 </section>
             </div>
-
-            <div id="customModal" style="display:none;position:absolute;inset:0;background:rgba(15,23,42,.22);z-index:999;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(8px);">
-                <div style="background:${theme.surface};width:100%;max-width:340px;border-radius:24px;padding:24px;box-shadow:0 24px 70px rgba(15,23,42,.18);border:1px solid ${theme.border};">
-                    <div style="font-size:10px;font-weight:950;letter-spacing:.12em;text-transform:uppercase;color:${theme.accent};margin-bottom:6px;">Preference</div>
-                    <div style="font-size:1.1rem;font-weight:950;color:${theme.text};margin-bottom:8px;">Set Record Interval</div>
-                    <div style="font-size:0.85rem;color:${theme.muted};margin-bottom:18px;">Set record interval for ${escapeHTML(sensorName)} in hours.</div>
-                    <input type="number" id="prefInput" value="2" min="1" style="width:100%;box-sizing:border-box;padding:14px;border:1px solid ${theme.border};border-radius:16px;font-weight:900;margin-bottom:18px;background:#f8fafc;color:${theme.text};">
-                    <div style="display:flex;gap:12px;">
-                        <button id="cancelModalBtn" style="flex:1;padding:13px;border:1px solid ${theme.border};background:#f8fafc;color:${theme.muted};border-radius:16px;font-weight:900;cursor:pointer;">Cancel</button>
-                        <button id="saveModalBtn" style="flex:1;padding:13px;border:none;background:${theme.accentDark};color:white;border-radius:16px;font-weight:900;cursor:pointer;">Save</button>
-                    </div>
                 </div>
             </div>
         </div>
@@ -111,7 +97,9 @@ export async function render(params = {}) {
 
 async function fetchHistory(meta, params = {}) {
     try {
-        const response = await fetch(`${API_BASE}/api/sensors/history?deviceId=farm_001&limit=8`);
+        const farm = getCurrentFarm();
+        const deviceId = params.deviceId || farm?.deviceId || 'farm_001';
+        const response = await fetch(`${API_BASE}/api/sensors/history?deviceId=${deviceId}&limit=8`);
         const result = await response.json();
         const readings = result.readings;
         if (!Array.isArray(readings) || readings.length === 0) throw new Error('No data');
@@ -157,8 +145,10 @@ function buildChart(historyRows) {
     return { linePath, areaPath, interactiveSlices };
 }
 
-function bindEvents({ backTarget, sensorKey, unit }) {
-    document.getElementById('detailBackBtn').onclick = () => showScreen(backTarget);
+function bindEvents({ backTarget, sensorKey, unit, params }) {
+   document.getElementById('detailBackBtn').onclick = () => {
+    showScreen(backTarget);
+};
 
     const tooltip = document.getElementById('chartTooltip');
     document.querySelectorAll('.chart-slice').forEach(slice => {
@@ -169,30 +159,6 @@ function bindEvents({ backTarget, sensorKey, unit }) {
         });
         slice.addEventListener('pointerleave', () => tooltip.style.display = 'none');
     });
-
-    const modal = document.getElementById('customModal');
-    document.getElementById('openModalBtn').onclick = () => modal.style.display = 'flex';
-    document.getElementById('cancelModalBtn').onclick = () => modal.style.display = 'none';
-
-    document.getElementById('saveModalBtn').onclick = async () => {
-        const hours = Number(document.getElementById('prefInput').value || 1);
-        try {
-            const res = await fetch(`${API_BASE}/api/sensors/preferences`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    deviceId: params.deviceId || getCurrentFarm()?.deviceId || 'farm_001',
-                    sensorIntervalSeconds: hours * 3600,
-                    sensorType: sensorKey,
-                }),
-            });
-            if (!res.ok) throw new Error('Preference update failed');
-            modal.style.display = 'none';
-            showToast('success', `Interval updated to ${hours}h`);
-        } catch (err) {
-            showToast('error', 'Update failed');
-        }
-    };
 }
 
 function buildSensorQuery(params = {}) {
