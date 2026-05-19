@@ -5,14 +5,18 @@ const fallbackPageModules = {
     splash: () => import("../pages/SplashPage.js").then((m) => m.render()),
     login: () => import("../pages/LoginPage.js").then((m) => m.render()),
     farmlist: () => import("../pages/FarmListPage.js").then((m) => m.render()),
-    buildfarm: () => import("../pages/BuildFarmPage.js?v=commercial-zone-driven-3").then((m) => m.render()),
+    buildfarm: () => import("../pages/BuildFarmPage.js?v=commercial-polish-1").then((m) => m.render()),
     home: () => import("../pages/HomePage.js").then((m) => m.render()),
-    "dash-c": () => import("../pages/CommercialPage.js?v=commercial-zone-driven-3").then((m) => m.render()),
+    "dash-c": () => import("../pages/CommercialPage.js?v=commercial-polish-1").then((m) => m.render()),
     control: () => import("../pages/ControlPage.js").then((m) => m.render()),
     disease: () => import("../pages/DiseaseAnalysisPage.js").then((m) => m.render()),
     community: () => import("../pages/CommunityPage.js").then((m) => m.render()),
     feature: (params) => import("../pages/FeaturePage.js").then((m) => m.render(params)),
-    "sensor-detail": (params) => import("../pages/SensorDetailPage.js").then((m) => m.render(params)),
+    "sensor-detail": (params) => {
+    const isCommercial = params?.from === 'dash-c' || params?.from === 'zone-detail' || params?.mode === 'commercial';
+    const page = isCommercial ? "../pages/SensorDetailPageCommercial.js" : "../pages/SensorDetailPage.js";
+    return import(page).then((m) => m.render(params));
+},
     profile: () => import("../pages/ProfilePage.js").then((m) => m.render()),
     "alert-detail": (params) => import("../pages/AlertDetailPage.js").then((m) => {
         m.render(params);
@@ -53,4 +57,5 @@ export async function showScreen(screenName, params = {}) {
         window.showToast?.('error', `Failed to load ${screenName}: ${err.message}`);
     }
 }
+
 

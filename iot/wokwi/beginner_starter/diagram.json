@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "author": "SeedDown",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": { "label": "ESP32" } },
+    { "type": "wokwi-dht22", "id": "dht1", "top": -150, "left": -250, "attrs": { "temperature": "22", "humidity": "65", "label": "DHT22 Temp/Humid" } },
+    { "type": "wokwi-potentiometer", "id": "pot1", "top": 80, "left": -285, "attrs": { "value": "1600", "label": "POT1 Soil Moisture" } },
+    { "type": "wokwi-photoresistor-sensor", "id": "ldr1", "top": 190, "left": -285, "attrs": { "label": "LDR Light Sensor" } },
+    { "type": "wokwi-led", "id": "led1", "top": -110, "left": 305, "attrs": { "color": "blue", "label": "WATER_ON / Pump" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": -62, "left": 235, "attrs": { "value": "220", "label": "220R" } },
+    { "type": "wokwi-led", "id": "led2", "top": 0, "left": 305, "attrs": { "color": "yellow", "label": "LIGHT_ON / Grow Light" } },
+    { "type": "wokwi-resistor", "id": "r2", "top": 48, "left": 235, "attrs": { "value": "220", "label": "220R" } },
+    { "type": "wokwi-led", "id": "led3", "top": 110, "left": 305, "attrs": { "color": "red", "label": "BUZZER / Alarm" } },
+    { "type": "wokwi-resistor", "id": "r3", "top": 158, "left": 235, "attrs": { "value": "220", "label": "220R" } }
+  ],
+  "connections": [
+    [ "dht1:VCC", "esp:3V3", "red", [] ],
+    [ "dht1:GND", "esp:GND.1", "black", [] ],
+    [ "dht1:SDA", "esp:15", "green", [] ],
+    [ "pot1:VCC", "esp:3V3", "red", [] ],
+    [ "pot1:GND", "esp:GND.1", "black", [] ],
+    [ "pot1:SIG", "esp:36", "green", [] ],
+    [ "ldr1:VCC", "esp:3V3", "red", [] ],
+    [ "ldr1:GND", "esp:GND.1", "black", [] ],
+    [ "ldr1:AO", "esp:33", "green", [] ],
+    [ "esp:2", "r1:1", "blue", [] ],
+    [ "r1:2", "led1:A", "blue", [] ],
+    [ "led1:C", "esp:GND.2", "black", [] ],
+    [ "esp:4", "r2:1", "gold", [] ],
+    [ "r2:2", "led2:A", "gold", [] ],
+    [ "led2:C", "esp:GND.2", "black", [] ],
+    [ "esp:17", "r3:1", "red", [] ],
+    [ "r3:2", "led3:A", "red", [] ],
+    [ "led3:C", "esp:GND.2", "black", [] ]
+  ],
+  "dependencies": {}
+}
