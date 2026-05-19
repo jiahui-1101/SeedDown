@@ -5,6 +5,12 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
     ? 'http://localhost:3000'
     : window.location.origin;
 
+const PACKAGE_SENSOR_KEYS = {
+    starter: ['temp', 'humid', 'light'],
+    standard: ['temp', 'humid', 'light', 'ph', 'water', 'nutrient'],
+    pro: ['temp', 'humid', 'light', 'ph', 'water', 'nutrient', 'ec', 'co2'],
+};
+
 export const SensorStrip = {
     container: null,
     refreshInterval: null,
@@ -57,7 +63,7 @@ export const SensorStrip = {
             reading.packageLevel || farm?.packageLevel,
         ].filter(Boolean);
 
-        const items = [
+        const allItems = [
             { icon: '🌡️', key: 'temp', label: 'Temp', unit: '°C' },
             { icon: '💧', key: 'humid', label: 'Humid', unit: '%rh' },
             { icon: '☀️', key: 'light', label: 'Light', unit: '' },
@@ -67,6 +73,9 @@ export const SensorStrip = {
             { icon: '🧫', key: 'ec', label: 'EC', unit: 'mS/cm' },
             { icon: '🌬️', key: 'co2', label: 'CO2', unit: 'ppm' },
         ];
+        const enabledKeys = sensorKeysForPackage(farm, reading);
+        const items = allItems.filter(item => enabledKeys.includes(item.key));
+        const columns = items.length <= 3 ? 3 : items.length <= 6 ? 3 : 4;
 
         this.container.innerHTML = `
             <div style="background:#FFFFFF;border-radius:24px;padding:20px 16px;margin:0 16px 16px 16px;box-shadow:0 4px 20px rgba(0,0,0,0.03);">
@@ -84,7 +93,7 @@ export const SensorStrip = {
                         ${reading.deviceId ? 'LIVE' : 'NO DATA'}
                     </span>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:1fr;gap:10px;">
+                <div style="display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));grid-auto-rows:1fr;gap:10px;">
                     ${items.map(item => this.createGridCard(item, s[item.key] || { val: '--', status: 'normal', note: '' })).join('')}
                 </div>
                 ${thresholdSummaryHtml(s)}
@@ -143,6 +152,13 @@ function mapReadingToSensors(reading, thresholds = {}) {
         ec: sensorValue(reading.ec, statusRange(reading.ec, thresholds.ecMin ?? 1.2, thresholds.ecMax ?? 2.0)),
         co2: sensorValue(reading.co2Ppm, reading.co2Ppm !== undefined && reading.co2Ppm < (thresholds.co2MinPpm ?? 800) ? 'warning' : 'normal'),
     };
+}
+
+function sensorKeysForPackage(farm, reading) {
+    const level = String(farm?.packageLevel || reading?.packageLevel || 'standard').toLowerCase();
+    if (level.includes('starter')) return PACKAGE_SENSOR_KEYS.starter;
+    if (level.includes('pro')) return PACKAGE_SENSOR_KEYS.pro;
+    return PACKAGE_SENSOR_KEYS.standard;
 }
 
 function sensorValue(value, status) {
