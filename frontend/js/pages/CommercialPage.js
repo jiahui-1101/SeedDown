@@ -1,6 +1,6 @@
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
-import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js';
+import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=zone-driven-2';
 import { openAddPlantModal } from '../components/AddPlantModal.js';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -22,7 +22,7 @@ let chatMessages = [];
 let selectedZoneId = null;
 let zoneSnapshots = {};
 
-const COMMERCIAL_ZONES = [
+const DEFAULT_COMMERCIAL_ZONES = [
     { id: 'zone_A', label: 'Zone A', crop: 'Leafy Greens' },
     { id: 'zone_B', label: 'Zone B', crop: 'Fruit Crops' },
     { id: 'zone_C', label: 'Zone C', crop: 'Herbs' },
@@ -600,14 +600,15 @@ function updateZoneSelectionUI() {
 
 function buildCommercialZones(farm, rack) {
     const plants = Array.isArray(farm?.plants) ? farm.plants : [];
-    const capacity = Math.max(1, Math.ceil((rack?.total || 9) / COMMERCIAL_ZONES.length));
+    const baseZones = commercialZonesForFarm(farm);
+    const capacity = Math.max(1, Math.ceil((rack?.total || 9) / baseZones.length));
     const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
 
-    return COMMERCIAL_ZONES.map((base, index) => {
+    return baseZones.map((base, index) => {
         const zonePlants = plants.filter((plant, plantIndex) => {
             const explicitZone = normalizeZoneId(plant.zoneId || plant.zone || plant.area);
             if (explicitZone) return explicitZone === base.id;
-            return plantIndex % COMMERCIAL_ZONES.length === index;
+            return plantIndex % baseZones.length === index;
         });
         const device = devices.find(item => normalizeZoneId(item.zoneId || item.zone) === base.id);
         const crop = dominantCrop(zonePlants) || base.crop;
@@ -620,6 +621,19 @@ function buildCommercialZones(farm, rack) {
             capacity,
             occupied: Math.min(100, Math.round((planted / capacity) * 100)),
             deviceId: device?.deviceId || (farm?.zoneId === base.id ? farm.deviceId : null),
+        };
+    });
+}
+
+function commercialZonesForFarm(farm) {
+    const zones = Array.isArray(farm?.zones) ? farm.zones : Array.isArray(farm?.commercialStructure?.zones) ? farm.commercialStructure.zones : [];
+    if (!zones.length) return DEFAULT_COMMERCIAL_ZONES;
+    return zones.map((zone, index) => {
+        const id = normalizeZoneId(zone.zone_id || zone.id || `zone_${String.fromCharCode(65 + index)}`);
+        return {
+            id,
+            label: zone.name || `Zone ${String.fromCharCode(65 + index)}`,
+            crop: zone.crop || (Array.isArray(zone.plants) ? zone.plants.join(', ') : '') || 'Mixed Crops',
         };
     });
 }
@@ -651,11 +665,12 @@ function normalizeZoneId(value) {
 }
 
 function resolveDefaultZone(farm) {
-    return normalizeZoneId(AppState.currentZoneId || farm?.zoneId) || 'zone_A';
+    const firstZone = commercialZonesForFarm(farm)[0]?.id || 'zone_A';
+    return normalizeZoneId(AppState.currentZoneId || farm?.zoneId) || firstZone;
 }
 
 function zoneLabel(zoneId) {
-    return COMMERCIAL_ZONES.find(zone => zone.id === zoneId)?.label || 'Farm';
+    return commercialZonesForFarm(getCurrentFarm()).find(zone => zone.id === zoneId)?.label || 'Farm';
 }
 
 function zoneHealth(reading, thresholds = {}) {
