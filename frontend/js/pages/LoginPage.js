@@ -5,7 +5,7 @@ import { initFirebase, getAuth, loadUserData } from '../utils/firebase.js';
 
 /* ── GUEST DEMO ACCOUNT (real Firebase account) ── */
 const GUEST_EMAIL    = 'demo@seeddown.com';
-const GUEST_PASSWORD = '666666';
+const GUEST_PASSWORD = 'seeddown2026';
 
 async function _initFirebase() {
     await initFirebase();
