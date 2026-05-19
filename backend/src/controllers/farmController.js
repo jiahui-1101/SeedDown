@@ -7,9 +7,9 @@
  * 3. GEMINI_API_KEY
  */
 
-const fetch = (...args) =>
-    import('node-fetch').then(({ default: f }) => f(...args));
+const fetch = (...args) => import('node-fetch').then(({ default: f }) => f(...args));
 const { analyzePlantImage, analyzePlantDisease } = require('../services/aiService');
+const { getDb } = require('../config/db'); // 确保引入 getDb 放在顶层方便使用
 
 // ─────────────────────────────────────────────────────────────
 // Scan Plants via backend AI provider chain
@@ -158,6 +158,7 @@ function emojiForPlant(name = '') {
     if (key.includes('basil') || key.includes('mint') || key.includes('spinach') || key.includes('cilantro') || key.includes('parsley')) return '🌿';
     return '🌱';
 }
+
 // ─────────────────────────────────────────────────────────────
 // Generate 3D (DA3 Proxy)
 // ─────────────────────────────────────────────────────────────
@@ -165,27 +166,16 @@ async function generate3D(req, res) {
     const { image, mediaType } = req.body;
 
     if (!image) {
-        return res.status(400).json({
-            error: 'No image provided',
-        });
+        return res.status(400).json({ error: 'No image provided' });
     }
 
-    const DA3_URL =
-        process.env.DA3_SERVICE_URL || 'http://localhost:8008';
+    const DA3_URL = process.env.DA3_SERVICE_URL || 'http://localhost:8008';
 
-    // Check DA3 service status
     try {
         const controller = new AbortController();
-
         setTimeout(() => controller.abort(), 3000);
-
-        const statusRes = await fetch(`${DA3_URL}/status`, {
-            signal: controller.signal,
-        });
-
-        if (!statusRes.ok) {
-            throw new Error('DA3 unhealthy');
-        }
+        const statusRes = await fetch(`${DA3_URL}/status`, { signal: controller.signal });
+        if (!statusRes.ok) throw new Error('DA3 unhealthy');
     } catch (err) {
         return res.status(503).json({
             error: 'DA3 service not reachable',
@@ -198,35 +188,23 @@ async function generate3D(req, res) {
     }
 
     try {
-        // Convert base64 to buffer
         const imgBuffer = Buffer.from(image, 'base64');
-
-        // Build multipart form manually
         const boundary = `----NLFBoundary${Date.now()}`;
-
         const parts = [
             `--${boundary}\r\n`,
             `Content-Disposition: form-data; name="image"; filename="farm.jpg"\r\n`,
             `Content-Type: ${mediaType || 'image/jpeg'}\r\n\r\n`,
         ];
-
         const partsAfter = [
             `\r\n--${boundary}\r\n`,
             `Content-Disposition: form-data; name="export_format"\r\n\r\nglb`,
             `\r\n--${boundary}--\r\n`,
         ];
-
         const preamble = Buffer.from(parts.join(''), 'utf8');
         const postamble = Buffer.from(partsAfter.join(''), 'utf8');
-
-        const body = Buffer.concat([
-            preamble,
-            imgBuffer,
-            postamble,
-        ]);
+        const body = Buffer.concat([preamble, imgBuffer, postamble]);
 
         const controller = new AbortController();
-
         setTimeout(() => controller.abort(), 90000);
 
         const inferRes = await fetch(`${DA3_URL}/infer`, {
@@ -241,33 +219,22 @@ async function generate3D(req, res) {
 
         if (!inferRes.ok) {
             const txt = await inferRes.text();
-
-            throw new Error(
-                `DA3 inference failed: ${inferRes.status} — ${txt}`
-            );
+            throw new Error(`DA3 inference failed: ${inferRes.status} — ${txt}`);
         }
 
         const arrayBuf = await inferRes.arrayBuffer();
-
         const glbBuffer = Buffer.from(arrayBuf);
 
         res.set({
             'Content-Type': 'model/gltf-binary',
-            'Content-Disposition':
-                'inline; filename="farm_3d.glb"',
+            'Content-Disposition': 'inline; filename="farm_3d.glb"',
             'Content-Length': glbBuffer.length,
         });
 
         return res.send(glbBuffer);
     } catch (err) {
-        console.error(
-            '[farmController] generate3D error:',
-            err.message
-        );
-
-        return res.status(500).json({
-            error: err.message,
-        });
+        console.error('[farmController] generate3D error:', err.message);
+        return res.status(500).json({ error: err.message });
     }
 }
 
@@ -276,38 +243,19 @@ async function generate3D(req, res) {
 // ─────────────────────────────────────────────────────────────
 async function createFarm(req, res) {
     const {
-        name,
-        location,
-        rackType,
-        plants,
-        targetPlant,
-        analysisGoal,
-        viewMode,
-        photoPreview,
-        description,
-        fieldId,
-        deviceId,
-        serial,
-        packageLevel,
-        goalPriority,
-        thresholds,
-        thresholdSource,
-        thresholdNotes,
-        zoneId,
-        accountMode,
-        farmId,
-        farmSize,
-        zones,
-        commercialDevices,
-        farmMaster,
+        name, location, rackType, plants, targetPlant, analysisGoal, viewMode,
+        photoPreview, description, fieldId, deviceId, serial, packageLevel,
+        goalPriority, thresholds, thresholdSource, thresholdNotes, zoneId,
+        accountMode, farmId, farmSize, zones, commercialDevices, farmMaster,
         commercialStructure,
     } = req.body;
 
     if (!name) {
-        return res.status(400).json({
-            error: 'Farm name required',
-        });
+        return res.status(400).json({ error: 'Farm name required' });
     }
+
+    // ✨ 这里的 req.user.userId 是从 Middleware 解析出来的
+    const currentUserId = req.user.userId;
 
     const farmDoc = {
         name: name.trim(),
@@ -336,34 +284,45 @@ async function createFarm(req, res) {
         viewMode: viewMode || 'realistic',
         hasPhoto: Boolean(photoPreview),
         status: 'active',
+        
+        ownerId: currentUserId, // <--- 【最重要的一步，绑定主人！】
         createdAt: new Date().toISOString(),
     };
 
-    // Try Firestore
     try {
-        const { getDb } = require('../config/db');
-        const docRef = await getDb()
-            .collection('farms')
-            .add(farmDoc);
-
+        const docRef = await getDb().collection('farms').add(farmDoc);
         return res.json({
             success: true,
+            ok: true, // 保持给前端的接口兼容性
             farmId: docRef.id,
             farm: farmDoc,
         });
     } catch (err) {
-        console.warn(
-            '[farmController] Firestore save skipped:',
-            err.message
-        );
+        console.warn('[farmController] Firestore save skipped:', err.message);
+        return res.json({
+            success: true,
+            ok: true,
+            farmId: `local_${Date.now()}`,
+            farm: farmDoc,
+        });
     }
+}
 
-    // Local fallback
-    return res.json({
-        success: true,
-        farmId: `local_${Date.now()}`,
-        farm: farmDoc,
-    });
+// ─────────────────────────────────────────────────────────────
+// 获取属于当前用户的 Farm
+// ─────────────────────────────────────────────────────────────
+async function getFarms(req, res) {
+    try {
+        const currentUserId = req.user.userId;
+        const snapshot = await getDb().collection('farms').where('ownerId', '==', currentUserId).get();
+        
+        const farms = [];
+        snapshot.forEach(doc => farms.push({ id: doc.id, ...doc.data() }));
+
+        res.status(200).json({ ok: true, farms });
+    } catch (error) {
+        res.status(500).json({ ok: false, error: error.message });
+    }
 }
 
 module.exports = {
@@ -371,5 +330,5 @@ module.exports = {
     analyzeDisease,
     generate3D,
     createFarm,
+    getFarms // 导出 getFarms 给 routes 用
 };
-

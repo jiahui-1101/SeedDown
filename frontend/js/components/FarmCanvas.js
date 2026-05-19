@@ -48,6 +48,8 @@ export const FarmCanvas = {
     fullscreenHandler: null,
     controls: null,
     mode: 'beginner',
+    pointerDown: null,
+    userInteracted: false,
 
     init(selector) {
         this.destroy();
@@ -59,6 +61,8 @@ export const FarmCanvas = {
         this.rack = resolveRack(this.field);
         this.slotPlants = resolveSlotPlants(this.field, this.rack);
         this.mode = selector === 'commercialFarmCanvas' || AppState.mode === 'commercial' ? 'commercial' : 'beginner';
+        this.pointerDown = null;
+        this.userInteracted = false;
         this.createDetailPanel();
 
         try {
@@ -101,24 +105,32 @@ export const FarmCanvas = {
 
         this.resizeHandler = () => this.resize();
         window.addEventListener('resize', this.resizeHandler);
+        this.canvas.style.touchAction = 'none';
+        this.canvas.onpointerdown = (event) => {
+            this.pointerDown = { x: event.clientX, y: event.clientY };
+        };
         this.canvas.onclick = (event) => this.handleCanvasClick(event);
         this.canvas.onmousemove = (event) => this.handleCanvasHover(event);
         this.canvas.ondblclick = () => this.toggleFullscreen();
-        if (this.mode === 'commercial') this.enableCommercialControls();
+        this.enableCanvasControls();
 
         this.resize();
         this.animate();
     },
 
-    enableCommercialControls() {
+    enableCanvasControls() {
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.08;
         this.controls.enablePan = true;
         this.controls.enableZoom = true;
-        this.controls.minDistance = 2.2;
-        this.controls.maxDistance = 8.5;
+        this.controls.minDistance = this.mode === 'commercial' ? 2.2 : 1.6;
+        this.controls.maxDistance = this.mode === 'commercial' ? 8.5 : 7.2;
+        this.controls.maxPolarAngle = Math.PI * 0.82;
         this.controls.target.set(0, Math.min(1.3, this.rack.tiers * 0.32), 0);
+        this.controls.addEventListener('start', () => {
+            this.userInteracted = true;
+        });
         this.controls.update();
     },
 
@@ -678,6 +690,11 @@ export const FarmCanvas = {
     },
 
     handleCanvasClick(event) {
+        if (this.pointerDown) {
+            const moved = Math.hypot(event.clientX - this.pointerDown.x, event.clientY - this.pointerDown.y);
+            this.pointerDown = null;
+            if (moved > 6) return;
+        }
         const hit = this.pickSlot(event);
         if (!hit?.userData?.slot) {
             this.showFarmSummary();
@@ -836,7 +853,7 @@ export const FarmCanvas = {
     animate() {
         this.frame += 1;
         if (this.group) {
-            if (this.mode === 'beginner') {
+            if (this.mode === 'beginner' && !this.userInteracted) {
                 this.group.rotation.y = Math.sin(this.frame / 95) * 0.28;
                 this.group.position.y += Math.sin(this.frame / 50) * 0.00025;
             }
@@ -876,8 +893,10 @@ export const FarmCanvas = {
         if (this.canvas) {
             this.canvas.onclick = null;
             this.canvas.onmousemove = null;
+            this.canvas.onpointerdown = null;
             this.canvas.ondblclick = null;
             this.canvas.style.cursor = '';
+            this.canvas.style.touchAction = '';
         }
         if (this.detailPanel) this.detailPanel.remove();
         if (this.fullscreenButton) this.fullscreenButton.remove();
@@ -897,6 +916,8 @@ export const FarmCanvas = {
         this.detailPanel = null;
         this.fullscreenButton = null;
         this.controls = null;
+        this.pointerDown = null;
+        this.userInteracted = false;
         this.mode = 'beginner';
     },
 };
@@ -1119,6 +1140,22 @@ function loadSavedFarms() {
 }
 
 function resolveRack(field) {
+    if (field?.rackConfig && Number(field.rackConfig.tiers) && Number(field.rackConfig.slotsPerTier)) {
+        const tiers = Math.max(1, Number.parseInt(field.rackConfig.tiers, 10) || 3);
+        const slotsPerTier = Math.max(1, Number.parseInt(field.rackConfig.slotsPerTier, 10) || 3);
+        return {
+            id: field.rackConfig.id || 'photo-detected',
+            label: field.rackConfig.label || 'Photo-detected Rack',
+            tiers,
+            slotsPerTier,
+            total: Math.max(
+                Number.parseInt(field.rackConfig.total, 10) || 0,
+                tiers * slotsPerTier,
+                Number.parseInt(field?.plantSlots, 10) || 0
+            ),
+            shape: field.rackConfig.shape || 'rack',
+        };
+    }
     const rawRack = String(field?.rackTypeId || field?.rackType || field?.rackLabel || '').toLowerCase();
     if (rawRack.includes('2')) return RACK_OPTIONS['2-tier'];
     if (rawRack.includes('4')) return RACK_OPTIONS['4-tier'];
