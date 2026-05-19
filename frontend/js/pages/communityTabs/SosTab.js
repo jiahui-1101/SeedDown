@@ -6,6 +6,12 @@ const API = (window.location.hostname === 'localhost' || window.location.hostnam
 
 let currentView = 'all';
 let allPosts    = [];
+// FIX: resolve actual logged-in user instead of hardcoding 'MyFarm'
+function getSosCurrentUser() {
+    return (window.AppState?.currentUser?.name)
+        || localStorage.getItem('username')
+        || 'MyFarm';
+}
 
 const SOS_STYLE = `
 <style id="sosTabStyle">
@@ -177,7 +183,7 @@ function bindSosLogic() {
         try {
             await fetch(`${API}/api/community/posts/sos`, {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ title, content, author:'MyFarm', image:base64Image }),
+                body: JSON.stringify({ title, content, author: getSosCurrentUser(), image:base64Image }),
             });
             modal.style.display = 'none';
             document.getElementById('sosInputTitle').value = '';
@@ -214,7 +220,7 @@ async function loadFeed() {
 
 function renderList() {
     const list = document.getElementById('sosFeedList');
-    const currentUser = 'MyFarm';
+    const currentUser = getSosCurrentUser();
 
     let displayPosts = [];
 
@@ -301,8 +307,8 @@ window.submitComment = async function(postId) {
     const text = input?.value?.trim();
     if (!text) return showToast('warning', 'Comment cannot be empty!');
 
-    const currentUser = 'MyFarm'; // 当前登录用户
-    const authorName = 'HelpfulNeighbor'; // 模拟评论者名字
+    const currentUser = getSosCurrentUser();
+    const authorName = getSosCurrentUser(); // 模拟评论者名字
 
     // 🌟 1. 默默在后台把数据发送给后端，不惊动用户
     try {

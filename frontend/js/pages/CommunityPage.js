@@ -76,8 +76,10 @@ function initTabs() {
  * Fetch Coin Balance
  */
 async function fetchMyCoins() {
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:3000' : window.location.origin;
     try {
-        const res = await fetch('http://localhost:3000/api/community/me');
+        const res = await fetch(`${API_BASE}/api/community/me`);
         const data = await res.json();
         document.getElementById('myCoinsDisplay').innerText = `🍃 ${data.coins} Coins`;
     } catch (e) {

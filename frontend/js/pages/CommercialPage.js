@@ -63,9 +63,21 @@ export function render() {
                     <button id="panelCloseBtn" class="commercial-icon-btn small" aria-label="Hide panel">×</button>
                 </div>
 
-               <div class="ops-scroll">
-                    <section class="ops-section" id="overallDataSection" style="cursor:pointer; border: 2px solid transparent; transition: border-color 0.2s;">
-                        <div class="ops-section-title" id="liveSensorTitle" style="color:#15803d; font-size:12px;">Live Sensors · Overall Farm</div>
+                <div class="ops-scroll">
+                    <section class="ops-section advisor-section">
+                        <div class="ops-section-title">AI Farm Advisor</div>
+                        <div id="ai-overview-text" class="advisor-text">Syncing commercial farm data...</div>
+                    </section>
+
+                    <section class="ops-section">
+                        <div class="ops-section-title">Farm Master / Zones</div>
+                        <div class="zone-overview-grid">
+                            ${zoneOverviewCards(farm, rack)}
+                        </div>
+                    </section>
+
+                    <section class="ops-section">
+                        <div class="ops-section-title" id="liveSensorTitle">Live Sensors · ${zoneLabel(selectedZoneId)}</div>
                         <div class="ops-sensor-grid">
                             ${sensorCard('Temp', 'pro-temp', '--', 'temp')}
                             ${sensorCard('Humid', 'pro-humid', '--', 'humid')}
@@ -76,24 +88,19 @@ export function render() {
                             ${sensorCard('EC', 'pro-ec', '--', 'ec')}
                             ${sensorCard('CO2', 'pro-co2', '--', 'co2')}
                         </div>
-                        <div style="text-align:center; font-size:10px; color:#047857; margin-top:12px; font-weight:bold;">
-                            👉 Click here to view Overall Historical Data
-                        </div>
                     </section>
 
-                    <section class="ops-section advisor-section">
-                        <div class="ops-section-title">AI Farm Advisor</div>
-                        <div id="ai-overview-text" class="advisor-text">Syncing commercial farm data...</div>
+                    <section class="ops-section ops-metrics">
+                        <button id="profit-card" class="metric-tile">
+                            <span>Est. Profit</span>
+                            <strong id="pro-profit">RM --</strong>
+                        </button>
+                        <button id="energy-card" class="metric-tile">
+                            <span>Energy Cost</span>
+                            <strong id="pro-energy">-- kWh</strong>
+                        </button>
                     </section>
 
-                    <section class="ops-section">
-                        <div class="ops-section-title">Production Zones</div>
-                        <div class="zone-overview-grid">
-                            ${zoneOverviewCards(farm, rack)}
-                        </div>
-                    </section>
-
-            
                     <section class="ops-section">
                         <div class="ops-section-title">Tools</div>
                         <div class="ops-tool-grid">
@@ -130,7 +137,15 @@ export function render() {
 }
 
 function bindEvents() {
-    
+    document.getElementById('profit-card')?.addEventListener('click', () => {
+        clearInterval(AppState.proInterval);
+        showScreen('profit-detail');
+    });
+
+    document.getElementById('energy-card')?.addEventListener('click', () => {
+        clearInterval(AppState.proInterval);
+        showScreen('energy-detail');
+    });
 
     document.getElementById('comBackBtn')?.addEventListener('click', () => {
         clearInterval(AppState.proInterval);
@@ -179,20 +194,6 @@ function bindEvents() {
             AppState.currentZoneId = selectedZoneId;
             updateZoneSelectionUI();
             syncSelectedZoneData();
-        });
-    });
-
-    // 💡 这是你刚刚加的：绑定 Overall Data 区域的点击跳转
-    document.getElementById('overallDataSection')?.addEventListener('click', () => {
-        // 跳转前先让后台的自动刷新停下来，避免卡顿
-        clearInterval(AppState.proInterval);
-        
-        // 跳转到你原本就有的 SensorDetailPage
-        showScreen('sensor-detail', { 
-            key: 'temp',             // 进去默认先显示温度历史图表
-            name: 'Overall Farm',    // 页面标题会显示 Overall Farm Analysis
-            from: 'dash-c',
-            zoneId: 'overall'        // 这个最重要！告诉详情页：“我要看全农场的数据”
         });
     });
 }
@@ -289,6 +290,8 @@ function initProDashboard() {
             const estProfit = Math.max(0, plantTotal * 1.35 + light * 0.012).toFixed(2);
             const energyCost = Math.max(0, temp * 0.65 + plantTotal * 0.18).toFixed(1);
 
+            setText('pro-profit', `RM ${estProfit}`);
+            setText('pro-energy', `${energyCost} kWh`);
             setText('pro-temp', `${temp.toFixed(1)}°C`);
             setText('pro-humid', `${humid}%`);
             setText('pro-light', light);
@@ -373,6 +376,8 @@ function applySensorReading(r) {
     const estProfit = Math.max(0, plantTotal * 1.35 + light * 0.012).toFixed(2);
     const energyCost = Math.max(0, temp * 0.65 + plantTotal * 0.18).toFixed(1);
 
+    setText('pro-profit', `RM ${estProfit}`);
+    setText('pro-energy', `${energyCost} kWh`);
     setText('pro-temp', `${temp.toFixed(1)}°C`);
     setText('pro-humid', `${humid}%`);
     setText('pro-light', light);
@@ -508,8 +513,12 @@ async function assignCommercialDevice() {
         persistCurrentFarm(farm);
         selectedZoneId = zoneId;
         AppState.currentZoneId = selectedZoneId;
-        renderZoneOverview();
-        updateZoneSelectionUI();
+        // FIX: defer one frame so the overlay has closed and the zone grid is in DOM
+        // before renderZoneOverview -> bindZoneCards runs querySelectorAll
+        requestAnimationFrame(() => {
+            renderZoneOverview();
+            updateZoneSelectionUI();
+        });
         status.style.color = '#047857';
         status.textContent = `Assigned ${data.device.deviceId} to ${zoneId}`;
     } catch (error) {
@@ -659,14 +668,6 @@ function bindZoneCards() {
             AppState.currentZoneId = selectedZoneId;
             updateZoneSelectionUI();
             syncSelectedZoneData();
-        });
-        card.addEventListener('dblclick', () => {
-            const zoneId = card.getAttribute('data-zone');
-            clearInterval(AppState.proInterval);
-            showScreen('zone-detail', {
-                zoneId,
-                from: 'dash-c',
-            });
         });
     });
 }
