@@ -24,13 +24,42 @@ const SERIAL_RULES = [
 ];
 
 const DEMO_DEVICE_BY_SERIAL = {
-  'SD-COM-FRM-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1' },
-  'SD-COM-MST-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1' },
-  'SD-COM-ZON-01001': { deviceId: 'commercial-zone-node-1', deviceToken: 'sd_demo_commercial_zone_node_1' },
-  'SD-COM-ZON-01002': { deviceId: 'commercial-zone-node-2', deviceToken: 'sd_demo_commercial_zone_node_2' },
-  'SD-COM-ZON-01003': { deviceId: 'commercial-zone-node-3', deviceToken: 'sd_demo_commercial_zone_node_3' },
+  'SD-BGN-STR-00123': { deviceId: 'beginner_starter', deviceToken: 'sd_demo_beginner_starter', fieldId: 'field_beginner_starter' },
+  'SD-BGN-STD-00456': { deviceId: 'beginner_standard', deviceToken: 'sd_demo_beginner_standard', fieldId: 'field_beginner_standard' },
+  'SD-BGN-PRO-00789': { deviceId: 'beginner_pro', deviceToken: 'sd_demo_beginner_pro', fieldId: 'field_beginner_pro' },
+  'SD-COM-FRM-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1', farmId: 'farm_commercial_demo_001', zoneId: 'farm_master' },
+  'SD-COM-MST-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1', farmId: 'farm_commercial_demo_001', zoneId: 'farm_master' },
+  'SD-COM-ZON-01001': { deviceId: 'commercial-zone-node-1', deviceToken: 'sd_demo_commercial_zone_node_1', farmId: 'farm_commercial_demo_001', zoneId: 'zone_A' },
+  'SD-COM-ZON-01002': { deviceId: 'commercial-zone-node-2', deviceToken: 'sd_demo_commercial_zone_node_2', farmId: 'farm_commercial_demo_001', zoneId: 'zone_B' },
+  'SD-COM-ZON-01003': { deviceId: 'commercial-zone-node-3', deviceToken: 'sd_demo_commercial_zone_node_3', farmId: 'farm_commercial_demo_001', zoneId: 'zone_C' },
 };
 
+
+const DEMO_DEVICE_BY_TOKEN = Object.entries(DEMO_DEVICE_BY_SERIAL).reduce((acc, [serial, device]) => {
+  acc[device.deviceToken] = { serial, ...device };
+  return acc;
+}, {});
+
+function demoDeviceFromToken(token) {
+  const demo = DEMO_DEVICE_BY_TOKEN[String(token || '').trim()];
+  if (!demo) return null;
+  const parsed = parseSerial(demo.serial);
+  return {
+    deviceId: demo.deviceId,
+    serial: demo.serial,
+    deviceType: parsed.deviceType,
+    packageLevel: parsed.packageLevel,
+    deviceToken: demo.deviceToken,
+    userId: null,
+    farmId: demo.farmId || (parsed.deviceType === 'commercial' ? 'farm_commercial_demo_001' : null),
+    fieldId: demo.fieldId || null,
+    zoneId: demo.zoneId || null,
+    nodeType: parsed.packageLevel,
+    status: 'assigned',
+    isOnline: true,
+    lastSeen: new Date(),
+  };
+}
 function normalizeSerial(serial = '') {
   return String(serial).trim().toUpperCase();
 }
@@ -143,7 +172,9 @@ async function getDevice(deviceId) {
 
 async function getDeviceByToken(token) {
   if (!token) return null;
-  return DeviceModel.findOne({ deviceToken: String(token).trim() }).lean();
+  const normalized = String(token).trim();
+  const stored = await DeviceModel.findOne({ deviceToken: normalized }).lean();
+  return stored || demoDeviceFromToken(normalized);
 }
 
 async function getDeviceByTokenOrThrow(token) {

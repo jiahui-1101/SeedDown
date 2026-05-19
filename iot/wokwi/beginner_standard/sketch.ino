@@ -38,8 +38,8 @@
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
 const char* BACKEND_BASE_URL = "https://nextlevelfarm.onrender.com";
-const char* DEVICE_ID = "dev_bgn_std_demo";
-const char* DEVICE_TOKEN = "PASTE_DEVICE_TOKEN_HERE";
+const char* DEVICE_ID = "beginner_standard";
+const char* DEVICE_TOKEN = "sd_demo_beginner_standard";
 const int DEFAULT_INTERVAL_SECONDS = 2;
 
 // Real sensors
@@ -192,6 +192,14 @@ void executeCommand(const String& command) {
     water ? "ON" : "off", light ? "ON" : "off", fan ? "ON" : "off", buzzer ? "ON" : "off", phWarn ? "ON" : "off");
 }
 
+void clearOutputs() {
+  digitalWrite(WATER_LED_PIN, LOW);
+  digitalWrite(LIGHT_LED_PIN, LOW);
+  digitalWrite(FAN_LED_PIN, LOW);
+  digitalWrite(BUZZER_LED_PIN, LOW);
+  digitalWrite(PH_LED_PIN, LOW);
+}
+
 void pollAndExecuteCommand() {
   String path = String("/api/sensors/command?deviceId=") + DEVICE_ID + "&format=text";
   String response = httpGet(path);
@@ -270,11 +278,7 @@ void loop() {
   bool fanOn = tempHigh || gasDanger;
   bool buzzerOn = gasDanger || waterLow;
 
-  digitalWrite(WATER_LED_PIN, soilDry ? HIGH : LOW);
-  digitalWrite(LIGHT_LED_PIN, lightLow ? HIGH : LOW);
-  digitalWrite(FAN_LED_PIN, fanOn ? HIGH : LOW);
-  digitalWrite(BUZZER_LED_PIN, buzzerOn ? HIGH : LOW);
-  digitalWrite(PH_LED_PIN, phBad ? HIGH : LOW);
+  clearOutputs(); // Physical LEDs are driven only after the backend command is received.
 
   Serial.println();
   Serial.println("========== SeedDown Beginner Standard ==========");
@@ -288,7 +292,7 @@ void loop() {
   Serial.printf("pH POT3 raw: %d | pH %.2f | Range %.1f-%.1f | %s\n", phRaw, ph, PH_MIN, PH_MAX, statusLabel(phBad).c_str());
   Serial.printf("Gas MQ-2 real sensor raw: %d | Danger > %d | %s\n", gasRaw, GAS_DANGER, statusLabel(gasDanger).c_str());
 
-  Serial.println("----- Output Status -----");
+  Serial.println("----- Local Threshold Preview (backend command drives LEDs) -----");
   Serial.printf("WATER_ON: %s\n", soilDry ? "ON" : "off");
   Serial.printf("LIGHT_ON: %s\n", lightLow ? "ON" : "off");
   Serial.printf("FAN_ON: %s\n", fanOn ? "ON" : "off");

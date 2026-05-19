@@ -1,15 +1,16 @@
 /*
-  SeedDown Wokwi Simulation - Beginner Pro
+  SeedDown Wokwi Simulation - Commercial Zone Node
 
   Real components:
   - DHT22 temperature/humidity sensor: GPIO15
-  - HC-SR04 water level distance: TRIG GPIO13 / ECHO GPIO12
+  - HC-SR04 zone reservoir distance: TRIG GPIO13 / ECHO GPIO12
 
   Simulated sensors:
   - POT1 Soil Moisture: GPIO36
   - POT3 pH Sensor: GPIO39
   - POT5 EC Sensor: GPIO35
   - POT6 CO2 Sensor: GPIO32
+  - POT7 YF-S201 Water Flow: GPIO14
 
   Real Wokwi sensors:
   - LDR Photoresistor Sensor AO: GPIO33
@@ -18,18 +19,19 @@
   Simulated actuators:
   - Blue LED WATER_ON / Pump: GPIO2
   - Yellow LED LIGHT_ON / Grow Light: GPIO4
-  - White LED FAN_ON / Fan: GPIO16
-  - Red LED BUZZER / Alarm: GPIO17
+  - White LED FAN_ON / Zone Fan: GPIO16
+  - Red LED BUZZER / Zone Alarm: GPIO17
   - Orange LED PH_WARNING: GPIO5
   - Green LED FERT_ALERT: GPIO18
   - Blue LED CO2_LOW: GPIO19
+  - Red LED GAS_ALERT: GPIO21
 
-  Plant: Basil | Goal: Fast Harvest
+  Zone: zone_B | Plant: Tomato | Goal: Maximum Yield
   Test guide:
   - Turn POT1 (Soil) low         -> WATER_ON
   - Lower LDR light level        -> LIGHT_ON
   - Turn POT3 (pH) to extreme    -> PH_WARNING
-  - Raise MQ-2 gas reading       -> FAN_ON + BUZZER
+  - Raise MQ-2 gas reading       -> FAN_ON + BUZZER + GAS_ALERT
   - Turn POT5 (EC) to extreme    -> FERT_ALERT Green LED
   - Turn POT6 (CO2) low          -> CO2_LOW Blue LED
 */
@@ -42,9 +44,11 @@
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
 const char* BACKEND_BASE_URL = "https://nextlevelfarm.onrender.com";
-const char* DEVICE_ID = "beginner_pro";
-const char* DEVICE_TOKEN = "sd_demo_beginner_pro";
+const char* DEVICE_ID = "commercial-zone-node-2";
+const char* DEVICE_TOKEN = "sd_demo_commercial_zone_node_2";
 const int DEFAULT_INTERVAL_SECONDS = 2;
+
+const char* ZONE_ID = "zone_B";
 
 // Real sensors
 const int DHT_PIN = 15;
@@ -58,6 +62,7 @@ const int PH_PIN = 39;
 const int GAS_PIN = 34;
 const int EC_PIN = 35;
 const int CO2_PIN = 32;
+const int FLOW_PIN = 14;
 
 // Outputs
 const int WATER_LED_PIN = 2;
@@ -67,22 +72,24 @@ const int BUZZER_LED_PIN = 17;
 const int PH_LED_PIN = 5;
 const int FERT_LED_PIN = 18;
 const int CO2_LED_PIN = 19;
+const int GAS_LED_PIN = 21;
 
 DHTesp dht;
 int offlineQueueCount = 0;
 
 // These thresholds are set by AI in production based on plant x goal.
-const float TEMP_MAX = 28.0;       // Basil + Fast Harvest: warm but safe.
-const float HUMIDITY_MIN = 60.0;   // Basil + Fast Harvest: humidity floor.
-const int SOIL_TRIGGER = 2000;     // Basil + Fast Harvest: water when soil ADC falls below this dry threshold.
-const int LIGHT_TRIGGER = 1200;    // Basil + Fast Harvest: turn light on when ADC falls below this dark threshold.
-const float PH_MIN = 5.5;          // Basil + Fast Harvest: lower pH safety bound.
-const float PH_MAX = 6.5;          // Basil + Fast Harvest: upper pH safety bound.
-const float EC_MIN = 1.4;          // Basil + Fast Harvest: minimum nutrient strength.
-const float EC_MAX = 2.0;          // Basil + Fast Harvest: maximum nutrient strength.
-const int CO2_MIN_PPM = 1000;      // Basil + Fast Harvest: CO2 enrichment target.
+const float TEMP_MAX = 28.0;       // Tomato + Maximum Yield: warm upper limit.
+const float HUMIDITY_MIN = 60.0;   // Tomato + Maximum Yield: humidity floor.
+const int SOIL_TRIGGER = 2200;     // Tomato + Maximum Yield: water when soil ADC falls below this dry threshold.
+const int LIGHT_TRIGGER = 1200;    // Tomato + Maximum Yield: turn light on when ADC falls below this dark threshold.
+const float PH_MIN = 5.5;          // Tomato + Maximum Yield: lower pH safety bound.
+const float PH_MAX = 6.5;          // Tomato + Maximum Yield: upper pH safety bound.
+const float EC_MIN = 2.5;          // Tomato + Maximum Yield: minimum nutrient strength.
+const float EC_MAX = 3.5;          // Tomato + Maximum Yield: maximum nutrient strength.
+const int CO2_MIN_PPM = 1000;      // Tomato + Maximum Yield: CO2 enrichment target.
 const int GAS_DANGER = 3000;       // Shared safety threshold for MQ-2 gas danger.
-const float WATER_LOW_CM = 20.0;   // Water reservoir distance above this means low water.
+const float WATER_LOW_CM = 20.0;   // Zone reservoir distance above this means low water.
+const float FLOW_MIN_LPM = 0.5;     // Tomato + Maximum Yield: minimum irrigation flow rate.
 
 float readDistanceCm() {
   digitalWrite(TRIG_PIN, LOW);
@@ -105,6 +112,10 @@ float toECValue(int raw) {
 
 int toCO2PPM(int raw) {
   return 400 + (int)((raw / 4095.0) * 4600.0);
+}
+
+float toFlowLpm(int raw) {
+  return (raw / 4095.0) * 5.0;
 }
 
 String statusLabel(bool warning) {
@@ -204,6 +215,7 @@ void executeCommand(const String& command) {
   bool phWarn = command.indexOf("PH_WARNING") >= 0;
   bool fert = command.indexOf("FERT_ALERT") >= 0;
   bool co2 = command.indexOf("CO2_LOW") >= 0;
+  bool gas = command.indexOf("GAS_ALERT") >= 0;
   digitalWrite(WATER_LED_PIN, water ? HIGH : LOW);
   digitalWrite(LIGHT_LED_PIN, light ? HIGH : LOW);
   digitalWrite(FAN_LED_PIN, fan ? HIGH : LOW);
@@ -211,9 +223,10 @@ void executeCommand(const String& command) {
   digitalWrite(PH_LED_PIN, phWarn ? HIGH : LOW);
   digitalWrite(FERT_LED_PIN, fert ? HIGH : LOW);
   digitalWrite(CO2_LED_PIN, co2 ? HIGH : LOW);
-  Serial.printf("[Command] WATER=%s LIGHT=%s FAN=%s BUZZER=%s PH=%s FERT=%s CO2=%s\n",
+  digitalWrite(GAS_LED_PIN, gas ? HIGH : LOW);
+  Serial.printf("[Command] WATER=%s LIGHT=%s FAN=%s BUZZER=%s PH=%s FERT=%s CO2=%s GAS=%s\n",
     water ? "ON" : "off", light ? "ON" : "off", fan ? "ON" : "off", buzzer ? "ON" : "off",
-    phWarn ? "ON" : "off", fert ? "ON" : "off", co2 ? "ON" : "off");
+    phWarn ? "ON" : "off", fert ? "ON" : "off", co2 ? "ON" : "off", gas ? "ON" : "off");
 }
 
 void clearOutputs() {
@@ -224,6 +237,7 @@ void clearOutputs() {
   digitalWrite(PH_LED_PIN, LOW);
   digitalWrite(FERT_LED_PIN, LOW);
   digitalWrite(CO2_LED_PIN, LOW);
+  digitalWrite(GAS_LED_PIN, LOW);
 }
 
 void pollAndExecuteCommand() {
@@ -245,8 +259,8 @@ void pollAndExecuteCommand() {
 void printBootInfo() {
   Serial.println();
   Serial.println("==================================================");
-  Serial.println("SeedDown Wokwi Package: Beginner Pro");
-  Serial.println("Plant: Basil | Goal: Fast Harvest");
+  Serial.println("SeedDown Wokwi Package: Commercial Zone Node");
+  Serial.printf("Zone: %s | Plant: Tomato | Goal: Maximum Yield\n", ZONE_ID);
   Serial.println("--------------------------------------------------");
   Serial.println("Sensor mapping:");
   Serial.println("  DHT22 real sensor       -> GPIO15");
@@ -257,6 +271,7 @@ void printBootInfo() {
   Serial.println("  MQ-2 Gas Sensor AOUT    -> GPIO34 ADC");
   Serial.println("  POT5 EC Sensor          -> GPIO35 ADC");
   Serial.println("  POT6 CO2 Sensor         -> GPIO32 ADC");
+  Serial.println("  POT7 YF-S201 Flow       -> GPIO14 ADC");
   Serial.println("Output mapping:");
   Serial.println("  WATER_ON Blue           -> GPIO2");
   Serial.println("  LIGHT_ON Yellow         -> GPIO4");
@@ -265,6 +280,7 @@ void printBootInfo() {
   Serial.println("  PH_WARNING Orange       -> GPIO5");
   Serial.println("  FERT_ALERT Green        -> GPIO18");
   Serial.println("  CO2_LOW Blue            -> GPIO19");
+  Serial.println("  GAS_ALERT Red           -> GPIO21");
   Serial.println("==================================================");
 }
 
@@ -281,6 +297,7 @@ void setup() {
   pinMode(PH_LED_PIN, OUTPUT);
   pinMode(FERT_LED_PIN, OUTPUT);
   pinMode(CO2_LED_PIN, OUTPUT);
+  pinMode(GAS_LED_PIN, OUTPUT);
 
   printBootInfo();
   if (LittleFS.begin(true)) Serial.println("[LittleFS] ready for offline queue");
@@ -299,9 +316,11 @@ void loop() {
   int gasRaw = analogRead(GAS_PIN);
   int ecRaw = analogRead(EC_PIN);
   int co2Raw = analogRead(CO2_PIN);
+  int flowRaw = analogRead(FLOW_PIN);
   float ph = toPhValue(phRaw);
   float ec = toECValue(ecRaw);
   int co2 = toCO2PPM(co2Raw);
+  float flowLpm = toFlowLpm(flowRaw);
 
   bool tempHigh = air.temperature > TEMP_MAX;
   bool humidityLow = air.humidity < HUMIDITY_MIN;
@@ -312,6 +331,7 @@ void loop() {
   bool waterLow = distanceCm > WATER_LOW_CM;
   bool ecBad = ec < EC_MIN || ec > EC_MAX;
   bool co2Low = co2 < CO2_MIN_PPM;
+  bool flowLow = flowLpm < FLOW_MIN_LPM;
 
   bool fanOn = tempHigh || gasDanger;
   bool buzzerOn = gasDanger || waterLow;
@@ -319,8 +339,11 @@ void loop() {
   clearOutputs(); // Physical LEDs are driven only after the backend command is received.
 
   Serial.println();
-  Serial.println("========== SeedDown Beginner Pro ==========");
-  Serial.println("Plant: Basil | Goal: Fast Harvest");
+  Serial.println("========== SeedDown Commercial Zone Node ==========");
+  Serial.printf("Zone ID: %s | Plant: Tomato | Goal: Maximum Yield\n", ZONE_ID);
+  Serial.println("----- Sensor POST payload fields -----");
+  Serial.printf("{ zoneId: \"%s\", temperature: %.1f, humidity: %.1f, soilRaw: %d, lightRaw: %d, ph: %.2f, gasRaw: %d, ec: %.2f, co2Ppm: %d, waterDistanceCm: %.1f, waterFlowLpm: %.2f }\n",
+                ZONE_ID, air.temperature, air.humidity, soilRaw, lightRaw, ph, gasRaw, ec, co2, distanceCm, flowLpm);
   Serial.println("----- Sensor Readings -----");
   Serial.printf("Temperature: %.1f degC | Threshold max %.1f | %s\n", air.temperature, TEMP_MAX, statusLabel(tempHigh).c_str());
   Serial.printf("Humidity: %.1f %% | Threshold min %.1f | %s\n", air.humidity, HUMIDITY_MIN, statusLabel(humidityLow).c_str());
@@ -331,6 +354,7 @@ void loop() {
   Serial.printf("Gas MQ-2 real sensor raw: %d | Danger > %d | %s\n", gasRaw, GAS_DANGER, statusLabel(gasDanger).c_str());
   Serial.printf("EC POT5 raw: %d | EC %.2f ms/cm | Range %.1f-%.1f | %s\n", ecRaw, ec, EC_MIN, EC_MAX, statusLabel(ecBad).c_str());
   Serial.printf("CO2 POT6 raw: %d | CO2 %d ppm | Min %d | %s\n", co2Raw, co2, CO2_MIN_PPM, statusLabel(co2Low).c_str());
+  Serial.printf("Flow POT7 raw: %d | Flow %.2f L/min | Min %.1f | %s\n", flowRaw, flowLpm, FLOW_MIN_LPM, statusLabel(flowLow).c_str());
 
   Serial.println("----- Local Threshold Preview (backend command drives LEDs) -----");
   Serial.printf("WATER_ON: %s\n", soilDry ? "ON" : "off");
@@ -340,10 +364,13 @@ void loop() {
   Serial.printf("PH_WARNING: %s\n", phBad ? "ON" : "off");
   Serial.printf("FERT_ALERT: %s\n", ecBad ? "ON" : "off");
   Serial.printf("CO2_LOW: %s\n", co2Low ? "ON" : "off");
-  Serial.println("===========================================");
+  Serial.printf("GAS_ALERT: %s\n", gasDanger ? "ON" : "off");
+  Serial.printf("FLOW_LOW command expectation: %s\n", flowLow ? "WATER_ON" : "off");
+  Serial.println("===================================================");
 
   String payload = String("{\"deviceId\":\"") + DEVICE_ID + "\"" +
-    ",\"packageLevel\":\"pro\"" +
+    ",\"zoneId\":\"" + ZONE_ID + "\"" +
+    ",\"packageLevel\":\"zone_pro\"" +
     ",\"temperature\":" + String(air.temperature, 2) +
     ",\"humidity\":" + String(air.humidity, 2) +
     ",\"waterDistanceCm\":" + String(distanceCm, 2) +
@@ -356,6 +383,8 @@ void loop() {
     ",\"ec\":" + String(ec, 2) +
     ",\"co2Raw\":" + co2Raw +
     ",\"co2Ppm\":" + co2 +
+    ",\"waterFlowRaw\":" + flowRaw +
+    ",\"waterFlowLpm\":" + String(flowLpm, 2) +
     ",\"intervalSeconds\":" + DEFAULT_INTERVAL_SECONDS +
     "}";
 
