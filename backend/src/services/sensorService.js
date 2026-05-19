@@ -103,7 +103,6 @@ function normalizeReading(body = {}, deviceContext = {}) {
     ec: numberOrUndefined(body.ec),
     co2Raw: numberOrUndefined(body.co2Raw),
     co2Ppm: numberOrUndefined(body.co2Ppm),
-    energyKwh: numberOrUndefined(body.energyKwh ?? body.powerKwh),
     intervalSeconds: numberOrUndefined(body.intervalSeconds),
   };
 }

@@ -24,12 +24,7 @@ const pages = {
     disease: () => import("./pages/DiseaseAnalysisPage.js").then((m) => m.render()),
     community: () => import("./pages/CommunityPage.js").then((m) => m.render()),
     feature: (params) => import("./pages/FeaturePage.js").then((m) => m.render(params)),
-    "sensor-detail": (params) => {
-    const isCommercial = params?.from === 'dash-c' || params?.from === 'zone-detail' || params?.mode === 'commercial';
-    const page = isCommercial ? "./pages/SensorDetailPageCommercial.js" : "./pages/SensorDetailPage.js";
-    return import(page).then((m) => m.render(params));
-},
-"zone-detail": (params) => import("./pages/ZoneDetailPage.js").then((m) => m.render(params)),
+    "sensor-detail": (p) => import("./pages/SensorDetailPage.js").then((m) => m.render(p)),
     profile: () => import("./pages/ProfilePage.js").then((m) => m.render()),
     "profit-detail": () => import("./pages/ProfitDetailPage.js").then((m) => m.render()),
     "energy-detail": () => import("./pages/EnergyDetailPage.js").then((m) => m.render()),

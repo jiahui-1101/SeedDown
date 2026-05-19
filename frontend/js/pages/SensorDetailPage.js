@@ -158,13 +158,7 @@ function buildChart(historyRows) {
 }
 
 function bindEvents({ backTarget, sensorKey, unit }) {
-   document.getElementById('detailBackBtn').onclick = () => {
-    if (params?.from === 'zone-detail') {
-        showScreen('zone-detail', params.returnParams || {});
-    } else {
-        showScreen(backTarget);
-    }
-};
+    document.getElementById('detailBackBtn').onclick = () => showScreen(backTarget);
 
     const tooltip = document.getElementById('chartTooltip');
     document.querySelectorAll('.chart-slice').forEach(slice => {
@@ -253,3 +247,4 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+

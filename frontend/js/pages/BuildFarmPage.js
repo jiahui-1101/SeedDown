@@ -6,7 +6,7 @@
 import { AppState } from '../store.js';
 import { saveFarmsToFirestore } from '../utils/firebase.js';
 import { showToast } from '../utils/toast.js';
-import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=commercial-polish-1';
+import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js';
 import jsQR from 'jsqr';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
@@ -517,10 +517,10 @@ function renderCommercialZoneThresholdStep(content) {
         input.addEventListener('change', event => {
             const zone = commercialStructure.zones.find(item => item.zone_id === event.target.dataset.zone);
             if (!zone) return;
-            syncCommercialZonePlantItems(zone, parseCommercialPlantItems(event.target.value));
+            zone.plants = parseTargetPlants(event.target.value).map(name => name.toLowerCase());
+            zone.crop = parseTargetPlants(event.target.value).join(', ') || zone.crop;
             commercialFarmThresholds = null;
             delete commercialZoneThresholds[zone.zone_id];
-            renderCommercialZoneThresholdStep(content);
         });
     });
     document.querySelectorAll('.commercial-threshold-input').forEach(input => {
@@ -635,11 +635,8 @@ function renderCommercialOverviewStep(content) {
 function initCommercialPreviewCanvas() {
     const canvas = document.getElementById('commercialPreviewCanvas');
     if (!canvas) return;
-    const previewFarm = buildCommercialPreviewFarm();
-    AppState.currentFarm = previewFarm;
-    AppState.currentFarmId = previewFarm.id;
-    AppState.mode = 'commercial';
-    CommercialFarmCanvas.init('commercialPreviewCanvas', previewFarm);
+    AppState.currentFarm = buildCommercialPreviewFarm();
+    CommercialFarmCanvas.init('commercialPreviewCanvas');
     CommercialFarmCanvas.setCameraFrame?.(false);
 }
 
@@ -648,12 +645,12 @@ function buildCommercialPreviewFarm() {
     const zones = commercialStructure.zones || [];
     const plants = [];
     zones.forEach((zone, zoneIndex) => {
-        const zonePlants = commercialPlantItemsForZone(zone);
-        zonePlants.forEach((item, plantIndex) => {
+        const zonePlants = zone.plants?.length ? zone.plants : ['lettuce'];
+        zonePlants.forEach((plant, plantIndex) => {
             plants.push({
-                name: item.name,
-                species: String(item.name).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-                slots: item.count,
+                name: plant,
+                species: plant,
+                slots: Math.max(3, Math.ceil(12 / Math.max(1, zonePlants.length))),
                 zoneId: zone.zone_id,
                 zoneName: zone.name,
                 slotIndex: zoneIndex + plantIndex * Math.max(1, zones.length),
@@ -701,9 +698,8 @@ function commercialStructureHtml() {
                     <div style="min-width:0;">
                         <div style="font-size:13px;font-weight:900;">${escapeHTML(zone.name)} · ${escapeHTML(zone.crop || 'Mixed Crops')}</div>
                         <div style="font-size:11px;color:var(--muted);margin-top:3px;">${escapeHTML(zone.notes || '')}</div>
-                        <div style="font-size:10px;color:var(--sub);margin-top:5px;line-height:1.35;">${escapeHTML(commercialPlantItemsForZone(zone).map(item => `${item.name} x ${item.count}`).join(' · '))}</div>
                     </div>
-                    <span style="padding:5px 8px;border-radius:999px;background:var(--accent-l);color:var(--accent);font-size:10px;font-weight:900;white-space:nowrap;">${commercialZonePlantCount(zone)} plants</span>
+                    <span style="padding:5px 8px;border-radius:999px;background:var(--accent-l);color:var(--accent);font-size:10px;font-weight:900;white-space:nowrap;">Zone Node</span>
                 </div>
             `).join('')}
         </div>
@@ -737,7 +733,7 @@ function farmThresholdCardHtml() {
 
 function zoneThresholdCardHtml(zone) {
     const threshold = commercialZoneThresholds[zone.zone_id];
-    const plants = formatCommercialPlantItems(commercialPlantItemsForZone(zone));
+    const plants = (zone.plants || []).join(', ');
     const thresholds = threshold?.thresholds || {};
     return `
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:12px;">
@@ -748,16 +744,8 @@ function zoneThresholdCardHtml(zone) {
                 </div>
                 <span style="font-size:10px;font-weight:900;color:${threshold ? 'var(--accent)' : 'var(--muted)'};">${threshold ? 'READY' : 'PENDING'}</span>
             </div>
-            <label style="display:block;margin-bottom:10px;">
-                <span style="display:block;font-size:10px;font-weight:900;color:var(--sub);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px;">Detected plants in this zone</span>
-                <textarea class="zone-plant-input" data-zone="${zone.zone_id}" placeholder="tomato x 8&#10;lettuce x 12"
-                    style="width:100%;min-height:82px;resize:vertical;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font-size:13px;outline:none;line-height:1.45;">${escapeHTML(plants)}</textarea>
-                <span style="display:block;font-size:10px;color:var(--muted);margin-top:4px;">Use one line per plant. Example: cucumber x 6. The 3D twin uses these counts directly.</span>
-            </label>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-                ${miniThreshold('Detected count', `${commercialZonePlantCount(zone)} plants`)}
-                ${miniThreshold('3D source', 'zone scan')}
-            </div>
+            <input class="zone-plant-input" data-zone="${zone.zone_id}" value="${escapeHTML(plants)}" placeholder="plants in this zone"
+                style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font-size:13px;outline:none;margin-bottom:10px;">
             <div id="commercialSafety_${zone.zone_id}" style="display:none;margin-bottom:10px;padding:8px 10px;border-radius:10px;background:rgba(245,158,11,.12);color:#b45309;font-size:11px;font-weight:800;line-height:1.35;"></div>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;">
                 ${commercialThresholdInputsHtml(zone, thresholds, 'zone')}
@@ -823,7 +811,7 @@ function commercialZoneThresholdItems() {
 
 function commercialThresholdAnalysis(zone, threshold, scope = 'zone') {
     const goals = commercialGoals.map(labelCommercialGoal).join(', ') || 'Commercial optimisation';
-    const plants = commercialPlantItemsForZone(zone).map(item => `${item.name} x ${item.count}`).join(', ') || zone.crop || 'mixed crops';
+    const plants = (zone.plants || []).join(', ') || zone.crop || 'mixed crops';
     const zoneLabel = scope === 'farm' ? 'the whole farm' : zone.name;
     if (!threshold) {
         return `Generate thresholds to explain recommended sensor ranges, safety limits, and actuator timing for ${escapeHTML(zoneLabel)}. SeedDown will use the selected commercial goals, detected crops, and available device package to decide which thresholds should be active. Plants: ${escapeHTML(plants)}. Goals: ${escapeHTML(goals)}.`;
@@ -845,7 +833,7 @@ function commercialThresholdAnalysis(zone, threshold, scope = 'zone') {
 
 function allCommercialPlants() {
     ensureCommercialStructure();
-    const plants = commercialStructure.zones.flatMap(zone => commercialPlantItemsForZone(zone).map(item => item.name));
+    const plants = commercialStructure.zones.flatMap(zone => zone.plants?.length ? zone.plants : [zone.crop || 'lettuce']);
     return [...new Set(plants.map(plant => String(plant).trim()).filter(Boolean))];
 }
 
@@ -975,42 +963,27 @@ async function analyzeCommercialZones() {
 function buildCommercialStructureFromPhoto() {
     const size = fieldInfo.rackType || 'medium';
     const zoneCount = size === 'large' ? 4 : size === 'small' ? 2 : 3;
-    const detectedItems = detectedPlants.length
-        ? detectedPlants.map(plant => ({
-            name: plant.name || plant.species || 'lettuce',
-            count: Math.max(1, Number.parseInt(plant.slots, 10) || 3),
-        }))
-        : [
-            { name: 'tomato', count: 8 },
-            { name: 'lettuce', count: 12 },
-            { name: 'spinach', count: 10 },
-            { name: 'strawberry', count: 6 },
-        ];
+    const detectedNames = detectedPlants.length
+        ? detectedPlants.map(plant => plant.name || plant.species || 'lettuce')
+        : ['tomato', 'lettuce', 'spinach', 'strawberry'];
 
     const zones = Array.from({ length: zoneCount }, (_, index) => {
         const base = DEFAULT_COMMERCIAL_ZONES[index] || {
             zone_id: `zone_${String.fromCharCode(65 + index)}`,
             name: `Zone ${String.fromCharCode(65 + index)}`,
             recommended_type: 'zone_node',
-            crop: detectedItems[index % detectedItems.length].name,
-            plants: [detectedItems[index % detectedItems.length].name],
+            crop: detectedNames[index % detectedNames.length],
+            plants: [detectedNames[index % detectedNames.length]],
             confidence: 0.78,
             notes: 'AI fallback zone recommendation',
         };
-        const assigned = detectedItems.filter((_, itemIndex) => itemIndex % zoneCount === index);
-        const fallbackItem = detectedItems[index % detectedItems.length];
-        const plantItems = assigned.length
-            ? assigned
-            : [{ ...fallbackItem, count: Math.max(1, Math.ceil(fallbackItem.count / zoneCount)) }];
-        const crop = plantItems.map(item => `${item.name} x ${item.count}`).join(', ');
+        const plantName = detectedNames[index % detectedNames.length];
         return {
             ...base,
             zone_id: `zone_${String.fromCharCode(65 + index)}`,
             name: `Zone ${String.fromCharCode(65 + index)}`,
-            crop,
-            plantItems: plantItems.map(item => ({ name: item.name, count: item.count })),
-            plants: plantItems.map(item => String(item.name).toLowerCase()),
-            plantCount: plantItems.reduce((sum, item) => sum + item.count, 0),
+            crop: plantName,
+            plants: [plantName.toLowerCase()],
         };
     });
 
@@ -1227,53 +1200,6 @@ function normalizeCommercialZoneThresholds(thresholds = {}, zone = {}) {
         cameraScanIntervalMinutes: Number(thresholds.cameraScanIntervalMinutes ?? 60),
         diseaseConfidenceMin: Number(thresholds.diseaseConfidenceMin ?? 70),
     };
-}
-
-function commercialPlantItemsForZone(zone = {}) {
-    if (Array.isArray(zone.plantItems) && zone.plantItems.length) {
-        return zone.plantItems.map(item => ({
-            name: String(item.name || item.plant || item.species || 'Plant').trim() || 'Plant',
-            count: Math.max(1, Math.min(999, Number.parseInt(item.count ?? item.slots ?? item.quantity ?? 1, 10) || 1)),
-        }));
-    }
-    const names = Array.isArray(zone.plants) && zone.plants.length
-        ? zone.plants
-        : parseTargetPlants(zone.crop || 'lettuce');
-    const fallbackCount = Math.max(1, Math.round(Number(zone.plantCount || zone.slots || 12) / Math.max(1, names.length)));
-    return names.map(name => ({ name: String(name).trim() || 'Plant', count: fallbackCount }));
-}
-
-function commercialZonePlantCount(zone = {}) {
-    return commercialPlantItemsForZone(zone).reduce((sum, item) => sum + item.count, 0);
-}
-
-function formatCommercialPlantItems(items = []) {
-    return items.map(item => `${item.name} x ${item.count}`).join('\n');
-}
-
-function parseCommercialPlantItems(value) {
-    const entries = String(value || '')
-        .split(/[\n;]+/)
-        .flatMap(line => line.split(/,(?=[^0-9]*[a-zA-Z])/))
-        .map(line => line.trim())
-        .filter(Boolean);
-    return entries.map(entry => {
-        const match = entry.match(/^(.+?)(?:\s*(?:x|\*)\s*|[:=]\s*|\s+)(\d+)$/i);
-        const name = (match ? match[1] : entry).trim();
-        const count = match ? Number.parseInt(match[2], 10) : 1;
-        return {
-            name: name.charAt(0).toUpperCase() + name.slice(1),
-            count: Math.max(1, Math.min(999, Number.isFinite(count) ? count : 1)),
-        };
-    });
-}
-
-function syncCommercialZonePlantItems(zone, items) {
-    const safeItems = items.length ? items : [{ name: 'Lettuce', count: 1 }];
-    zone.plantItems = safeItems;
-    zone.plants = safeItems.map(item => item.name.toLowerCase());
-    zone.plantCount = safeItems.reduce((sum, item) => sum + item.count, 0);
-    zone.crop = safeItems.map(item => `${item.name} x ${item.count}`).join(', ');
 }
 
 function commercialEnergyLimitBySize() {
@@ -2395,19 +2321,17 @@ function thresholdInputsHtml(thresholds = {}) {
     const capability = packageCapability(beginnerPackageLevel());
     return thresholdItems().map(({ key, label }) => {
         const unlocked = capability.thresholdKeys.includes(key);
-        const value = unlocked ? (thresholds[key] ?? '') : capability.lockedText;
         return `
         <label style="display:block;opacity:${unlocked ? '1' : '.58'};">
             <span style="display:block;font-size:10px;font-weight:900;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">${label}</span>
-            <input class="threshold-input" data-key="${key}" type="${unlocked ? 'number' : 'text'}" value="${escapeAttr(value)}" placeholder="${unlocked ? 'generate first' : capability.lockedText}"
-                disabled readonly
-                title="Beginner thresholds are AI-managed to prevent unsafe sensor or actuator settings."
-                style="width:100%;padding:10px;border:1px solid ${unlocked ? 'var(--border)' : 'rgba(148,163,184,.35)'};border-radius:10px;background:${unlocked ? '#F8FAFC' : 'rgba(148,163,184,.1)'};font-size:13px;font-weight:800;color:${unlocked ? 'var(--text)' : 'var(--muted)'};outline:none;cursor:not-allowed;">
-            <span style="display:block;font-size:9px;color:${unlocked ? 'var(--muted)' : 'var(--sub)'};margin-top:4px;line-height:1.3;">${unlocked ? 'AI managed · locked for beginner safety' : 'Sensor not included in this package'}</span>
+            <input class="threshold-input" data-key="${key}" type="${unlocked ? 'number' : 'text'}" value="${unlocked ? (thresholds[key] ?? '') : capability.lockedText}" placeholder="${unlocked ? 'auto' : capability.lockedText}"
+                ${unlocked ? '' : 'disabled'}
+                style="width:100%;padding:10px;border:1px solid ${unlocked ? 'var(--border)' : 'rgba(148,163,184,.35)'};border-radius:10px;background:${unlocked ? 'var(--surface2)' : 'rgba(148,163,184,.1)'};font-size:13px;font-weight:800;color:${unlocked ? 'var(--text)' : 'var(--muted)'};outline:none;">
         </label>
     `;
     }).join('');
 }
+
 function thresholdItems() {
     return [
         { key: 'tempMin', label: 'Temp min' },
@@ -2437,13 +2361,13 @@ function thresholdAnalysisHtml(plants = []) {
     const goals = goalPriority.map(goal => GOAL_OPTIONS.find(item => item.id === goal)?.label || goal).join(', ') || 'Beginner Safe';
     const locked = thresholdItems().filter(item => !capability.thresholdKeys.includes(item.key)).map(item => item.label);
     const generated = Boolean(generatedThresholds?.thresholds);
-    const sourceLabel = generatedThresholds?.source === 'ai' ? 'AI generated' : generatedThresholds?.source === 'fallback' ? 'Rule-based fallback' : generated ? 'AI managed locked recipe' : 'Waiting for generation';
+    const sourceLabel = generatedThresholds?.source === 'ai' ? 'AI generated' : generatedThresholds?.source === 'fallback' ? 'Rule-based fallback' : generated ? 'Manual / edited' : 'Waiting for generation';
 
     const reasons = [
         `Plant profile: ${plantNames}.`,
         `Structure: ${rack.label} with ${rack.tiers} tiers and ${rack.total} slots.`,
         `Goal priority: ${goals}.`,
-        `Package logic: ${capability.label} only enables thresholds for available sensors. Beginner mode locks the values after generation so users cannot accidentally create unsafe pump, fan, buzzer, pH, or sensor settings.`,
+        `Package logic: ${capability.label} only enables thresholds for available sensors.`,
     ];
 
     if (locked.length) {
@@ -2488,11 +2412,14 @@ function filterThresholdsForPackage(thresholds = {}, level = beginnerPackageLeve
 
 function bindThresholdInputs() {
     document.querySelectorAll('.threshold-input').forEach(input => {
-        input.addEventListener('click', () => {
-            showToast('info', 'Beginner thresholds are locked. Use Generate so AI can keep the device settings safe.');
+        input.addEventListener('input', event => {
+            if (!generatedThresholds) generatedThresholds = { thresholds: {}, notes: 'Manual thresholds', source: 'manual' };
+            const value = event.target.value === '' ? undefined : Number(event.target.value);
+            if (Number.isFinite(value)) generatedThresholds.thresholds[event.target.dataset.key] = value;
         });
     });
 }
+
 async function registerDeviceFromStep(scannedPackage = null) {
     if (!deviceSetup.serial.trim()) {
         showToast('warning', 'Enter device serial');
@@ -2903,13 +2830,8 @@ async function createCommercialFarm() {
     const zones = commercialStructure.zones.map(zone => {
         const assignment = commercialDeviceAssignments.find(item => item.targetId === zone.zone_id);
         const threshold = commercialZoneThresholds[zone.zone_id] || {};
-        const plantItems = commercialPlantItemsForZone(zone);
         return {
             ...zone,
-            plantItems,
-            plants: plantItems.map(item => item.name.toLowerCase()),
-            plantCount: plantItems.reduce((sum, item) => sum + item.count, 0),
-            crop: plantItems.map(item => `${item.name} x ${item.count}`).join(', '),
             deviceId: assignment?.deviceId || null,
             deviceToken: assignment?.deviceToken || null,
             serial: assignment?.serial || null,
@@ -2939,14 +2861,14 @@ async function createCommercialFarm() {
         targetPlant: zones.map(zone => zone.crop).join(', '),
         analysisGoal: commercialGoals.join(','),
         photoPreview: photoData?.dataUrl || null,
-        plants: zones.flatMap(zone => commercialPlantItemsForZone(zone).map((plant, index) => ({
-            name: plant.name,
-            species: String(plant.name).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
-            emoji: emojiForName(plant.name),
+        plants: zones.flatMap(zone => (zone.plants || []).map((plant, index) => ({
+            name: plant,
+            species: String(plant).toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+            emoji: emojiForName(plant),
             zoneId: zone.zone_id,
             zoneName: zone.name,
             tier: index + 1,
-            slots: plant.count,
+            slots: Math.max(3, Math.ceil(12 / Math.max(1, (zone.plants || []).length || 1))),
         }))),
         rackType: 'commercial-multi-zone',
         viewMode: 'commercial',
@@ -3206,13 +3128,6 @@ function escapeHTML(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
-
-function escapeAttr(value) {
-    return escapeHTML(value);
-}
-
-
-
 
 
 

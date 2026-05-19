@@ -415,4 +415,3 @@ function escapeAttr(value) {
     return escapeHTML(value).replace(/`/g, '&#096;');
 }
 
-
