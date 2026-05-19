@@ -26,6 +26,7 @@
 - [Real-Life Deployment Budget](#real-life-deployment-budget-money_with_wings)
 - [Installation](#installation-link)
 - [Environment Variables](#environment-variables-lock)
+- [Current Demo IoT Setup](#current-demo-iot-setup-satellite)
 - [Render Deployment](#render-deployment-rocket)
 - [API Reference](#api-reference-electric_plug)
 - [Project Structure](#project-structure-open_file_folder)
@@ -206,7 +207,7 @@ Users can create a new field through a guided flow:
    - NFT Channel Rows
    - Hanging Column Farm
 3. Upload or capture a plant photo.
-4. Use Firebase AI / Gemini-compatible recognition when configured.
+4. Use backend AI recognition through `GROQ_API_KEY`, `GEMINI_API_KEY_2`, or `GEMINI_API_KEY` when configured.
 5. Fall back to target-plant detection when AI quota or keys are unavailable.
 6. Generate a responsive 3D preview using Three.js.
 
@@ -311,7 +312,7 @@ Community features make the platform more engaging:
 
 ### AI / Data
 
-- Firebase AI Logic / Gemini-compatible plant recognition on frontend
+- Backend AI provider chain for plant recognition, disease analysis, advisor chat, and thresholds
 - Gemini API compatible backend route for plant recognition fallback
 - Groq/OpenAI-compatible advisor service for chat and What-If insights
 - Optional Claude-compatible fallback for backend plant photo recognition
@@ -536,10 +537,9 @@ FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 GOOGLE_APPLICATION_CREDENTIALS=./firebase-service-account.json
 
 # Optional AI keys:
-GEMINI_API_KEY=your_gemini_key_here
-GOOGLE_AI_API_KEY=your_google_ai_key_here
 GROQ_API_KEY=your_groq_key_here
-CLAUDE_API_KEY=your_claude_key_here
+GEMINI_API_KEY_2=your_backup_gemini_key_here
+GEMINI_API_KEY=your_gemini_key_here
 DA3_SERVICE_URL=your_depth_or_3d_service_url_here
 ```
 
@@ -547,7 +547,7 @@ DA3_SERVICE_URL=your_depth_or_3d_service_url_here
 
 ### Frontend `.env`
 
-Create `frontend/.env` if Firebase AI Logic is used:
+Create `frontend/.env` only for frontend Firebase project configuration:
 
 ```env
 VITE_FIREBASE_API_KEY=your_web_api_key
@@ -560,6 +560,57 @@ VITE_FIREBASE_AI_MODEL=gemini-2.0-flash
 ```
 
 If these values are not configured, plant recognition falls back to manual / target plant behavior.
+
+---
+
+## Current Demo IoT Setup :satellite:
+
+The current SeedDown demo uses fixed device IDs so Wokwi, Firestore, and the dashboard can be tested without manually creating data first.
+
+### Demo Device IDs
+
+| Device ID | Serial / QR Package | Role | Scope |
+|---|---|---|---|
+| `commercial-farm-master-1` | `SD-COM-FRM-03001` | Commercial Farm Master Node | Farm-level CO2, water reservoir, gas, and energy monitoring |
+| `commercial-zone-node-1` | `SD-COM-ZON-01001` | Commercial Zone Node | Zone A crop environment and actuators |
+| `commercial-zone-node-2` | `SD-COM-ZON-01002` | Commercial Zone Node | Zone B crop environment and actuators |
+| `commercial-zone-node-3` | `SD-COM-ZON-01003` | Commercial Zone Node | Zone C crop environment and actuators |
+| `beginner_starter` | `SD-BGN-STR-00123` | Beginner Starter | Basic temperature, humidity, soil, and light demo |
+| `beginner_standard` | `SD-BGN-STD-00456` | Beginner Standard | Adds water level, pH, and gas safety demo |
+| `beginner_pro` | `SD-BGN-PRO-00789` | Beginner Pro | Adds EC and CO2 demo |
+
+### Seed Demo Firestore Data
+
+If Firestore is empty, seed the demo devices, thresholds, readings, and command history:
+
+```bash
+cd backend
+npm run seed:demo-iot
+```
+
+The seed script writes to:
+
+- `devices`
+- `userPreferences`
+- `sensorReadings`
+- `deviceCommands`
+
+It also prints the demo device tokens. Wokwi firmware can use those tokens with the `x-device-token` header, or can run in fallback mode while testing locally.
+
+### Current Device-Token Flow
+
+```mermaid
+flowchart LR
+    QR["Scan QR / Package Serial"] --> DeviceAPI["POST /api/devices/register"]
+    DeviceAPI --> Token["Device Token"]
+    ESP32["ESP32 / Wokwi"] --> SensorAPI["POST /api/sensors + x-device-token"]
+    SensorAPI --> Firestore["Firestore readings"]
+    SensorAPI --> Command["Generated command"]
+    ESP32 --> Poll["GET /api/sensors/command?format=text"]
+    Poll --> Actuator["LED / Pump / Fan / Alert"]
+```
+
+The old `farm_001` fallback still exists for compatibility, but the current demo target uses the fixed IDs above.
 
 ---
 
@@ -585,10 +636,9 @@ FIREBASE_SERVICE_ACCOUNT_JSON={full service account JSON}
 ### Optional Render Environment Variables
 
 ```text
-GEMINI_API_KEY=your_gemini_key
-GOOGLE_AI_API_KEY=your_google_ai_key
 GROQ_API_KEY=your_groq_key
-CLAUDE_API_KEY=your_claude_key
+GEMINI_API_KEY_2=your_backup_gemini_key
+GEMINI_API_KEY=your_gemini_key
 DA3_SERVICE_URL=your_3d_service_url
 ```
 
@@ -708,6 +758,7 @@ SeedDown/
 │   ├── crops_data.json              # Crop database
 │   ├── garden_recipes.json          # Recipe/recommendation database
 │   ├── seed_crops.js                # Crop seeding script
+│   ├── seed_demo_iot.js             # Demo device/readings seed script
 │   ├── test_sensor.js               # Backend sensor test helper
 │   ├── app.js                       # Express app setup
 │   ├── server.js                    # Server entrypoint
@@ -720,7 +771,7 @@ SeedDown/
 │   │   ├── components/              # FarmCanvas, SensorStrip, Advisor, Plant Modal
 │   │   ├── pages/                   # App screens and dashboards
 │   │   ├── pages/communityTabs/     # SOS, Barter, Visit Neighbor modules
-│   │   ├── services/                # AI chat, Firebase AI logic, IoT simulator
+│   │   ├── services/                # AI chat, IoT simulator, frontend helpers
 │   │   ├── utils/                   # Navigation, Firebase helpers, toast
 │   │   ├── main.js                  # Frontend entrypoint
 │   │   └── store.js                 # Global app state
@@ -728,11 +779,17 @@ SeedDown/
 │   └── package.json
 │
 ├── iot/
-│   └── vertical-farming-esp32/      # ESP32 / Wokwi / PlatformIO project
+│   ├── vertical-farming-esp32/      # Original ESP32 / Wokwi / PlatformIO project
 │       ├── src/main.cpp             # Sensor loop and backend communication
 │       ├── diagram.json             # Wokwi circuit diagram
 │       ├── platformio.ini           # PlatformIO config
 │       └── wokwi.toml               # Wokwi config
+│   └── wokwi/                       # Package-specific Wokwi simulations
+│       ├── beginner_starter/
+│       ├── beginner_standard/
+│       ├── beginner_pro/
+│       ├── commercial_zone/
+│       └── commercial_master/
 │
 ├── shared/                          # Shared constants and types
 │   ├── constants.js
@@ -813,7 +870,7 @@ SeedDown already demonstrates the end-to-end loop from IoT sensing to dashboard 
 - Use plant photos over time to detect growth rate, yellowing leaves, wilting, and possible disease.
 - Combine image analysis with sensor trends for more accurate recommendations.
 - Recommend harvest timing using plant age, size, crop profile, and environmental history.
-- Improve recognition fallback when Gemini / Firebase AI quota is unavailable.
+- Improve recognition fallback when Groq / Gemini quota is unavailable.
 
 ### 7. Scaling Beyond Prototype
 

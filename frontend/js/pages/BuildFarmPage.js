@@ -102,9 +102,9 @@ const GOAL_OPTIONS = [
     { id: 'beginner_safe', label: 'Beginner Safe' },
 ];
 const PACKAGE_QR_OPTIONS = [
-    { id: 'beginner_starter', label: 'Beginner Starter', serial: 'SD-BGN-STR-00101', accountType: 'beginner_starter', packageLevel: 'starter', deviceType: 'beginner', desc: 'basic home sensor kit' },
+    { id: 'beginner_starter', label: 'Beginner Starter', serial: 'SD-BGN-STR-00123', accountType: 'beginner_starter', packageLevel: 'starter', deviceType: 'beginner', desc: 'basic home sensor kit' },
     { id: 'beginner_standard', label: 'Beginner Standard', serial: 'SD-BGN-STD-00456', accountType: 'beginner_standard', packageLevel: 'standard', deviceType: 'beginner', desc: 'balanced home vertical farm kit' },
-    { id: 'beginner_pro', label: 'Beginner Pro', serial: 'SD-BGN-PRO-00901', accountType: 'beginner_pro', packageLevel: 'pro', deviceType: 'beginner', desc: 'advanced home kit with more automation' },
+    { id: 'beginner_pro', label: 'Beginner Pro', serial: 'SD-BGN-PRO-00789', accountType: 'beginner_pro', packageLevel: 'pro', deviceType: 'beginner', desc: 'advanced home kit with more automation' },
     { id: 'commercial_farm_master_1', label: 'Commercial Farm Master Node 1', serial: 'SD-COM-FRM-03001', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'farm-level controller, one per commercial farm' },
     { id: 'commercial_farm_master_2', label: 'Commercial Farm Master Node 2', serial: 'SD-COM-FRM-03002', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'spare farm-level controller for demo or second farm' },
     { id: 'commercial_farm_master_3', label: 'Commercial Farm Master Node 3', serial: 'SD-COM-FRM-03003', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'spare farm-level controller for demo or second farm' },
