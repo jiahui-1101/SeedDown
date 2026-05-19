@@ -555,5 +555,116 @@
     "recipeKeywords": [
       ""
     ]
+  },
+  {
+    "species": "kangkung",
+    "commonName": "kangkung",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "kangkung"
+    ],
+    "indoorGardenData": {
+      "lightType": "LED",
+      "pHLevel": 6,
+      "soilType": "Peat Moss",
+      "wateringMethod": "Drip Irrigation",
+      "temperatureStability": 0.1,
+      "humidityStability": 2,
+      "lightStability": 1,
+      "waterStability": 4,
+      "nutrientStability": 3,
+      "growthRate": 0.8,
+      "yieldPercentage": 80
+    }
+  },
+  {
+    "species": "petai",
+    "commonName": "petai",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "petai"
+    ],
+    "indoorGardenData": {
+      "avgPlantsPerSquareMeter": 4,
+      "avgGrowthRate": 0.5,
+      "avgYieldPerSquareMeter": 800,
+      "avgDaysToMaturity": 45,
+      "avgWaterUsagePerSquareMeter": 600,
+      "avgFertilizerUsagePerSquareMeter": 12
+    }
+  },
+  {
+    "species": "watermelon",
+    "commonName": "watermelon",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "watermelon"
+    ]
   }
 ]
