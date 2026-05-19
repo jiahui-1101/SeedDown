@@ -222,7 +222,7 @@ async function _fetchBackendAnalysis(metrics, readings) {
     
     // 1. Update UI from Rule-Based Summary
     _el('con-water-vs').textContent  = `↓ ${summary.waterSavePct || Math.round((1 - metrics.waterLiters/tradWaterPerDay)*100)}% vs traditional`;
-_el('con-co2').textContent = `${metrics.co2Saved.toFixed(2)} kg`;
+    _el('con-co2').textContent = `${metrics.co2Saved.toFixed(2)} kg`;
     
     const gradeMap = {
       'excellent': { l: 'A+', c: '#16A34A', n: 'Ultra-efficient resource usage.' },
@@ -294,7 +294,7 @@ async function _renderCharts(readings, idealZone, idealEnergyLimit) {
   const energyData = readings.map(r => {
     const lr = r.lightRaw ?? r.light ?? 2000;
     const t  = r.temperature ?? 25;
-    return ((lr < 1500 ? WATTS_LIGHT : 0) + (t > 28 ? WATTS_FAN : 0)) / 1000; // Wh to kWh per reading
+    return ((lr < 1500 ? WATTS_LIGHT : 0) + (t > 28 ? WATTS_FAN : 0)) / 10; // Wh to kWh per reading
   }).reverse();
 
   const chartDefaults = {
