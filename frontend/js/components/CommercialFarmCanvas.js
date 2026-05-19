@@ -165,6 +165,7 @@ export const CommercialFarmCanvas = {
         towers.forEach((tower, index) => this.addTower(tower, index));
 
         this.addIrrigationPipes(towers);
+        this.addDigitalTwinDevices(towers);
         this.addNutrientStation();
         this.addControlPanel();
         this.addVentilationFans();
@@ -269,6 +270,26 @@ export const CommercialFarmCanvas = {
     },
 
     createTowerLayout() {
+        const zones = commercialZones(this.farm);
+        if (zones.length) {
+            const cols = Math.ceil(Math.sqrt(zones.length));
+            const rowCount = Math.ceil(zones.length / cols);
+            const spacingX = 2.65;
+            const spacingZ = 3.1;
+            const startX = -((cols - 1) * spacingX) / 2;
+            const startZ = -((rowCount - 1) * spacingZ) / 2;
+            return zones.map((zone, index) => ({
+                x: startX + (index % cols) * spacingX,
+                z: startZ + Math.floor(index / cols) * spacingZ,
+                zoneIndex: index,
+                row: Math.floor(index / cols),
+                col: index % cols,
+                zoneId: zone.zone_id || zone.id || `zone_${String.fromCharCode(65 + index)}`,
+                label: zone.name || `Zone ${String.fromCharCode(65 + index)}`,
+                crop: zone.crop || (Array.isArray(zone.plants) ? zone.plants.join(', ') : '') || 'Mixed crops',
+            }));
+        }
+
         const desired = Math.max(6, Math.min(10, Math.ceil(this.rack.total / 2)));
         const positions = [];
         const cols = Math.ceil(desired / 2);
@@ -296,8 +317,9 @@ export const CommercialFarmCanvas = {
         tower.position.set(config.x, 0, config.z);
         tower.userData = {
             isTower: true,
-            id: `zone-${zoneLetter}`,
-            label: `Zone ${zoneLetter}`,
+            id: config.zoneId || `zone-${zoneLetter}`,
+            label: config.label || `Zone ${zoneLetter}`,
+            crop: config.crop || 'Mixed crops',
             zoneIndex: towerIndex,
             plants: [],
             status: 'empty',
@@ -315,9 +337,10 @@ export const CommercialFarmCanvas = {
         base.castShadow = true;
         tower.add(base);
 
+        const layoutCount = this.createTowerLayout().length;
         const slotsForTower = this.slotPlants
             .map((plant, index) => ({ plant, index }))
-            .filter(item => item.plant && indexToTower(item.index, this.rack, towerIndex, this.createTowerLayout().length));
+            .filter(item => item.plant && plantBelongsToTower(item.plant, item.index, this.rack, towerIndex, layoutCount, config));
 
         const levels = 8;
         const bowlsPerLevel = 4;
@@ -344,7 +367,7 @@ export const CommercialFarmCanvas = {
         }
 
         tower.userData.status = towerStatus(tower.userData.plants);
-        const label = this.createTextSprite(`ZONE ${zoneLetter}`, {
+        const label = this.createTextSprite(String(config.label || `ZONE ${zoneLetter}`).toUpperCase(), {
             bg: 'rgba(9,18,13,.88)',
             fg: '#a3e635',
             border: '#315d3e',
@@ -396,6 +419,95 @@ export const CommercialFarmCanvas = {
         tower.add(dot);
 
         if (plant) this.addPlantCluster(tower, x * 1.1, y + 0.12, z * 1.1, plant);
+    },
+
+    addDigitalTwinDevices(towers) {
+        const farmDevices = [
+            { key: 'co2', label: 'CO2 Sensor', value: `${Number(this.sensorSnapshot.co2Ppm || 800)} ppm`, type: 'sensor', x: -6.9, y: 1.1, z: 5.25, color: 0x38bdf8 },
+            { key: 'reservoir', label: 'Water Reservoir', value: `${Number(this.sensorSnapshot.waterDistanceCm || 0)} cm`, type: 'sensor', x: -5.65, y: 0.9, z: 5.25, color: 0x0ea5e9 },
+            { key: 'gas', label: 'MQ-2 Gas Sensor', value: `${Number(this.sensorSnapshot.gasRaw || 0)} raw`, type: 'sensor', x: -4.4, y: 0.9, z: 5.25, color: statusColor(Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 'danger' : 'healthy') },
+            { key: 'power', label: 'Power Meter', value: `${Number(this.sensorSnapshot.energyKwh || 5.1).toFixed(1)} kWh`, type: 'sensor', x: 4.4, y: 0.9, z: 5.25, color: 0xf59e0b },
+            { key: 'main_fan', label: 'Main Ventilation Fan', value: Number(this.sensorSnapshot.temperature || 25) > 30 ? 'active' : 'standby', type: 'output', x: 5.65, y: 0.9, z: 5.25, color: 0x64748b },
+            { key: 'emergency_buzzer', label: 'Emergency Buzzer', value: Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 'alert' : 'ready', type: 'output', x: 6.9, y: 0.9, z: 5.25, color: Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 0xef4444 : 0x84cc16 },
+        ];
+        farmDevices.forEach(device => this.addDeviceMarker(device));
+
+        const zoneDevices = [
+            { key: 'dht11', label: 'DHT11 Temp/Humid', type: 'sensor', color: 0x22c55e },
+            { key: 'soil', label: 'Soil Moisture', type: 'sensor', color: 0x8b5a2b },
+            { key: 'ldr', label: 'LDR Light', type: 'sensor', color: 0xfacc15 },
+            { key: 'ph', label: 'pH Sensor', type: 'sensor', color: 0xa855f7 },
+            { key: 'ec', label: 'EC Sensor', type: 'sensor', color: 0x14b8a6 },
+            { key: 'flow', label: 'YF-S201 Flow', type: 'sensor', color: 0x38bdf8 },
+            { key: 'pump', label: 'Water Pump', type: 'output', color: 0x0ea5e9 },
+            { key: 'grow_light', label: 'LED Grow Light', type: 'output', color: 0xdd88ff },
+            { key: 'zone_fan', label: 'Zone Fan', type: 'output', color: 0x64748b },
+            { key: 'active_buzzer', label: 'Active Buzzer', type: 'output', color: 0xf97316 },
+            { key: 'camera', label: 'Camera', type: 'sensor', color: 0x111827 },
+        ];
+
+        towers.forEach((tower, towerIndex) => {
+            const zoneId = tower.zoneId || tower.userData?.id || `zone_${String.fromCharCode(65 + towerIndex)}`;
+            const zoneLabel = tower.label || tower.userData?.label || `Zone ${String.fromCharCode(65 + towerIndex)}`;
+            zoneDevices.forEach((device, index) => {
+                const angle = (Math.PI * 2 * index) / zoneDevices.length;
+                const radius = 0.92 + (index % 2) * 0.18;
+                this.addDeviceMarker({
+                    ...device,
+                    scope: 'zone',
+                    zoneId,
+                    zoneLabel,
+                    value: zoneDeviceValue(device.key, this.sensorSnapshot),
+                    x: tower.x + Math.cos(angle) * radius,
+                    y: 0.22 + (index % 3) * 0.08,
+                    z: tower.z + Math.sin(angle) * radius,
+                    compact: true,
+                });
+            });
+        });
+    },
+
+    addDeviceMarker(device) {
+        const group = new THREE.Group();
+        group.position.set(device.x, device.y, device.z);
+        group.userData = {
+            isDevice: true,
+            label: device.label,
+            key: device.key,
+            type: device.type,
+            scope: device.scope || 'farm',
+            zoneId: device.zoneId || null,
+            zoneLabel: device.zoneLabel || null,
+            value: device.value || '--',
+            status: deviceStatus(device),
+        };
+
+        const body = new THREE.Mesh(
+            device.compact ? new THREE.SphereGeometry(0.07, 12, 8) : new THREE.BoxGeometry(0.22, 0.18, 0.14),
+            new THREE.MeshStandardMaterial({
+                color: device.color,
+                emissive: device.color,
+                emissiveIntensity: device.type === 'output' ? 0.28 : 0.16,
+                roughness: 0.44,
+                metalness: 0.16,
+            })
+        );
+        body.castShadow = true;
+        body.userData.root = group;
+        group.add(body);
+
+        const labelText = device.compact ? shortDeviceLabel(device.key) : device.label.replace(/\s+/g, '\n');
+        const tag = this.createTextSprite(labelText, {
+            bg: 'rgba(255,255,255,.9)',
+            fg: '#0f172a',
+            font: '900 26px Inter, system-ui, sans-serif',
+        });
+        tag.position.set(0, device.compact ? 0.17 : 0.24, 0);
+        tag.scale.set(device.compact ? 0.22 : 0.34, device.compact ? 0.09 : 0.13, 1);
+        group.add(tag);
+
+        this.scene.add(group);
+        this.interactiveRoots.push(group);
     },
 
     addPlantCluster(parent, x, y, z, plant) {
@@ -793,7 +905,7 @@ export const CommercialFarmCanvas = {
         const plantCount = Array.isArray(data.plants) ? data.plants.length : 0;
         this.tooltip.innerHTML = `
             <span class="cf-tooltip-dot ${data.status || 'healthy'}"></span>
-            <div><strong>${escapeHTML(data.label || data.label || 'Station')}</strong><small>${plantCount ? `${plantCount} active plants` : data.isTank ? 'Nutrient station' : 'Empty zone'}</small></div>
+            <div><strong>${escapeHTML(data.label || 'Station')}</strong><small>${data.isDevice ? `${data.scope || 'farm'} ${data.type}` : plantCount ? `${plantCount} active plants` : data.isTank ? 'Nutrient station' : 'Empty zone'}</small></div>
         `;
     },
 
@@ -811,6 +923,10 @@ export const CommercialFarmCanvas = {
         const data = root.userData || {};
         if (data.isTank) {
             this.detailPanel.innerHTML = stationPanelHTML(data, this.sensorSnapshot);
+            return;
+        }
+        if (data.isDevice) {
+            this.detailPanel.innerHTML = devicePanelHTML(data);
             return;
         }
         const plants = Array.isArray(data.plants) ? data.plants : [];
@@ -1038,6 +1154,16 @@ function loadSavedFarms() {
 }
 
 function resolveRack(field) {
+    if (commercialZones(field).length) {
+        const zoneCount = commercialZones(field).length;
+        return {
+            id: 'commercial-zones',
+            label: `${zoneCount}-Zone Commercial Farm`,
+            tiers: zoneCount,
+            slotsPerTier: 12,
+            total: Math.max(12, zoneCount * 12),
+        };
+    }
     const rawRack = String(field?.rackTypeId || field?.rackType || field?.rackLabel || '').toLowerCase();
     if (rawRack.includes('2')) return RACK_OPTIONS['2-tier'];
     if (rawRack.includes('4')) return RACK_OPTIONS['4-tier'];
@@ -1051,13 +1177,30 @@ function resolveRack(field) {
 
 function resolveSlotPlants(field, rack) {
     const sourcePlants = Array.isArray(field?.plants) ? field.plants : [];
-    const slots = Array(rack.total).fill(null);
+    const zones = commercialZones(field);
+    const commercialTotal = zones.length ? Math.max(rack.total, zones.length * 12, sourcePlants.length * 3) : rack.total;
+    const slots = Array(commercialTotal).fill(null);
     const used = new Set();
 
-    sourcePlants.forEach(plant => {
+    sourcePlants.forEach((plant, plantOrder) => {
+        if (zones.length && plant.zoneId) {
+            const zoneIndex = zones.findIndex(zone => zoneMatchesPlant(zone, plant));
+            const zoneStart = Math.max(0, zoneIndex) * 12;
+            const count = Math.max(1, Number.parseInt(plant.slots || plant.count || 1, 10) || 1);
+            for (let i = 0; i < count; i++) {
+                const index = firstFreeSlotInRange(slots, used, zoneStart, zoneStart + 12) ?? firstFreeSlot(slots, used);
+                if (index === -1 || index === null || index === undefined) return;
+                slots[index] = normalizePlant(plant, index, rack, field);
+                slots[index].zoneId = plant.zoneId;
+                slots[index].zoneName = plant.zoneName || zones[zoneIndex]?.name || plant.zoneId;
+                used.add(index);
+            }
+            return;
+        }
+
         if (plant.slotIndex !== undefined && plant.slotIndex !== null) {
             const index = Number(plant.slotIndex);
-            if (Number.isInteger(index) && index >= 0 && index < rack.total) {
+            if (Number.isInteger(index) && index >= 0 && index < slots.length) {
                 slots[index] = normalizePlant(plant, index, rack, field);
                 used.add(index);
             }
@@ -1080,6 +1223,35 @@ function resolveSlotPlants(field, rack) {
         slots[i] = normalizePlant({ name: field?.targetPlant || 'Plant', status: 'healthy' }, i, rack, field);
     }
     return slots;
+}
+
+function commercialZones(field) {
+    const zones = Array.isArray(field?.zones) ? field.zones : Array.isArray(field?.commercialStructure?.zones) ? field.commercialStructure.zones : [];
+    return zones
+        .map((zone, index) => ({
+            ...zone,
+            zone_id: zone.zone_id || zone.id || `zone_${String.fromCharCode(65 + index)}`,
+            name: zone.name || `Zone ${String.fromCharCode(65 + index)}`,
+        }))
+        .filter(zone => zone.zone_id || zone.name);
+}
+
+function zoneMatchesPlant(zone, plant) {
+    const plantZone = String(plant.zoneId || plant.zone_id || plant.zone || '').toLowerCase();
+    return plantZone && (
+        plantZone === String(zone.zone_id || '').toLowerCase()
+        || plantZone === String(zone.id || '').toLowerCase()
+        || plantZone === String(zone.name || '').toLowerCase()
+    );
+}
+
+function firstFreeSlotInRange(slots, used, start, end) {
+    const safeStart = Math.max(0, start);
+    const safeEnd = Math.min(slots.length, end);
+    for (let i = safeStart; i < safeEnd; i++) {
+        if (!slots[i] && !used.has(i)) return i;
+    }
+    return null;
 }
 
 function normalizePlant(plant, index, rack, field) {
@@ -1138,10 +1310,56 @@ function getSensorSnapshot() {
         temperature: s.temp?.val ?? 25,
         humidity: s.humid?.val ?? 60,
         lightRaw: s.light?.val ?? 2000,
+        soilRaw: s.soil?.val ?? s.soilRaw?.val ?? 1800,
         ph: s.ph?.val ?? 6.1,
         waterDistanceCm: s.water?.val ?? 10,
         gasRaw: s.nutrient?.val ?? 1000,
+        ec: s.ec?.val ?? 1.5,
+        co2Ppm: s.co2?.val ?? 850,
+        energyKwh: s.energy?.val ?? 5.1,
+        waterFlowLpm: s.flow?.val ?? 0.8,
     };
+}
+
+function zoneDeviceValue(key, sensors) {
+    const map = {
+        dht11: `${Number(sensors.temperature || 0).toFixed(1)}C / ${Number(sensors.humidity || 0)}%`,
+        soil: `${Number(sensors.soilRaw || 1800)} raw`,
+        ldr: `${Number(sensors.lightRaw || 0)} raw`,
+        ph: `${Number(sensors.ph || 0).toFixed(1)} pH`,
+        ec: `${Number(sensors.ec || 1.5).toFixed(1)} EC`,
+        flow: `${Number(sensors.waterFlowLpm || 0.8).toFixed(1)} L/min`,
+        pump: Number(sensors.waterDistanceCm || 0) > 20 ? 'ready' : 'standby',
+        grow_light: Number(sensors.lightRaw || 0) < 1500 ? 'active' : 'standby',
+        zone_fan: Number(sensors.temperature || 25) > 30 ? 'active' : 'standby',
+        active_buzzer: Number(sensors.gasRaw || 0) > 2500 ? 'alert' : 'ready',
+        camera: 'scan ready',
+    };
+    return map[key] || '--';
+}
+
+function shortDeviceLabel(key) {
+    const map = {
+        dht11: 'DHT',
+        soil: 'SOIL',
+        ldr: 'LDR',
+        ph: 'pH',
+        ec: 'EC',
+        flow: 'FLOW',
+        pump: 'PUMP',
+        grow_light: 'LED',
+        zone_fan: 'FAN',
+        active_buzzer: 'BUZZ',
+        camera: 'CAM',
+    };
+    return map[key] || String(key).slice(0, 4).toUpperCase();
+}
+
+function deviceStatus(device) {
+    const value = String(device.value || '').toLowerCase();
+    if (value.includes('alert') || value.includes('danger')) return 'danger';
+    if (value.includes('active')) return 'warning';
+    return 'healthy';
 }
 
 function isPhWarning(sensors) {
@@ -1160,6 +1378,16 @@ function speciesConfig(plant) {
 function indexToTower(index, rack, towerIndex, towerCount) {
     if (Number.isNaN(index)) return false;
     return index % towerCount === towerIndex || Math.floor(index / Math.max(1, rack.slotsPerTier)) === towerIndex;
+}
+
+function plantBelongsToTower(plant, index, rack, towerIndex, towerCount, config = {}) {
+    if (plant?.zoneId && config.zoneId) {
+        return String(plant.zoneId).toLowerCase() === String(config.zoneId).toLowerCase();
+    }
+    if (plant?.zoneName && config.label) {
+        return String(plant.zoneName).toLowerCase() === String(config.label).toLowerCase();
+    }
+    return indexToTower(index, rack, towerIndex, towerCount);
 }
 
 function makeLine(a, b, material) {
@@ -1227,6 +1455,49 @@ function stationPanelHTML(data, sensors) {
     `;
 }
 
+function devicePanelHTML(data) {
+    const scopeLabel = data.scope === 'zone' ? data.zoneLabel || data.zoneId || 'Zone' : 'Farm Level';
+    const role = data.type === 'output' ? 'Actuator / Output' : 'Sensor';
+    return `
+        <div class="cf-panel-kicker">Digital twin device</div>
+        <div class="cf-panel-title">${escapeHTML(data.label || 'Device')}</div>
+        <div class="cf-panel-sub">${escapeHTML(scopeLabel)} · ${escapeHTML(role)}</div>
+        <div class="cf-mini-grid">
+            ${miniMetric('Value', data.value || '--')}
+            ${miniMetric('Status', data.status || 'healthy')}
+            ${miniMetric('Type', data.type || 'sensor')}
+        </div>
+        <div class="cf-plant-list">
+            <span>Layer <b>${escapeHTML(data.scope === 'zone' ? 'ZONE' : 'FARM')}</b></span>
+            <span>Clickable <b>YES</b></span>
+            <span>Purpose <b>${escapeHTML(devicePurpose(data.key))}</b></span>
+        </div>
+    `;
+}
+
+function devicePurpose(key) {
+    const map = {
+        co2: 'air enrichment',
+        reservoir: 'water level',
+        gas: 'safety alert',
+        power: 'energy tracking',
+        main_fan: 'facility airflow',
+        emergency_buzzer: 'emergency alarm',
+        dht11: 'temperature humidity',
+        soil: 'root moisture',
+        ldr: 'light detection',
+        ph: 'water acidity',
+        ec: 'nutrient strength',
+        flow: 'irrigation flow',
+        pump: 'irrigation output',
+        grow_light: 'lighting output',
+        zone_fan: 'zone airflow',
+        active_buzzer: 'zone warning',
+        camera: 'plant vision',
+    };
+    return map[key] || 'monitoring';
+}
+
 function miniMetric(label, value) {
     return `<div class="cf-mini-metric"><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>`;
 }
@@ -1284,6 +1555,18 @@ function ensureCommercialStyles() {
             display: block;
             background: #f8faf7 !important;
             border-radius: 22px !important;
+        }
+        .commercial-preview-host.commercial-farm-host {
+            height: min(58dvh, 520px) !important;
+            min-height: 360px !important;
+            background: #f8faf7 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+        .commercial-preview-host .commercial-farm-canvas {
+            height: 100% !important;
+            border-radius: 0 !important;
         }
         .commercial-command-screen.commercial-farm-host {
             position: fixed !important;
@@ -1596,3 +1879,5 @@ function ensureCommercialStyles() {
     `;
     document.head.appendChild(style);
 }
+
+

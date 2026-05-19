@@ -15,6 +15,9 @@ const SERIAL_RULES = [
   { prefix: 'SD-BGN-STR', deviceType: 'beginner', packageLevel: 'starter', accountTypes: ['beginner', 'beginner_starter'] },
   { prefix: 'SD-BGN-STD', deviceType: 'beginner', packageLevel: 'standard', accountTypes: ['beginner', 'beginner_standard'] },
   { prefix: 'SD-BGN-PRO', deviceType: 'beginner', packageLevel: 'pro', accountTypes: ['beginner', 'beginner_pro'] },
+  { prefix: 'SD-COM-FRM', deviceType: 'commercial', packageLevel: 'farm_master', accountTypes: ['commercial', 'commercial_master', 'commercial_farm_master'] },
+  { prefix: 'SD-COM-FZK', deviceType: 'commercial', packageLevel: 'farm_zone', accountTypes: ['commercial', 'commercial_farm_zone'] },
+  { prefix: 'SD-COM-ZON', deviceType: 'commercial', packageLevel: 'zone_node', accountTypes: ['commercial', 'commercial_zone'] },
   { prefix: 'SD-COM-ZNB', deviceType: 'commercial', packageLevel: 'zone_basic', accountTypes: ['commercial', 'commercial_zone_basic'] },
   { prefix: 'SD-COM-ZNP', deviceType: 'commercial', packageLevel: 'zone_pro', accountTypes: ['commercial', 'commercial_zone_pro'] },
   { prefix: 'SD-COM-MST', deviceType: 'commercial', packageLevel: 'farm_master', accountTypes: ['commercial', 'commercial_master'] },
@@ -34,6 +37,8 @@ function parseSerial(serial) {
 function validateAccountType(parsed, accountType = '') {
   const normalized = String(accountType || '').trim().toLowerCase();
   if (!normalized) return;
+  if (parsed.deviceType === 'commercial' && normalized.startsWith('commercial')) return;
+  if (parsed.deviceType === 'beginner' && normalized.startsWith('beginner')) return;
   if (!parsed.accountTypes.includes(normalized)) {
     throw new Error(`Serial ${parsed.serial} is for ${parsed.deviceType}/${parsed.packageLevel}, not ${accountType}`);
   }

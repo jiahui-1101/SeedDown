@@ -37,6 +37,8 @@ export function render() {
     const container = document.getElementById('screenContainer');
     const farm = getCurrentFarm();
     const profile = { ...defaultControls(), ...(loadProfile(AppState.currentFarmId) || {}) };
+    const zones = commercialZonesForControl(farm);
+    const farmThresholds = { ...(farm?.farmThresholds || {}), ...profile };
 
     container.innerHTML = `
         <div class="screen active" id="controlScreen">
@@ -54,8 +56,8 @@ export function render() {
                     <div style="display:flex;gap:12px;align-items:center;">
                         <div style="width:44px;height:44px;border-radius:14px;background:var(--accent-l);display:flex;align-items:center;justify-content:center;font-size:24px;">🎛️</div>
                         <div style="flex:1;min-width:0;">
-                            <div style="font-size:11px;font-weight:900;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;">Device thresholds</div>
-                            <div style="font-size:13px;color:var(--sub);line-height:1.4;">These values change how the backend creates ESP32 commands on the next sensor cycle.</div>
+                            <div style="font-size:11px;font-weight:900;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;">Commercial threshold control</div>
+                            <div style="font-size:13px;color:var(--sub);line-height:1.4;">Farm Master and Zone thresholds match the New Field AI threshold setup.</div>
                         </div>
                     </div>
                     <div style="margin-top:12px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px;">
@@ -88,29 +90,21 @@ export function render() {
                     </div>
                 </div>
 
-                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
-                    <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:12px;">PRESETS</div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                        ${presetButton('leafy', '🥬', 'Leafy Greens')}
-                        ${presetButton('fruiting', '🍅', 'Fruiting Crops')}
-                        ${presetButton('energy', '⚡', 'Energy Saver')}
-                        ${presetButton('safety', '🛡️', 'High Safety')}
-                    </div>
-                </div>
+                ${controlThresholdCardHtml({
+                    id: 'farm_master',
+                    title: 'Farm Master Node',
+                    subtitle: 'Farm-level shared sensors and outputs',
+                    scope: 'farm',
+                    thresholds: farmThresholds,
+                })}
 
-                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);">
-                    <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">WATER + ROOT ZONE</div>
-                    ${rangeControl('Soil Dry Threshold', 'controlSoil', 'soilVal', profile.soilDryThreshold, 500, 3000, 100, 'raw', 'Lower means easier to trigger WATER_ON')}
-                    ${numberPair('pH Range', 'controlPhMin', 'controlPhMax', profile.phMin, profile.phMax, 4.0, 8.0, 0.1, 'pH outside this range creates PH_WARNING')}
-                    ${rangeControl('Watering Duration', 'controlWaterDur', 'waterDurVal', profile.wateringDuration, 3, 60, 1, 's', 'Duration sent with WATER_ON command')}
-                </div>
-
-                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);">
-                    <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">ENVIRONMENT LIMITS</div>
-                    ${numberPair('Temperature Range', 'controlTempMin', 'controlTempMax', profile.tempMin, profile.tempMax, 0, 60, 0.5, 'Temperature outside this range creates BUZZER_ON')}
-                    ${rangeControl('Light Dark Threshold', 'controlLight', 'lightVal', profile.lightThreshold, 200, 4000, 100, 'raw', 'Light below this value creates LIGHT_ON')}
-                    ${rangeControl('Gas Danger Threshold', 'controlGas', 'gasVal', profile.gasDangerThreshold, 500, 4095, 100, 'raw', 'Gas above this value creates BUZZER_ON')}
-                </div>
+                ${zones.map(zone => controlThresholdCardHtml({
+                    id: zone.id,
+                    title: zone.label,
+                    subtitle: `${zone.crop || 'Mixed crops'} · zone-level sensor and output recipe`,
+                    scope: 'zone',
+                    thresholds: zone.thresholds || {},
+                })).join('')}
 
                 <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
                     <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:12px;">MANUAL OVERRIDE</div>
@@ -146,22 +140,14 @@ function bindEvents() {
     document.getElementById('refreshCommandBtn')?.addEventListener('click', () => fetchLatestCommand(true));
     document.getElementById('emergencyStopBtn')?.addEventListener('click', () => sendManualCommand('NO_ACTION', 'Emergency stop from dashboard'));
 
-    document.querySelectorAll('.preset-btn').forEach(button => {
-        button.addEventListener('click', () => applyPreset(button.dataset.preset));
-    });
-
     document.querySelectorAll('.manual-command-btn').forEach(button => {
         button.addEventListener('click', () => sendManualCommand(button.dataset.command, `${button.dataset.label} manual override from dashboard`));
     });
 
-    slider('controlSoil', 'soilVal', v => `${v} raw`);
-    slider('controlWaterDur', 'waterDurVal', v => `${v}s`);
-    slider('controlLight', 'lightVal', v => `${v} raw`);
-    slider('controlGas', 'gasVal', v => `${v} raw`);
-
-    ['controlDeviceId', 'controlTempMin', 'controlTempMax', 'controlPhMin', 'controlPhMax'].forEach(id => {
-        document.getElementById(id)?.addEventListener('input', updateControlRecommendations);
+    document.querySelectorAll('.control-threshold-input').forEach(input => {
+        input.addEventListener('input', updateControlRecommendations);
     });
+    document.getElementById('controlDeviceId')?.addEventListener('input', updateControlRecommendations);
     updateControlRecommendations();
 }
 
@@ -324,14 +310,8 @@ async function syncControls() {
 
     const payload = {
         deviceId: controls.deviceId,
-        soilDryThreshold: controls.soilDryThreshold,
-        gasDangerThreshold: controls.gasDangerThreshold,
-        tempMin: controls.tempMin,
-        tempMax: controls.tempMax,
-        phMin: controls.phMin,
-        phMax: controls.phMax,
-        darkThreshold: controls.lightThreshold,
-        wateringDurationSeconds: controls.wateringDuration,
+        ...controls,
+        byScope: undefined,
     };
 
     try {
@@ -356,17 +336,23 @@ async function syncControls() {
 }
 
 function collectControls() {
-    return {
+    const controls = {
         deviceId: value('controlDeviceId') || 'farm_001',
-        soilDryThreshold: intValue('controlSoil', 1800),
-        gasDangerThreshold: intValue('controlGas', 2500),
-        tempMin: floatValue('controlTempMin', 18),
-        tempMax: floatValue('controlTempMax', 35),
-        phMin: floatValue('controlPhMin', 5.5),
-        phMax: floatValue('controlPhMax', 6.5),
-        lightThreshold: intValue('controlLight', 1500),
-        wateringDuration: intValue('controlWaterDur', 10),
     };
+    document.querySelectorAll('.control-threshold-input').forEach(input => {
+        const key = input.dataset.key;
+        const scope = input.dataset.scope || 'zone';
+        const zone = input.dataset.zone || scope;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        controls[key] = value;
+        if (!controls.byScope) controls.byScope = {};
+        if (!controls.byScope[zone]) controls.byScope[zone] = {};
+        controls.byScope[zone][key] = value;
+    });
+    controls.lightThreshold = controls.darkThreshold ?? 1500;
+    controls.wateringDuration = controls.wateringDurationSeconds ?? 10;
+    return controls;
 }
 
 function updateControlRecommendations() {
@@ -420,29 +406,32 @@ function getControlRecommendations(c) {
 
     if (!c.deviceId.trim()) add('danger', 'Device ID is empty, so ESP32 preferences cannot sync correctly.');
 
-    if (c.tempMin >= c.tempMax) add('danger', 'Temperature min must be lower than max. Recommended range: 18C to 35C.');
+    if (c.tempMin !== undefined && c.tempMax !== undefined && c.tempMin >= c.tempMax) add('danger', 'Temperature min must be lower than max. Recommended range: 18C to 35C.');
     else {
-        if (c.tempMin < 10) add('warning', 'Temperature min is very low; cold stress may be ignored too long. Consider 18C.');
-        if (c.tempMax > 42) add('danger', 'Temperature max is too high; buzzer/fan may react too late. Keep it near 35C.');
-        if (c.tempMax - c.tempMin < 5) add('warning', 'Temperature range is too narrow and may create frequent false alerts.');
-        if (c.tempMax - c.tempMin > 25) add('warning', 'Temperature range is too wide and may miss crop stress.');
+        if (c.tempMin !== undefined && c.tempMin < 10) add('warning', 'Temperature min is very low; cold stress may be ignored too long. Consider 18C.');
+        if (c.tempMax !== undefined && c.tempMax > 42) add('danger', 'Temperature max is too high; buzzer/fan may react too late. Keep it near 35C.');
+        if (c.tempMin !== undefined && c.tempMax !== undefined && c.tempMax - c.tempMin < 5) add('warning', 'Temperature range is too narrow and may create frequent false alerts.');
+        if (c.tempMin !== undefined && c.tempMax !== undefined && c.tempMax - c.tempMin > 25) add('warning', 'Temperature range is too wide and may miss crop stress.');
     }
 
-    if (c.phMin >= c.phMax) add('danger', 'pH min must be lower than pH max. Recommended range: 5.5 to 6.5.');
+    if (c.phMin !== undefined && c.phMax !== undefined && c.phMin >= c.phMax) add('danger', 'pH min must be lower than pH max. Recommended range: 5.5 to 6.5.');
     else {
-        if (c.phMin < 4.8) add('warning', 'pH min is too acidic for most crops. Consider 5.5.');
-        if (c.phMax > 7.2) add('warning', 'pH max is too alkaline for nutrient uptake. Consider 6.5.');
-        if (c.phMax - c.phMin > 1.8) add('warning', 'pH range is too wide; nutrient issues may be detected late.');
+        if (c.phMin !== undefined && c.phMin < 4.8) add('warning', 'pH min is too acidic for most crops. Consider 5.5.');
+        if (c.phMax !== undefined && c.phMax > 7.2) add('warning', 'pH max is too alkaline for nutrient uptake. Consider 6.5.');
+        if (c.phMin !== undefined && c.phMax !== undefined && c.phMax - c.phMin > 1.8) add('warning', 'pH range is too wide; nutrient issues may be detected late.');
     }
 
-    if (c.gasDangerThreshold > 3300) add('danger', 'Gas danger threshold is very high; buzzer may trigger too late. Consider 2500 or lower.');
-    if (c.gasDangerThreshold < 900) add('warning', 'Gas danger threshold is very sensitive and may cause frequent buzzer alerts.');
-    if (c.soilDryThreshold < 900) add('warning', 'Soil threshold is very low; watering may wait until plants are too dry.');
-    if (c.soilDryThreshold > 2700) add('warning', 'Soil threshold is very high; pump may run too often and waste water.');
-    if (c.lightThreshold < 700) add('warning', 'Light threshold is very low; plants may stay under-lit before action triggers.');
-    if (c.lightThreshold > 3200) add('warning', 'Light threshold is very high; lighting/fan simulation may trigger too often and waste energy.');
-    if (c.wateringDuration > 30) add('warning', 'Watering duration is long; risk of overwatering. Try 8-15 seconds first.');
-    if (c.wateringDuration < 4) add('warning', 'Watering duration is very short; pump may not deliver enough water.');
+    if (c.gasDangerThreshold !== undefined && c.gasDangerThreshold > 3300) add('danger', 'Gas danger threshold is very high; emergency buzzer may trigger too late. Consider 3000 or lower.');
+    if (c.gasDangerThreshold !== undefined && c.gasDangerThreshold < 900) add('warning', 'Gas danger threshold is very sensitive and may cause frequent buzzer alerts.');
+    if (c.soilDryThreshold !== undefined && c.soilDryThreshold < 900) add('warning', 'Soil threshold is very low; watering may wait until plants are too dry.');
+    if (c.soilDryThreshold !== undefined && c.soilDryThreshold > 3000) add('warning', 'Soil threshold is very high; pump may run too often and waste water.');
+    if (c.darkThreshold !== undefined && c.darkThreshold < 700) add('warning', 'Light threshold is very low; plants may stay under-lit before action triggers.');
+    if (c.darkThreshold !== undefined && c.darkThreshold > 3200) add('warning', 'Light threshold is very high; LED grow light may trigger too often and waste energy.');
+    if (c.wateringDurationSeconds !== undefined && c.wateringDurationSeconds > 30) add('warning', 'Pump duration is long; risk of overwatering. Try 8-15 seconds first.');
+    if (c.wateringDurationSeconds !== undefined && c.wateringDurationSeconds < 4) add('warning', 'Pump duration is very short; pump may not deliver enough water.');
+    if (c.co2MaxPpm !== undefined && c.co2MinPpm !== undefined && c.co2MinPpm >= c.co2MaxPpm) add('danger', 'CO2 min must be lower than CO2 max.');
+    if (c.energyDailyLimitKwh !== undefined && c.energyDailyLimitKwh > 80) add('warning', 'Energy limit is very high; Eco Save analysis may become meaningless.');
+    if (c.cameraScanIntervalMinutes !== undefined && c.cameraScanIntervalMinutes > 1440) add('warning', 'Camera scan interval is longer than one day; disease detection may be late.');
 
     return findings;
 }
@@ -461,6 +450,107 @@ function manualButton(command, icon, label) {
             <div style="font-size:24px;line-height:1;">${icon}</div>
             <div style="font-size:11px;margin-top:6px;">${label}</div>
         </button>`;
+}
+
+function controlThresholdCardHtml({ id, title, subtitle, scope, thresholds }) {
+    const safeId = String(id || scope || 'threshold').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const isFarm = scope === 'farm';
+    return `
+        <div class="control-threshold-card" data-threshold-scope="${escapeAttr(scope)}" data-threshold-id="${escapeAttr(safeId)}" style="background:var(--surface);border:1px solid var(--border);border-radius:22px;padding:16px;box-shadow:var(--shadow-sm);">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;">
+                <div style="min-width:0;">
+                    <div style="font-size:11px;font-weight:900;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;">${isFarm ? 'Farm level threshold' : 'Zone level threshold'}</div>
+                    <div style="font-size:17px;font-weight:900;color:var(--text);margin-top:3px;">${escapeHTML(title)}</div>
+                    <div style="font-size:12px;color:var(--sub);line-height:1.35;margin-top:3px;">${escapeHTML(subtitle)}</div>
+                </div>
+                <span style="background:${isFarm ? '#ECFDF5' : '#EFF6FF'};color:${isFarm ? 'var(--accent)' : '#2563EB'};border-radius:999px;padding:7px 10px;font-size:10px;font-weight:900;text-transform:uppercase;white-space:nowrap;">${isFarm ? 'shared' : 'per zone'}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+                ${controlThresholdInputsHtml(scope, safeId, thresholds)}
+            </div>
+            <div style="margin-top:12px;background:#F8FAFC;border:1px solid var(--border);border-radius:14px;padding:11px 12px;color:var(--sub);font-size:12px;line-height:1.45;">
+                <b style="color:var(--text);">AI reason:</b> ${escapeHTML(controlThresholdReason(scope, title, thresholds))}
+            </div>
+        </div>
+    `;
+}
+
+function controlThresholdInputsHtml(scope, zoneId, thresholds) {
+    const items = scope === 'farm' ? controlFarmThresholdItems() : controlZoneThresholdItems();
+    return items.map(item => thresholdInputHtml(item, scope, zoneId, thresholds)).join('');
+}
+
+function thresholdInputHtml(item, scope, zoneId, thresholds) {
+    const value = thresholds?.[item.key] ?? item.default;
+    return `
+        <label style="display:flex;flex-direction:column;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:11px 12px;min-width:0;">
+            <span style="font-size:10px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;">${escapeHTML(item.label)}</span>
+            <input class="control-threshold-input" data-key="${escapeAttr(item.key)}" data-scope="${escapeAttr(scope)}" data-zone="${escapeAttr(zoneId)}" type="number" value="${escapeAttr(value)}" min="${escapeAttr(item.min)}" max="${escapeAttr(item.max)}" step="${escapeAttr(item.step)}" style="border:none;background:transparent;outline:none;color:var(--accent);font-size:18px;font-weight:900;font-family:'DM Mono',monospace;width:100%;">
+            <span style="font-size:11px;color:var(--sub);line-height:1.3;">${escapeHTML(item.unit)} · ${escapeHTML(item.hint)}</span>
+        </label>
+    `;
+}
+
+function controlFarmThresholdItems() {
+    return [
+        { key: 'co2MinPpm', label: 'CO2 minimum', default: 700, min: 300, max: 1500, step: 10, unit: 'ppm', hint: 'farm air baseline' },
+        { key: 'co2MaxPpm', label: 'CO2 maximum', default: 1200, min: 600, max: 2500, step: 10, unit: 'ppm', hint: 'upper ventilation guard' },
+        { key: 'waterLowCm', label: 'Reservoir low', default: 18, min: 1, max: 80, step: 1, unit: 'cm', hint: 'HC-SR04 refill alert' },
+        { key: 'waterCriticalCm', label: 'Reservoir critical', default: 6, min: 1, max: 40, step: 1, unit: 'cm', hint: 'emergency pump lockout' },
+        { key: 'gasDangerThreshold', label: 'MQ-2 danger', default: 2500, min: 500, max: 4095, step: 50, unit: 'raw', hint: 'safety buzzer threshold' },
+        { key: 'energyDailyLimitKwh', label: 'Power limit', default: 8, min: 1, max: 120, step: 0.5, unit: 'kWh/day', hint: 'energy budget' },
+        { key: 'fanDurationSeconds', label: 'Main fan duration', default: 20, min: 3, max: 180, step: 1, unit: 'sec', hint: 'facility ventilation output' },
+        { key: 'farmPollIntervalSeconds', label: 'Farm poll interval', default: 300, min: 5, max: 3600, step: 5, unit: 'sec', hint: 'master node sync rate' },
+    ];
+}
+
+function controlZoneThresholdItems() {
+    return [
+        { key: 'tempMin', label: 'Temp minimum', default: 18, min: 0, max: 35, step: 0.5, unit: 'C', hint: 'DHT11 lower guard' },
+        { key: 'tempMax', label: 'Temp maximum', default: 35, min: 15, max: 55, step: 0.5, unit: 'C', hint: 'fan or buzzer trigger' },
+        { key: 'humidityMin', label: 'Humidity minimum', default: 50, min: 20, max: 95, step: 1, unit: '%', hint: 'DHT11 humidity floor' },
+        { key: 'humidityMax', label: 'Humidity maximum', default: 85, min: 40, max: 100, step: 1, unit: '%', hint: 'mold prevention' },
+        { key: 'soilDryThreshold', label: 'Soil dry', default: 1800, min: 200, max: 4095, step: 50, unit: 'raw', hint: 'water pump trigger' },
+        { key: 'darkThreshold', label: 'LDR dark', default: 1500, min: 100, max: 4095, step: 50, unit: 'raw', hint: 'grow light trigger' },
+        { key: 'phMin', label: 'pH minimum', default: 5.5, min: 3, max: 8, step: 0.1, unit: 'pH', hint: 'acidic warning' },
+        { key: 'phMax', label: 'pH maximum', default: 6.5, min: 4, max: 9, step: 0.1, unit: 'pH', hint: 'alkaline warning' },
+        { key: 'ecMin', label: 'EC minimum', default: 1.2, min: 0, max: 4, step: 0.1, unit: 'mS/cm', hint: 'fertilizer low alert' },
+        { key: 'ecMax', label: 'EC maximum', default: 2.2, min: 0.5, max: 6, step: 0.1, unit: 'mS/cm', hint: 'fertilizer excess alert' },
+        { key: 'flowMinLpm', label: 'Flow minimum', default: 0.3, min: 0, max: 5, step: 0.1, unit: 'L/min', hint: 'YF-S201 pump health' },
+        { key: 'wateringDurationSeconds', label: 'Pump duration', default: 10, min: 1, max: 90, step: 1, unit: 'sec', hint: 'irrigation output' },
+        { key: 'growLightDurationMinutes', label: 'Grow light pulse', default: 20, min: 1, max: 240, step: 1, unit: 'min', hint: 'LED output duration' },
+        { key: 'zoneFanDurationSeconds', label: 'Zone fan duration', default: 15, min: 1, max: 180, step: 1, unit: 'sec', hint: 'zone airflow output' },
+        { key: 'cameraScanIntervalMinutes', label: 'Camera scan', default: 720, min: 10, max: 2880, step: 10, unit: 'min', hint: 'disease analysis cadence' },
+        { key: 'diseaseConfidenceMin', label: 'Disease confidence', default: 70, min: 30, max: 99, step: 1, unit: '%', hint: 'AI asks questions below this' },
+    ];
+}
+
+function controlThresholdReason(scope, title, thresholds = {}) {
+    if (scope === 'farm') {
+        return 'Farm Master thresholds protect shared infrastructure first: CO2, reservoir level, gas safety, energy budget, main ventilation and emergency buzzer. These values are intentionally conservative because one farm-level failure can affect every zone.';
+    }
+    const temp = `${thresholds.tempMin ?? 18}-${thresholds.tempMax ?? 35}C`;
+    const ph = `${thresholds.phMin ?? 5.5}-${thresholds.phMax ?? 6.5}`;
+    return `${title} uses independent zone thresholds because each crop tray can have different temperature, root moisture, pH, EC, lighting and camera disease-risk needs. AI keeps the safe range around ${temp}, pH ${ph}, then lets operators tune pump, grow light and fan outputs without changing the whole farm.`;
+}
+
+function commercialZonesForControl(farm) {
+    const source = farm?.commercialStructure?.zones || farm?.zones || [];
+    const zones = Array.isArray(source) ? source : [];
+    if (zones.length) {
+        return zones.map((zone, index) => ({
+            id: zone.id || zone.zone_id || `zone_${String.fromCharCode(65 + index)}`,
+            label: zone.name || zone.label || `Zone ${String.fromCharCode(65 + index)}`,
+            crop: zone.crop || (Array.isArray(zone.plants) ? zone.plants.join(', ') : '') || 'Mixed crops',
+            thresholds: zone.thresholds || zone.aiThresholds || {},
+        }));
+    }
+    return ['A', 'B', 'C'].map(letter => ({
+        id: `zone_${letter}`,
+        label: `Zone ${letter}`,
+        crop: 'Mixed crops',
+        thresholds: {},
+    }));
 }
 function rangeControl(label, inputId, labelId, value, min, max, step, unit, hint) {
     return `
@@ -576,6 +666,7 @@ function escapeHTML(value) {
 function escapeAttr(value) {
     return escapeHTML(value).replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
+
 
 
 
