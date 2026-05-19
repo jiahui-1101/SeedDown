@@ -31,6 +31,7 @@ let fieldInfo = {
     targetPlant: '',
     analysisGoal: 'yield',
     rackType: '3-tier',
+    customRack: null,
 };
 let detectedPlants = [];
 let commercialStructure = null;
@@ -88,6 +89,24 @@ const PACKAGE_QR_OPTIONS = [
     { id: 'commercial_master', label: 'Commercial Farm Master', serial: 'SD-COM-MST-03001', accountType: 'commercial_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'master node for multi-zone farms' },
 ];
 
+const PACKAGE_CAPABILITIES = {
+    starter: {
+        label: 'Starter',
+        thresholdKeys: ['tempMin', 'tempMax', 'humidityMin', 'humidityMax', 'soilDryThreshold', 'darkThreshold', 'wateringDurationSeconds', 'sensorIntervalSeconds'],
+        lockedText: 'Unlock with Standard / Pro',
+    },
+    standard: {
+        label: 'Standard',
+        thresholdKeys: ['tempMin', 'tempMax', 'humidityMin', 'humidityMax', 'soilDryThreshold', 'darkThreshold', 'phMin', 'phMax', 'gasDangerThreshold', 'wateringDurationSeconds', 'fanDurationSeconds', 'sensorIntervalSeconds'],
+        lockedText: 'Unlock with Pro',
+    },
+    pro: {
+        label: 'Pro',
+        thresholdKeys: ['tempMin', 'tempMax', 'humidityMin', 'humidityMax', 'soilDryThreshold', 'darkThreshold', 'phMin', 'phMax', 'ecMin', 'ecMax', 'co2MinPpm', 'gasDangerThreshold', 'waterLowCm', 'wateringDurationSeconds', 'fanDurationSeconds', 'sensorIntervalSeconds'],
+        lockedText: '',
+    },
+};
+
 const EMOJI_MAP = {
     lettuce: '🥬',
     spinach: '🌿',
@@ -129,6 +148,7 @@ export function render() {
         targetPlant: '',
         analysisGoal: 'yield',
         rackType: '3-tier',
+        customRack: null,
     };
     detectedPlants = [];
     commercialStructure = null;
@@ -146,8 +166,8 @@ export function render() {
                 <button id="bfBack" aria-label="Back"
                     style="background:none;border:none;font-size:22px;cursor:pointer;padding:4px 8px;color:var(--text);line-height:1;">←</button>
                 <div>
-                    <div style="font-weight:800;font-size:16px;">${isCommercialFlow() ? 'New Commercial Farm' : 'New Field'}</div>
-                    <div style="font-size:11px;color:var(--muted);margin-top:1px;">${isCommercialFlow() ? 'AI zoning to device assignment and launch' : 'device setup to AI thresholds and 3D preview'}</div>
+                    <div style="font-weight:800;font-size:16px;">${isCommercialFlow() ? 'New Commercial Farm' : 'New Beginner Field'}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:1px;">${isCommercialFlow() ? 'AI zoning to device assignment and launch' : 'single-field QR setup, photo structure scan, and 3D preview'}</div>
                 </div>
                 <div style="width:40px;"></div>
             </div>
@@ -889,6 +909,7 @@ function renderDeviceStep(content) {
                 <div id="deviceStatus" style="margin-top:12px;font-size:12px;color:${registeredDevice ? 'var(--accent)' : 'var(--muted)'};line-height:1.45;">
                     ${registeredDevice ? `Linked ${escapeHTML(registeredDevice.deviceId)} · ${escapeHTML(registeredDevice.packageLevel)} · ${escapeHTML(registeredDevice.serial || deviceSetup.serial)}` : 'No QR scanned yet.'}
                 </div>
+                ${registeredDevice ? packageCapabilitySummaryHtml() : ''}
             </section>
 
             <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
@@ -931,6 +952,25 @@ function packageQrCardsHtml() {
             </button>
         `;
     }).join('');
+}
+
+function packageCapabilitySummaryHtml() {
+    const level = beginnerPackageLevel();
+    const capability = packageCapability(level);
+    const locks = thresholdItems()
+        .filter(item => !capability.thresholdKeys.includes(item.key))
+        .map(item => item.label)
+        .slice(0, 4);
+
+    return `
+        <div style="margin-top:12px;padding:11px;border-radius:12px;background:var(--accent-l);border:1px solid rgba(22,163,74,.16);">
+            <div style="font-size:11px;font-weight:900;color:var(--accent);margin-bottom:4px;">${escapeHTML(capability.label)} package detected</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.45;">
+                Threshold generation will only enable sensors included in this QR package.
+                ${locks.length ? ` Locked: ${locks.join(', ')}${locks.length >= 4 ? '...' : ''}` : ' All threshold controls are unlocked.'}
+            </div>
+        </div>
+    `;
 }
 
 function fakeQrGrid(serial) {
@@ -1093,6 +1133,17 @@ function rackOption(rack) {
     `;
 }
 
+function bindRackOptions() {
+    document.querySelectorAll('.rack-opt').forEach(button => {
+        button.addEventListener('click', () => {
+            fieldInfo.rackType = button.dataset.id || fieldInfo.rackType;
+            fieldInfo.customRack = null;
+            generatedThresholds = null;
+            drawStep();
+        });
+    });
+}
+
 function renderStep2(content) {
     content.innerHTML = `
         <div style="display:flex;flex-direction:column;gap:14px;">
@@ -1148,6 +1199,19 @@ function renderStep2(content) {
                     <button id="manualAddBtn" style="padding:10px 14px;border:none;border-radius:10px;background:var(--accent);color:white;font-weight:800;cursor:pointer;">Add</button>
                 </div>
             </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">STRUCTURE RECOGNITION</div>
+                        <div style="font-size:11px;color:var(--muted);margin-top:3px;">AI can detect rack/tower/wall/channel layout from the photo, then you can adjust it.</div>
+                    </div>
+                    <span id="structureStatus" style="font-size:10px;font-weight:900;color:var(--accent);">${currentRack().label}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:8px;max-height:260px;overflow:auto;">
+                    ${RACK_OPTIONS.map(rackOption).join('')}
+                </div>
+            </section>
         </div>
     `;
 
@@ -1158,6 +1222,7 @@ function renderStep2(content) {
     document.getElementById('manualPlantInput').addEventListener('keypress', event => {
         if (event.key === 'Enter') handleManualAdd();
     });
+    bindRackOptions();
 
     if (photoData && !scanStarted) {
         scanStarted = true;
@@ -1263,13 +1328,16 @@ async function scanPlantsFromPhoto() {
         });
         const data = await res.json();
         const plants = Array.isArray(data.plants) ? data.plants : [];
+        const recognizedStructure = data.structure || data.rack || data.layout;
+        let structureChanged = applyRecognizedStructure(recognizedStructure);
         if (plants.length) {
             mergePlants(plants);
-            showToast('success', `${plants.length} plant type${plants.length > 1 ? 's' : ''} detected`);
-            if (status) status.textContent = 'Review and adjust slots before generating 3D.';
+            structureChanged = autoFitStructureFromPhoto(recognizedStructure) || structureChanged;
+            showToast('success', `${plants.length} plant type${plants.length > 1 ? 's' : ''} detected${structureChanged ? ' + structure matched' : ''}`);
+            if (status) status.textContent = `Review plants and ${structureChanged ? 'detected structure' : 'structure'} before generating 3D.`;
         } else {
-            if (status) status.textContent = data.warning || 'No clear plant detected. Manual list is still usable.';
-            showToast('info', 'No plant detected from photo yet');
+            if (status) status.textContent = structureChanged ? 'Structure detected. Add plants manually if needed.' : (data.warning || 'No clear plant detected. Manual list is still usable.');
+            showToast('info', structureChanged ? 'Structure detected from photo' : 'No plant detected from photo yet');
         }
     } catch (error) {
         if (status) status.textContent = 'Photo scan unavailable. Manual plant list is ready.';
@@ -1280,10 +1348,12 @@ async function scanPlantsFromPhoto() {
             button.disabled = false;
         }
         renderPlantList();
+        if (!isCommercialFlow() && step === 3) drawStep();
     }
 }
 
 function renderStep3(content) {
+    autoFitStructureFromPhoto();
     const rack = currentRack();
     const totalUsed = totalSlotsUsed();
     const targetPlant = detectedPlants[0]?.name || 'Field';
@@ -1768,7 +1838,7 @@ function renderThresholdStep(content) {
                 <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px;">
                     <div>
                         <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">AI THRESHOLDS</div>
-                        <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45;">Plants: ${plants.map(p => escapeHTML(p.name)).join(', ') || 'mixed greens'}</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.45;">Plants: ${plants.map(p => escapeHTML(p.name)).join(', ') || 'mixed greens'} · Package: ${escapeHTML(packageCapability(beginnerPackageLevel()).label)}</div>
                     </div>
                     <button id="generateThresholdsBtn" style="padding:8px 10px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-l);color:var(--accent);font-size:11px;font-weight:900;cursor:pointer;">Generate</button>
                 </div>
@@ -1778,6 +1848,11 @@ function renderThresholdStep(content) {
                 <div id="thresholdGrid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
                     ${thresholdInputsHtml(generatedThresholds?.thresholds || {})}
                 </div>
+            </section>
+
+            <section style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);">
+                <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;margin-bottom:10px;">AI ANALYSIS</div>
+                ${thresholdAnalysisHtml(plants)}
             </section>
         </div>
     `;
@@ -1797,20 +1872,159 @@ function renderThresholdStep(content) {
     bindThresholdInputs();
 }
 
+function applyRecognizedStructure(structure) {
+    if (!structure) return false;
+    const rawType = String(structure.rackType || structure.type || structure.id || structure.structureType || '').toLowerCase();
+    const tiers = Number(structure.tiers || structure.tierCount || 0);
+    const slots = Number(structure.slotsPerTier || structure.columns || 0);
+    const text = `${rawType} ${structure.label || ''} ${structure.description || ''}`.toLowerCase();
+
+    let rackId = null;
+    if (text.includes('wall') || text.includes('panel') || text.includes('grid')) rackId = 'wall';
+    else if (text.includes('a-frame') || text.includes('pyramid') || text.includes('slant')) rackId = 'a-frame';
+    else if (text.includes('nft') || text.includes('channel') || text.includes('row')) rackId = 'nft-channel';
+    else if (text.includes('hanging') || text.includes('column') || text.includes('tower')) rackId = text.includes('tower') && tiers >= 5 ? '5-tier' : 'hanging';
+    else if (tiers >= 5) rackId = '5-tier';
+    else if (tiers === 4 && slots >= 5) rackId = 'wall';
+    else if (tiers === 4) rackId = '4-tier';
+    else if (tiers === 2) rackId = '2-tier';
+    else if (tiers === 3) rackId = '3-tier';
+    else if (rawType && RACK_OPTIONS.some(rack => rack.id === rawType)) rackId = rawType;
+
+    if (!rackId || fieldInfo.rackType === rackId) return false;
+    fieldInfo.rackType = rackId;
+    fieldInfo.customRack = null;
+    generatedThresholds = null;
+    return true;
+}
+
+function autoFitStructureFromPhoto(structure = null) {
+    const usedSlots = totalSlotsUsed();
+    if (!usedSlots) return false;
+
+    const current = currentRack();
+    const structureSlots = Number(structure?.total || structure?.totalSlots || structure?.plantSlots || 0);
+    const visibleTotal = Math.max(usedSlots, structureSlots);
+    const knownEnough = current.total >= visibleTotal && !fieldInfo.customRack;
+    if (knownEnough) return false;
+
+    const structureTiers = Number(structure?.tiers || structure?.tierCount || 0);
+    const structureSlotsPerTier = Number(structure?.slotsPerTier || structure?.columns || 0);
+    const tiers = structureTiers > 0
+        ? Math.max(1, Math.min(8, Math.round(structureTiers)))
+        : Math.max(3, Math.min(7, Math.ceil(Math.sqrt(visibleTotal))));
+    const slotsPerTier = structureSlotsPerTier > 0
+        ? Math.max(1, Math.min(12, Math.round(structureSlotsPerTier)))
+        : Math.max(3, Math.ceil(visibleTotal / tiers));
+    const total = Math.max(visibleTotal, tiers * slotsPerTier);
+    const shape = visibleTotal > 24 ? 'wall' : tiers >= 5 ? 'tower' : 'rack';
+
+    fieldInfo.customRack = {
+        id: 'photo-detected',
+        label: structure?.label || structure?.name || 'Photo-detected Multi Rack',
+        icon: 'AI',
+        tiers,
+        slotsPerTier,
+        total,
+        shape,
+        desc: 'Auto-sized from photo analysis and visible plant slot count',
+    };
+    fieldInfo.rackType = 'photo-detected';
+    generatedThresholds = null;
+    return true;
+}
+
 function thresholdInputsHtml(thresholds = {}) {
-    const items = [
-        ['tempMin', 'Temp min'], ['tempMax', 'Temp max'], ['humidityMin', 'Humid min'], ['humidityMax', 'Humid max'],
-        ['soilDryThreshold', 'Soil dry'], ['darkThreshold', 'Light dark'], ['phMin', 'pH min'], ['phMax', 'pH max'],
-        ['ecMin', 'EC min'], ['ecMax', 'EC max'], ['co2MinPpm', 'CO2 min'], ['wateringDurationSeconds', 'Water sec'],
-        ['fanDurationSeconds', 'Fan sec'], ['sensorIntervalSeconds', 'Interval sec'],
-    ];
-    return items.map(([key, label]) => `
-        <label style="display:block;">
+    const capability = packageCapability(beginnerPackageLevel());
+    return thresholdItems().map(({ key, label }) => {
+        const unlocked = capability.thresholdKeys.includes(key);
+        return `
+        <label style="display:block;opacity:${unlocked ? '1' : '.58'};">
             <span style="display:block;font-size:10px;font-weight:900;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">${label}</span>
-            <input class="threshold-input" data-key="${key}" type="number" value="${thresholds[key] ?? ''}" placeholder="auto"
-                style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);font-size:13px;font-weight:800;color:var(--text);outline:none;">
+            <input class="threshold-input" data-key="${key}" type="${unlocked ? 'number' : 'text'}" value="${unlocked ? (thresholds[key] ?? '') : capability.lockedText}" placeholder="${unlocked ? 'auto' : capability.lockedText}"
+                ${unlocked ? '' : 'disabled'}
+                style="width:100%;padding:10px;border:1px solid ${unlocked ? 'var(--border)' : 'rgba(148,163,184,.35)'};border-radius:10px;background:${unlocked ? 'var(--surface2)' : 'rgba(148,163,184,.1)'};font-size:13px;font-weight:800;color:${unlocked ? 'var(--text)' : 'var(--muted)'};outline:none;">
         </label>
-    `).join('');
+    `;
+    }).join('');
+}
+
+function thresholdItems() {
+    return [
+        { key: 'tempMin', label: 'Temp min' },
+        { key: 'tempMax', label: 'Temp max' },
+        { key: 'humidityMin', label: 'Humid min' },
+        { key: 'humidityMax', label: 'Humid max' },
+        { key: 'soilDryThreshold', label: 'Soil dry' },
+        { key: 'darkThreshold', label: 'Light dark' },
+        { key: 'phMin', label: 'pH min' },
+        { key: 'phMax', label: 'pH max' },
+        { key: 'ecMin', label: 'EC min' },
+        { key: 'ecMax', label: 'EC max' },
+        { key: 'co2MinPpm', label: 'CO2 min' },
+        { key: 'gasDangerThreshold', label: 'Gas limit' },
+        { key: 'waterLowCm', label: 'Water low' },
+        { key: 'wateringDurationSeconds', label: 'Water sec' },
+        { key: 'fanDurationSeconds', label: 'Fan sec' },
+        { key: 'sensorIntervalSeconds', label: 'Interval sec' },
+    ];
+}
+
+function thresholdAnalysisHtml(plants = []) {
+    const rack = currentRack();
+    const level = beginnerPackageLevel();
+    const capability = packageCapability(level);
+    const plantNames = plants.length ? plants.map(plant => plant.name).join(', ') : 'mixed greens';
+    const goals = goalPriority.map(goal => GOAL_OPTIONS.find(item => item.id === goal)?.label || goal).join(', ') || 'Beginner Safe';
+    const locked = thresholdItems().filter(item => !capability.thresholdKeys.includes(item.key)).map(item => item.label);
+    const generated = Boolean(generatedThresholds?.thresholds);
+    const sourceLabel = generatedThresholds?.source === 'ai' ? 'AI generated' : generatedThresholds?.source === 'fallback' ? 'Rule-based fallback' : generated ? 'Manual / edited' : 'Waiting for generation';
+
+    const reasons = [
+        `Plant profile: ${plantNames}.`,
+        `Structure: ${rack.label} with ${rack.tiers} tiers and ${rack.total} slots.`,
+        `Goal priority: ${goals}.`,
+        `Package logic: ${capability.label} only enables thresholds for available sensors.`,
+    ];
+
+    if (locked.length) {
+        reasons.push(`Locked sensors: ${locked.slice(0, 5).join(', ')}${locked.length > 5 ? '...' : ''}.`);
+    } else {
+        reasons.push('All sensor thresholds are unlocked for this package.');
+    }
+
+    return `
+        <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">
+                <strong style="font-size:13px;color:var(--text);">${escapeHTML(sourceLabel)}</strong>
+                <span style="font-size:10px;font-weight:900;color:var(--accent);background:var(--accent-l);padding:5px 8px;border-radius:999px;">${escapeHTML(capability.label)}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.55;">
+                ${escapeHTML(generatedThresholds?.notes || 'Generate thresholds to see SeedDown’s full reasoning for this field.')}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+                ${reasons.map(reason => `
+                    <div style="display:flex;gap:7px;align-items:flex-start;font-size:11px;color:var(--sub);line-height:1.45;">
+                        <span style="color:var(--accent);font-weight:900;">•</span>
+                        <span>${escapeHTML(reason)}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function packageCapability(level) {
+    return PACKAGE_CAPABILITIES[level] || PACKAGE_CAPABILITIES.standard;
+}
+
+function beginnerPackageLevel() {
+    return registeredDevice?.packageLevel || PACKAGE_QR_OPTIONS.find(item => item.serial === deviceSetup.serial)?.packageLevel || 'standard';
+}
+
+function filterThresholdsForPackage(thresholds = {}, level = beginnerPackageLevel()) {
+    const allowed = new Set(packageCapability(level).thresholdKeys);
+    return Object.fromEntries(Object.entries(thresholds).filter(([key]) => allowed.has(key)));
 }
 
 function bindThresholdInputs() {
@@ -1906,7 +2120,12 @@ async function generateThresholdsForField() {
         });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'Threshold generation failed');
-        generatedThresholds = { thresholds: data.thresholds, notes: data.notes, source: data.source };
+        const packageLevel = registeredDevice?.packageLevel || beginnerPackageLevel();
+        generatedThresholds = {
+            thresholds: filterThresholdsForPackage(data.thresholds || {}, packageLevel),
+            notes: data.notes || `${packageCapability(packageLevel).label} package thresholds generated. Locked sensors require a higher package.`,
+            source: data.source,
+        };
         showToast('success', data.source === 'ai' ? 'AI thresholds generated' : 'Fallback thresholds generated');
         drawStep();
         return generatedThresholds;
@@ -2099,12 +2318,13 @@ async function createField() {
 
     const rack = currentRack();
     const fieldId = registeredDevice?.fieldId || `field_${Date.now()}`;
-    const thresholds = generatedThresholds?.thresholds || {};
+    const thresholds = filterThresholdsForPackage(generatedThresholds?.thresholds || {}, registeredDevice?.packageLevel || beginnerPackageLevel());
     const payload = {
         name: fieldInfo.name.trim(),
         location: fieldInfo.location.trim(),
         description: fieldInfo.description.trim(),
         rackType: fieldInfo.rackType,
+        rackConfig: fieldInfo.customRack ? { ...fieldInfo.customRack } : null,
         targetPlant: detectedPlants.map(plant => plant.name).join(', '),
         analysisGoal: goalPriority.join(','),
         viewMode,
@@ -2158,6 +2378,7 @@ async function createField() {
         rackTypeId: fieldInfo.rackType,
         rackType: rack.label,
         rackLabel: rack.label,
+        rackConfig: fieldInfo.customRack ? { ...fieldInfo.customRack } : null,
         targetPlant: payload.targetPlant,
         analysisGoal: payload.analysisGoal,
         deviceId: registeredDevice?.deviceId || 'farm_001',
@@ -2427,6 +2648,9 @@ function normalizePlant(plant) {
     };
 }
 function currentRack() {
+    if (fieldInfo.rackType === 'photo-detected' && fieldInfo.customRack) {
+        return fieldInfo.customRack;
+    }
     return RACK_OPTIONS.find(rack => rack.id === fieldInfo.rackType) || RACK_OPTIONS[0];
 }
 
@@ -2439,6 +2663,19 @@ function goalLabel(id) {
 }
 
 function isCommercialFlow() {
+    try {
+        const buildFlow = localStorage.getItem('seeddown_build_flow');
+        if (buildFlow === 'beginner') {
+            AppState.mode = 'beginner';
+            return false;
+        }
+        if (buildFlow === 'commercial' || localStorage.getItem('seeddown_mode') === 'commercial') {
+            AppState.mode = 'commercial';
+            return true;
+        }
+    } catch {
+        // Keep AppState as the fallback when storage is unavailable.
+    }
     return AppState.mode === 'commercial';
 }
 

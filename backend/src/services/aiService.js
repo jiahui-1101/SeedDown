@@ -168,16 +168,6 @@ async function analyzePlantImage({ image, mediaType, targetPlant }) {
   return parsePlantRecognition(rawText);
 }
 
-async function analyzePlantDisease({ image, mediaType, plantName, plantSpecies, farmContext = {}, answers = {} }) {
-  const rawText = await runVisionPrompt({
-    image,
-    mediaType,
-    prompt: plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }),
-    maxTokens: 1200,
-  });
-  return parseDiseaseAnalysis(rawText, plantName);
-}
-
 async function chatWithAdvisor(messages, gardenState) {
   const system = `You are Sprout, the AI garden advisor for SeedDown.
 Help with crop care, harvest timing, recipes, sensor readings, and vertical farming.
@@ -225,11 +215,18 @@ function plantRecognitionPrompt(targetPlant) {
 
   return `You are a vertical farm expert. Analyse this indoor or vertical farm photo.${hint}
 
-Identify every plant species you can see and estimate how many slots or pots each occupies.
+Identify every plant species you can see, estimate how many slots or pots each occupies, and recognise the visible vertical farming structure.
 
 Return ONLY valid JSON, no markdown fences, no preamble:
 
 {
+  "structure": {
+    "rackType": "2-tier | 3-tier | 4-tier | 5-tier | wall | a-frame | nft-channel | hanging",
+    "label": "short structure name",
+    "tiers": 3,
+    "slotsPerTier": 3,
+    "confidence": 0.82
+  },
   "plants": [
     {
       "name": "Common Name",
@@ -244,67 +241,182 @@ Return ONLY valid JSON, no markdown fences, no preamble:
 Rules:
 - confidence: 0.0-1.0
 - slots: integer, estimated pot or slot count for this species visible
+- rackType must be one of the listed values; choose the closest match from visual structure
+- tiers and slotsPerTier should match the visible rack/tower/channel when possible
 - species: lowercase, underscores for spaces
 - use realistic vegetable or herb emojis
 - if photo is unclear but the target plant hint is useful, return one plant using the hint with lower confidence
-- if no plants are visible and no hint is useful, return {"plants":[]}
+- if no plants are visible and no hint is useful, still return structure if visible, with "plants":[]
 - return raw JSON only`;
-}
-
-function plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }) {
-  const context = JSON.stringify({ plantName, plantSpecies, farmContext, answers }, null, 2);
-  return `You are SeedDown's commercial vertical farming plant health analyst.
-Analyse the uploaded plant photo using the known plant context below.
-
-Known context:
-${context}
-
-Return ONLY valid JSON, no markdown fences, no preamble:
-
-{
-  "plant": "Plant name",
-  "condition": "Most likely disease or stress condition",
-  "severity": "low | medium | high | unknown",
-  "confidence": 0.78,
-  "confidenceExplanation": "Short explanation of why this confidence was selected",
-  "evidence": ["visible symptom or contextual clue"],
-  "likelyCauses": ["cause 1", "cause 2"],
-  "solutions": ["specific action 1", "specific action 2", "specific action 3"],
-  "prevention": ["future prevention step 1", "future prevention step 2"],
-  "needsMoreInfo": false,
-  "followUpQuestions": []
-}
-
-Rules:
-- Use the known plant species strongly, because recognition happened earlier.
-- If the photo is unclear, symptoms are not visible, or multiple diseases look similar, set confidence below 0.55, needsMoreInfo true, and ask 3 concise follow-up questions.
-- If it looks like environmental stress instead of infection, say so clearly.
-- Do not claim certainty. Keep recommendations practical for indoor vertical farming.
-- confidence must be from 0.0 to 1.0.
-- return raw JSON only.`;
 }
 
 function parsePlantRecognition(rawText) {
   const parsed = JSON.parse(stripJson(rawText, '{"plants":[]}'));
   parsed.plants = sanitizePlants(parsed.plants || []);
+  parsed.structure = sanitizeStructure(parsed.structure || parsed.rack || parsed.layout);
   return parsed;
 }
 
-function parseDiseaseAnalysis(rawText, fallbackPlant = 'Plant') {
+function sanitizeStructure(structure = {}) {
+  const allowed = new Set(['2-tier', '3-tier', '4-tier', '5-tier', 'wall', 'a-frame', 'nft-channel', 'hanging']);
+  const rawType = String(structure.rackType || structure.type || structure.id || '').toLowerCase();
+  const rackType = allowed.has(rawType) ? rawType : inferRackType(structure);
+  return {
+    rackType,
+    label: structure.label || labelRackType(rackType),
+    tiers: Math.max(1, Math.min(8, parseInt(structure.tiers || structure.tierCount, 10) || defaultTiers(rackType))),
+    slotsPerTier: Math.max(1, Math.min(12, parseInt(structure.slotsPerTier || structure.columns, 10) || defaultSlotsPerTier(rackType))),
+    confidence: Math.min(1, Math.max(0, parseFloat(structure.confidence) || 0.45)),
+  };
+}
+
+function inferRackType(structure = {}) {
+  const text = `${structure.label || ''} ${structure.description || ''} ${structure.structureType || ''}`.toLowerCase();
+  const tiers = parseInt(structure.tiers || structure.tierCount, 10) || 0;
+  const slots = parseInt(structure.slotsPerTier || structure.columns, 10) || 0;
+
+  if (text.includes('wall') || text.includes('panel') || text.includes('grid')) return 'wall';
+  if (text.includes('a-frame') || text.includes('pyramid') || text.includes('slant')) return 'a-frame';
+  if (text.includes('nft') || text.includes('channel') || text.includes('row')) return 'nft-channel';
+  if (text.includes('hanging') || text.includes('column')) return 'hanging';
+  if (tiers >= 5) return '5-tier';
+  if (tiers === 4 && slots >= 5) return 'wall';
+  if (tiers === 4) return '4-tier';
+  if (tiers === 2) return '2-tier';
+  return '3-tier';
+}
+
+function defaultTiers(rackType) {
+  return {
+    '2-tier': 2,
+    '3-tier': 3,
+    '4-tier': 4,
+    '5-tier': 5,
+    wall: 4,
+    'a-frame': 4,
+    'nft-channel': 3,
+    hanging: 5,
+  }[rackType] || 3;
+}
+
+function defaultSlotsPerTier(rackType) {
+  return {
+    '2-tier': 3,
+    '3-tier': 3,
+    '4-tier': 4,
+    '5-tier': 4,
+    wall: 5,
+    'a-frame': 4,
+    'nft-channel': 6,
+    hanging: 3,
+  }[rackType] || 3;
+}
+
+function labelRackType(rackType) {
+  return {
+    '2-tier': '2-Tier Starter Rack',
+    '3-tier': '3-Tier Vertical Rack',
+    '4-tier': '4-Tier Grow Shelf',
+    '5-tier': '5-Tier Tower Rack',
+    wall: 'Wall Panel Grid',
+    'a-frame': 'A-Frame Pyramid',
+    'nft-channel': 'NFT Channel Rows',
+    hanging: 'Hanging Column Farm',
+  }[rackType] || '3-Tier Vertical Rack';
+}
+
+async function analyzePlantDisease({ image, mediaType, plantName, plantSpecies, farmContext = {}, answers = {} }) {
+  const prompt = plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers });
+
+  let rawText;
+
+  if (image && image.trim() !== '') {
+    rawText = await runVisionPrompt({
+      image,
+      mediaType,
+      prompt,
+      maxTokens: 1200,
+    });
+  } else {
+    const noImageSystemPrompt = "You are SeedDown's commercial vertical farming plant health analyst. Respond ONLY with valid JSON, no markdown.";
+    const noImageUserMsg = `[NO IMAGE PROVIDED BY USER - DIAGNOSE BASED ON CONTEXT ONLY]\n\n${prompt}`;
+
+    rawText = await askText(noImageSystemPrompt, noImageUserMsg, 1200);
+  }
+
+  return parseDiseaseAnalysis(rawText, plantName, !image);
+}
+
+function plantDiseasePrompt({ plantName, plantSpecies, farmContext, answers }) {
+  const context = JSON.stringify({ plantName, plantSpecies, farmContext, answers }, null, 2);
+  return `Analyse the plant health state using the known plant context below. 
+If an image is available (queried via vision), inspect it. If NO image is provided, base your entire clinical judgment on the symptoms text and farm context parameters.
+
+Known context:
+${context}
+
+Return ONLY valid JSON, no markdown fences, no preamble:
+{
+  "plant": "Plant name",
+  "condition": "Most likely disease or stress condition",
+  "severity": "low | medium | high | unknown",
+  "confidence": 0.55,
+  "confidenceExplanation": "Short explanation of why this confidence was selected",
+  "evidence": ["visible symptom or contextual clue"],
+  "likelyCauses": ["cause 1", "cause 2"],
+  "solutions": ["specific action 1", "specific action 2", "specific action 3"],
+  "prevention": ["future prevention step 1", "future prevention step 2"],
+  "treatmentDuration": "Estimated time needed to cure (e.g., '5-7 days')",
+  "needsMoreInfo": true,
+  "followUpQuestions": []
+}
+
+Rules:
+- If NO image is provided, your max confidence should not exceed 0.65 because you cannot visually confirm symptoms. Set needsMoreInfo to true and provide follow-up questions to help the user inspect the plant manually.
+- Do not claim certainty. Keep recommendations practical for indoor vertical farming.
+- return raw JSON only.`;
+}
+
+function parseDiseaseAnalysis(rawText, fallbackPlant = 'Plant', isNoImage = false) {
   const parsed = JSON.parse(stripJson(rawText, '{}'));
-  const confidence = Math.min(1, Math.max(0, parseFloat(parsed.confidence) || 0));
+  let confidence = Math.min(1, Math.max(0, parseFloat(parsed.confidence) || 0));
+  
+  // No-image mode is capped because symptoms cannot be visually confirmed.
+  if (isNoImage && confidence > 0.65) {
+    confidence = 0.65;
+  }
+
+  // Ask follow-up questions when confidence is low or no image was provided.
+  const needsMoreInfo = Boolean(parsed.needsMoreInfo) || confidence < 0.80 || isNoImage;
+
+  // Use model questions first, then fill gaps with practical checks.
+  let finalQuestions = sanitizeStringList(parsed.followUpQuestions).slice(0, 4);
+
+  if (needsMoreInfo && finalQuestions.length === 0) {
+    if (isNoImage) {
+      finalQuestions.push("Could you please provide a photo of the affected area?");
+    }
+
+    finalQuestions.push(
+      "Observe closely: do the spots eventually dry out, become brittle, and easily crack to form small holes (shot-holes)?",
+      "Do the spots feature concentric rings on their surface, similar to the rings of a tree?",
+      "Did these symptoms first appear on the older leaves at the bottom of the plant, or did they appear all over the plant (including new leaves and fruits) at the same time?"
+    );
+  }
+
   return {
     plant: parsed.plant || fallbackPlant || 'Plant',
     condition: parsed.condition || 'Unable to confirm plant disease from this image',
     severity: ['low', 'medium', 'high', 'unknown'].includes(parsed.severity) ? parsed.severity : 'unknown',
     confidence,
-    confidenceExplanation: parsed.confidenceExplanation || 'Confidence is based on image clarity, visible symptoms, and match with the known plant profile.',
+    confidenceExplanation: parsed.confidenceExplanation || (isNoImage ? 'Diagnosis made without image analysis; purely based on parameters.' : 'Confidence check.'),
     evidence: sanitizeStringList(parsed.evidence),
     likelyCauses: sanitizeStringList(parsed.likelyCauses),
     solutions: sanitizeStringList(parsed.solutions),
     prevention: sanitizeStringList(parsed.prevention),
-    needsMoreInfo: Boolean(parsed.needsMoreInfo) || confidence < 0.55,
-    followUpQuestions: sanitizeStringList(parsed.followUpQuestions).slice(0, 4),
+    treatmentDuration: parsed.treatmentDuration || 'Undetermined duration',
+    needsMoreInfo,
+    followUpQuestions: finalQuestions,
   };
 }
 

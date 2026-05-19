@@ -5,7 +5,7 @@ const fallbackPageModules = {
     splash: () => import("../pages/SplashPage.js").then((m) => m.render()),
     login: () => import("../pages/LoginPage.js").then((m) => m.render()),
     farmlist: () => import("../pages/FarmListPage.js").then((m) => m.render()),
-    buildfarm: () => import("../pages/BuildFarmPage.js").then((m) => m.render()),
+    buildfarm: () => import("../pages/BuildFarmPage.js?v=beginner-commercial-split-2").then((m) => m.render()),
     home: () => import("../pages/HomePage.js").then((m) => m.render()),
     "dash-c": () => import("../pages/CommercialPage.js").then((m) => m.render()),
     control: () => import("../pages/ControlPage.js").then((m) => m.render()),

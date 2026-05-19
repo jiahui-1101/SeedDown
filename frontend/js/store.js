@@ -1,5 +1,13 @@
+function savedMode() {
+    try {
+        return localStorage.getItem('seeddown_mode') || 'beginner';
+    } catch {
+        return 'beginner';
+    }
+}
+
 export const AppState = {
-    mode: 'beginner',
+    mode: savedMode(),
     currentScreen: 'splash',
     farmName: 'My Farm',
     currentFarmId: null,

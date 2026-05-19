@@ -1,560 +1,597 @@
-import { showScreen } from '../utils/navigation.js';
-import { AppState } from '../store.js';
-import { showToast } from '../utils/toast.js';
+/* ============================================================
+   DiseaseAnalysisPage.js — AI Disease Analysis (Optimized)
+   ============================================================ */
+   import { showScreen } from '../utils/navigation.js';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
+   const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+       ? 'http://localhost:3000' : window.location.origin;
+   
+   function getPlantedCrops() {
+       const seen   = new Set();
+       const result = [];
+   
+       function add(name, emoji) {
+           if (!name) return;
+           const key = name.toLowerCase().trim();
+           if (seen.has(key)) return;
+           seen.add(key);
+           result.push({
+               name:    name.charAt(0).toUpperCase() + name.slice(1),
+               emoji:   emoji || emojiFor(name),
+               species: key.replace(/\s+/g, '_'),
+           });
+       }
+   
+       try {
+           const farms = JSON.parse(localStorage.getItem('user_farms') || '[]');
+           const farm  = window.AppState?.currentFarm
+               || farms.find(f => f.id === window.AppState?.currentFarmId)
+               || farms[farms.length - 1];
+   
+           if (farm) {
+               (farm.plants || []).forEach(p => {
+                   if (typeof p === 'string') add(p);
+                   else add(p.name || p.species, p.emoji);
+               });
+   
+               (farm.zones || []).forEach(zone => {
+                   (zone.plants || []).forEach(p => {
+                       if (typeof p === 'string') add(p);
+                       else add(p.name || p.species, p.emoji);
+                   });
+               });
+           }
+   
+           (window.AppState?.tiles || []).forEach(tile => {
+               if (tile.name && tile.status !== 'empty') add(tile.name, tile.plant);
+           });
+       } catch (_) {}
+   
+       return result;
+   }
+   
+   function emojiFor(name = '') {
+       const k = name.toLowerCase();
+       if (k.includes('lettuce') || k.includes('cabbage') || k.includes('kale'))  return '🥬';
+       if (k.includes('tomato'))   return '🍅';
+       if (k.includes('chili') || k.includes('pepper') || k.includes('capsicum')) return '🌶️';
+       if (k.includes('strawberry'))  return '🍓';
+       if (k.includes('cucumber'))    return '🥒';
+       if (k.includes('carrot'))      return '🥕';
+       if (k.includes('spinach'))     return '🍃';
+       if (k.includes('basil') || k.includes('mint') || k.includes('cilantro'))   return '🌿';
+       if (k.includes('bean'))        return '🫘';
+       return '🌱';
+   }
+   
+   /* ── render ── */
+   export function render() {
+       const container = document.getElementById('screenContainer');
+       const crops     = getPlantedCrops();
+   
+       container.innerHTML = `
+       <div id="diseaseScreen" class="screen active" style="min-height:100vh;background:#f4f6f8;padding-bottom:80px;">
+   
+         <div style="display:flex;align-items:center;gap:12px;padding:16px 18px;
+                     background:white;border-bottom:1px solid #eee;position:sticky;top:0;z-index:10;">
+           <button onclick="window.showScreen('dash-c')"
+                   style="background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;padding:0;">←</button>
+           <div>
+             <div style="font-weight:800;font-size:1.05rem;color:#1f2937;">🧫 AI Commercial Disease Analysis</div>
+             <div style="font-size:0.72rem;color:#9CA3AF;">Powered by SeedDown AI · Multi-Model Core</div>
+           </div>
+         </div>
+   
+         <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+   
+           <div style="background:white;border-radius:16px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
+             <div style="font-weight:700;font-size:.88rem;color:#374151;margin-bottom:12px;">📷 Upload Plant Photo</div>
+   
+             <div id="dropZone"
+                  style="border:2px dashed #D1FAE5;border-radius:12px;padding:28px 16px;
+                         text-align:center;cursor:pointer;background:#FAFFFE;transition:all .2s;"
+                  onclick="document.getElementById('photoInput').click()"
+                  ondragover="event.preventDefault();this.style.borderColor='#10B981';this.style.background='#F0FDF4';"
+                  ondragleave="this.style.borderColor='#D1FAE5';this.style.background='#FAFFFE';"
+                  ondrop="window._daDrop(event)">
+               <div style="font-size:2.2rem;margin-bottom:8px;">📸</div>
+               <div style="font-weight:700;color:#065F46;margin-bottom:3px;font-size:.9rem;">Tap or drag photo here</div>
+               <div style="font-size:.73rem;color:#9CA3AF;">JPG · PNG · WEBP — max 8MB</div>
+             </div>
+             <input type="file" id="photoInput" accept="image/*" style="display:none;">
+   
+             <div id="imgPreviewWrap" style="display:none;margin-top:12px;position:relative;">
+               <img id="imgPreview" style="width:100%;max-height:240px;object-fit:contain;border-radius:10px;
+                                            border:1px solid #eee;display:block;">
+               <button onclick="window._daClear()"
+                       style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:white;
+                              border:none;border-radius:50%;width:28px;height:28px;font-size:.9rem;
+                              cursor:pointer;line-height:1;">✕</button>
+             </div>
+           </div>
+   
+           <div style="background:white;border-radius:16px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
+             <div style="font-weight:700;font-size:.88rem;color:#374151;margin-bottom:12px;">🌱 Which Plant?</div>
+   
+             ${crops.length ? `
+             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;" id="cropChips">
+               ${crops.map(p => `
+                 <button class="crop-chip"
+                         onclick="window._daSelectCrop('${p.name}')"
+                         style="padding:7px 14px;border-radius:20px;border:1.5px solid #E5E7EB;
+                                background:white;font-size:.82rem;cursor:pointer;
+                                display:flex;align-items:center;gap:6px;transition:all .15s;">
+                   <span>${p.emoji}</span><span>${p.name}</span>
+                 </button>`).join('')}
+             </div>
+             <div style="font-size:.72rem;color:#9CA3AF;text-align:center;margin-bottom:10px;">— or type below —</div>
+             ` : `
+             <div style="font-size:.78rem;color:#9CA3AF;margin-bottom:10px;">
+               No plants detected from your farm. Type the plant name below.
+             </div>`}
+   
+             <input id="plantNameInput" type="text" placeholder="e.g. Lettuce, Basil, Tomato"
+                    style="width:100%;padding:11px 14px;border-radius:10px;
+                           border:1.5px solid #E5E7EB;font-size:.9rem;
+                           box-sizing:border-box;outline:none;">
+           </div>
+   
+           <details style="background:white;border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,.05);">
+             <summary style="padding:16px 18px;font-weight:700;font-size:.88rem;color:#374151;
+                              cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;">
+               ⚙️ Add Farm Context <span style="font-size:.72rem;color:#9CA3AF;font-weight:400;">(optional)</span>
+             </summary>
+             <div style="padding:0 18px 18px;display:flex;flex-direction:column;gap:10px;">
+               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                 <div>
+                   <label style="font-size:.73rem;color:#9CA3AF;display:block;margin-bottom:4px;">Temp (°C)</label>
+                   <input id="ctxTemp" type="number" placeholder="28"
+                          style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:.85rem;box-sizing:border-box;outline:none;">
+                 </div>
+                 <div>
+                   <label style="font-size:.73rem;color:#9CA3AF;display:block;margin-bottom:4px;">Humidity (%)</label>
+                   <input id="ctxHumid" type="number" placeholder="65"
+                          style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:.85rem;box-sizing:border-box;outline:none;">
+                 </div>
+               </div>
+               <div>
+                 <label style="font-size:.73rem;color:#9CA3AF;display:block;margin-bottom:4px;">Days since planting</label>
+                 <input id="ctxDays" type="number" placeholder="14"
+                        style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid #E5E7EB;font-size:.85rem;box-sizing:border-box;outline:none;">
+               </div>
+               <div>
+                 <label style="font-size:.73rem;color:#9CA3AF;display:block;margin-bottom:4px;">Symptoms observed</label>
+                 <textarea id="ctxNotes" placeholder="e.g. Yellow spots on leaves..."
+                           style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid #E5E7EB;
+                                  font-size:.85rem;height:68px;resize:none;box-sizing:border-box;outline:none;"></textarea>
+               </div>
+             </div>
+           </details>
+   
+           <button id="analyseBtn" onclick="window._daRun()"
+                   style="width:100%;padding:15px;border-radius:14px;border:none;
+                          background:linear-gradient(135deg,#10B981,#059669);color:white;
+                          font-size:1rem;font-weight:800;cursor:pointer;
+                          box-shadow:0 4px 14px rgba(16,185,129,.3);">
+             🔬 Analyse with AI
+           </button>
+   
+           <div id="resultArea"></div>
+   
+         </div>
+       </div>`;
+   
+       window.showScreen = showScreen;
+       document.getElementById('photoInput').addEventListener('change', e => {
+           if (e.target.files[0]) _loadFile(e.target.files[0]);
+       });
+   }
+   
+   let _b64 = null, _mime = 'image/jpeg';
+   
+   function _loadFile(file) {
+       if (file.size > 8 * 1024 * 1024) { alert('Image too large (max 8MB)'); return; }
+       _mime = file.type || 'image/jpeg';
+       const r = new FileReader();
+       r.onload = e => {
+           _b64 = e.target.result.split(',')[1];
+           document.getElementById('imgPreview').src = e.target.result;
+           document.getElementById('imgPreviewWrap').style.display = 'block';
+           document.getElementById('dropZone').style.display = 'none';
+       };
+       r.readAsDataURL(file);
+   }
+   
+   window._daDrop = e => {
+       e.preventDefault();
+       const f = e.dataTransfer.files[0];
+       if (f?.type.startsWith('image/')) _loadFile(f);
+       document.getElementById('dropZone').style.borderColor = '#D1FAE5';
+       document.getElementById('dropZone').style.background  = '#FAFFFE';
+   };
+   
+   window._daClear = () => {
+       _b64 = null;
+       document.getElementById('photoInput').value = '';
+       document.getElementById('imgPreviewWrap').style.display = 'none';
+       document.getElementById('dropZone').style.display       = 'block';
+   };
+   
+   window._daSelectCrop = name => {
+       document.getElementById('plantNameInput').value = name;
+       document.querySelectorAll('.crop-chip').forEach(btn => {
+           const isThis = btn.innerText.includes(name);
+           btn.style.background    = isThis ? '#D1FAE5' : 'white';
+           btn.style.borderColor   = isThis ? '#10B981' : '#E5E7EB';
+           btn.style.color         = isThis ? '#065F46' : '#374151';
+           btn.style.fontWeight    = isThis ? '700' : '400';
+       });
+   };
+   
+   /* ── main call ── */
+   // 修改后的 DiseaseAnalysisPage.js 关键交互段落
 
-const FARMS_KEY = 'user_farms';
-const REPORTS_KEY = 'seeddown_disease_reports';
+/* ── render 函数中的上传面板部分（加一个 (Optional) 提示标签） ── */
+// 您只需注意 innerHTML 里 Upload Section 的标题部分修改为：
+// <div style="font-weight:700;font-size:.88rem;color:#374151;margin-bottom:12px;">📷 Upload Plant Photo <span style="font-size:0.75rem;color:#9CA3AF;font-weight:400;">(Optional)</span></div>
 
-let selectedImage = null;
-let selectedMediaType = 'image/jpeg';
-let selectedPlant = null;
-let currentFarm = null;
-let lastResult = null;
 
-export function render() {
-    currentFarm = getCurrentFarm();
-    const plants = getPlants(currentFarm);
-    selectedPlant = chooseInitialPlant(plants);
-    selectedImage = null;
-    selectedMediaType = 'image/jpeg';
-    lastResult = null;
+/* ── 修改核心的点击提交方法 _daRun ── */
+window._daRun = async function(answers = {}) {
+  // 🔍 删除了：if (!_b64) { alert('Please upload a plant photo first.'); return; }
+  
+  const plantName = document.getElementById('plantNameInput').value.trim();
+  if (!plantName) { alert('Please select or type the plant name.'); return; }
 
-    const container = document.getElementById('screenContainer');
-    container.innerHTML = `
-        <div class="screen active" id="diseaseScreen" style="background:var(--bg);display:flex;flex-direction:column;height:100vh;color:var(--text);">
-            <div class="topbar">
-                <button id="diseaseBackBtn" class="back-btn" style="background:transparent;border:none;font-size:20px;cursor:pointer;color:var(--text);">←</button>
-                <div style="flex:1;min-width:0;">
-                    <div style="font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Plant Disease Analysis</div>
-                    <div style="font-size:10px;color:var(--muted);font-weight:900;text-transform:uppercase;letter-spacing:.06em;">${escapeHTML(currentFarm?.name || AppState.farmName || 'Commercial Farm')}</div>
-                </div>
-                <button id="diseaseHistoryBtn" style="border:1px solid var(--border);background:var(--surface);color:var(--accent);border-radius:10px;padding:8px 11px;font-size:11px;font-weight:900;cursor:pointer;">History</button>
-            </div>
+  const farmContext = {
+      temperature:    document.getElementById('ctxTemp')?.value  || null,
+      humidity:       document.getElementById('ctxHumid')?.value || null,
+      daysSincePlant: document.getElementById('ctxDays')?.value  || null,
+      notes:          document.getElementById('ctxNotes')?.value || null,
+  };
 
-            <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;">
-                <section class="disease-hero">
-                    <div class="disease-hero-icon">AI</div>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:11px;font-weight:900;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;">Known plant + new photo</div>
-                        <div style="font-size:20px;font-weight:950;line-height:1.1;margin-top:3px;">Diagnose suspected plant disease</div>
-                        <div style="font-size:13px;color:var(--sub);line-height:1.4;margin-top:6px;">SeedDown uses the plant remembered during field creation, checks the new photo, then explains likely cause, confidence, and treatment steps.</div>
-                    </div>
-                </section>
+  // 🔍 新增安全逻辑：如果用户既没传照片，又没有写任何 Notes 描述和参数，则进行提醒，避免空数据提交
+  if (!_b64 && !farmContext.notes && !farmContext.temperature && !farmContext.humidity) {
+      alert('Please either upload a photo OR provide some farm context/symptoms text so the AI can diagnose.');
+      return;
+  }
 
-                <section class="disease-card">
-                    <div class="disease-section-title">1. Select suspected plant</div>
-                    <div id="plantSelector" class="plant-selector">
-                        ${plantOptionsHTML(plants)}
-                    </div>
-                    <div id="plantContext" class="plant-context">${plantContextHTML(selectedPlant)}</div>
-                </section>
+  const btn        = document.getElementById('analyseBtn');
+  const resultArea = document.getElementById('resultArea');
+  btn.disabled = true; btn.style.opacity = '.65';
+  btn.innerText = answers && Object.keys(answers).length ? '🔄 Re-analysing…' : '🔬 Analysing…';
 
-                <section class="disease-card">
-                    <div class="disease-section-title">2. Capture or upload symptom photo</div>
-                    <label class="photo-drop" for="diseasePhotoInput">
-                        <div id="photoPreview" class="photo-preview-empty">
-                            <span style="font-size:26px;">📷</span>
-                            <strong>Add leaf / stem / fruit photo</strong>
-                            <small>Use a close-up photo with clear lighting</small>
-                        </div>
-                    </label>
-                    <input id="diseasePhotoInput" type="file" accept="image/*" capture="environment" style="display:none;">
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
-                        <button id="choosePhotoBtn" class="disease-secondary-btn">Choose Photo</button>
-                        <button id="runDiseaseBtn" class="disease-primary-btn">Run Analysis</button>
-                    </div>
-                </section>
+  // 🔍 动态改变加载文案
+  const loadingText = _b64 ? 'AI is examining your plant photo…' : 'AI is analyzing your farm context & symptoms…';
+  const subLoadingText = _b64 ? 'Takes 5–10 seconds via Groq vision' : 'Processing text parameters via Groq core';
 
-                <section id="analysisState" class="disease-card disease-muted-card">
-                    <div style="display:flex;gap:10px;align-items:flex-start;">
-                        <div class="disease-mini-icon">?</div>
-                        <div>
-                            <div style="font-size:14px;font-weight:900;">Waiting for plant photo</div>
-                            <div style="font-size:12px;color:var(--sub);line-height:1.4;margin-top:3px;">Choose the plant and upload a symptom photo. If confidence is low, SeedDown will ask extra questions before making a final recommendation.</div>
-                        </div>
-                    </div>
-                </section>
-
-                <section id="analysisResult" style="display:none;"></section>
-
-                <div style="height:10px;"></div>
-            </div>
+  resultArea.innerHTML = `
+      <div style="background:white;border-radius:16px;padding:28px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.05);">
+        <div style="font-size:2.2rem;margin-bottom:12px;">🧠</div>
+        <div style="font-weight:700;color:#111;margin-bottom:6px;">
+          ${Object.keys(answers).length ? 'Refining diagnosis…' : loadingText}
         </div>
-    `;
+        <div style="font-size:.8rem;color:#9CA3AF;">${subLoadingText}</div>
+        <div id="ldots" style="margin-top:14px;font-size:1.4rem;letter-spacing:6px;color:#10B981;">· · ·</div>
+      </div>`;
 
-    ensureDiseaseStyles();
-    bindEvents(plants);
-}
+  const dotStates = ['· · ·','● · ·','· ● ·','· · ●'];
+  let di = 0;
+  const dint = setInterval(() => {
+      const el = document.getElementById('ldots');
+      if (el) el.innerText = dotStates[di++ % 4]; else clearInterval(dint);
+  }, 380);
 
-function bindEvents(plants) {
-    document.getElementById('diseaseBackBtn')?.addEventListener('click', () => showScreen('dash-c'));
-    document.getElementById('diseaseHistoryBtn')?.addEventListener('click', showHistory);
-    document.getElementById('choosePhotoBtn')?.addEventListener('click', () => document.getElementById('diseasePhotoInput')?.click());
-    document.getElementById('diseasePhotoInput')?.addEventListener('change', onPhotoSelected);
-    document.getElementById('runDiseaseBtn')?.addEventListener('click', () => runAnalysis());
+  try {
+      const res = await fetch(`${API_BASE}/api/ai/disease-analysis`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+              image:       _b64 || null,      // 🔍 传给后端可以是 null
+              mediaType:   _b64 ? _mime : null,
+              plantName,
+              plantSpecies: plantName.toLowerCase().replace(/\s+/g, '_'),
+              farmContext,
+              answers,
+          }),
+      });
+      clearInterval(dint);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Server error'); }
+      renderResult(await res.json(), plantName);
+  } catch (err) {
+      clearInterval(dint);
+      resultArea.innerHTML = `
+          <div style="background:white;border-radius:16px;padding:20px;border-left:4px solid #EF4444;box-shadow:0 2px 8px rgba(0,0,0,.05);">
+            <div style="font-weight:700;color:#DC2626;margin-bottom:6px;">⚠️ Analysis failed</div>
+            <div style="font-size:.84rem;color:#4B5563;">${err.message}</div>
+          </div>`;
+  } finally {
+      btn.disabled = false; btn.style.opacity = '1'; btn.innerText = '🔬 Analyse with AI';
+  }
+};
+   
+   /* ── result card ── */
+   function renderResult(data, plantName) {
+       const sv = {
+           low:     { color:'#059669', bg:'#D1FAE5', label:'Low Risk',   icon:'🟢' },
+           medium:  { color:'#D97706', bg:'#FEF3C7', label:'Moderate',  icon:'🟡' },
+           high:    { color:'#DC2626', bg:'#FEE2E2', label:'High Risk',  icon:'🔴' },
+           unknown: { color:'#6B7280', bg:'#F3F4F6', label:'Unknown',   icon:'⚪' },
+       }[data.severity] || { color:'#6B7280', bg:'#F3F4F6', label:'Unknown', icon:'⚪' };
+   
+       const pct       = Math.round((data.confidence || 0) * 100);
+       // 门槛设定：低于80%显示黄色/橙色高警示样式
+       const confColor = pct >= 80 ? '#10B981' : pct >= 50 ? '#F59E0B' : '#EF4444';
+   
+      /* ── 升级版：现代 SaaS 风格卡片渲染器 (对应您的目标 UI) ── */
+      const getTheme = (colorCode) => {
+        // 为四大板块匹配不同的柔和渐变背景与边框
+        const themes = {
+            '#374151': { bg: '#F8FAFC', border: '#E2E8F0', check: '🔹' }, // Evidence (灰蓝主题)
+            '#92400E': { bg: '#FFFBEB', border: '#FDE68A', check: '🔸' }, // Causes (琥珀主题)
+            '#065F46': { bg: '#ECFDF5', border: '#A7F3D0', check: '✅' }, // Actions (翠绿主题)
+            '#1E40AF': { bg: '#EFF6FF', border: '#BFDBFE', check: '💡' }  // Prevention (湛蓝主题)
+        };
+        return themes[colorCode] || { bg: '#F9FAFB', border: '#E5E7EB', check: '▪️' };
+    };
 
-    document.querySelectorAll('.plant-choice').forEach(button => {
-        button.addEventListener('click', () => {
-            const index = Number(button.dataset.index);
-            selectedPlant = plants[index] || selectedPlant;
-            document.querySelectorAll('.plant-choice').forEach(node => node.classList.remove('selected'));
-            button.classList.add('selected');
-            const context = document.getElementById('plantContext');
-            if (context) context.innerHTML = plantContextHTML(selectedPlant);
-        });
-    });
-}
+    const section = (icon, title, items, colorCode = '#374151') => {
+      if (!items || !items.length) return '';
+      const theme = getTheme(colorCode);
+      
+      const cards = items.map(text => `
+          <div style="display:flex; align-items:flex-start; gap:10px; background:white; padding:12px 14px; 
+                      border-radius:10px; box-shadow:0 2px 4px rgba(0,0,0,0.02); 
+                      border:1px solid ${theme.border}; margin-bottom:8px;">
+              <div style="font-size:0.85rem; margin-top:2px; flex-shrink:0;">${theme.check}</div>
+              <div style="font-size:0.84rem; color:#334155; line-height:1.5; font-weight:500;">${text}</div>
+          </div>
+      `).join('');
 
-async function onPhotoSelected(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    selectedMediaType = file.type || 'image/jpeg';
-    const dataUrl = await fileToDataURL(file);
-    selectedImage = dataUrl.split(',')[1] || '';
-    const preview = document.getElementById('photoPreview');
-    if (preview) {
-        preview.className = 'photo-preview-filled';
-        preview.innerHTML = `<img src="${dataUrl}" alt="Selected plant symptom photo"><div><strong>${escapeHTML(file.name || 'Plant photo')}</strong><small>${Math.round(file.size / 1024)} KB - ready for analysis</small></div>`;
-    }
-}
-
-async function runAnalysis(extraAnswers = {}) {
-    if (!selectedPlant) {
-        showToast('warning', 'Select a plant first');
-        return;
-    }
-    if (!selectedImage) {
-        showToast('warning', 'Upload or capture a plant photo first');
-        return;
-    }
-
-    setLoading(true);
-    try {
-        const farmContext = buildFarmContext(currentFarm, selectedPlant);
-        const response = await fetch(`${API_BASE}/api/farms/analyze-disease`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                image: selectedImage,
-                mediaType: selectedMediaType,
-                plantName: selectedPlant.name,
-                plantSpecies: selectedPlant.species,
-                farmContext,
-                answers: extraAnswers,
-            }),
-        });
-        const aiResult = await response.json();
-        if (!response.ok || aiResult.error) throw new Error(aiResult.error || 'Disease analysis failed');
-        lastResult = normalizeResult(aiResult || fallbackDiagnosis(selectedPlant, farmContext), selectedPlant);
-        saveReport(lastResult, selectedPlant, currentFarm);
-        renderResult(lastResult);
-        showToast(aiResult.source === 'backend-ai' ? 'success' : 'warning', aiResult.source === 'backend-ai' ? 'AI disease analysis completed' : 'AI unavailable, using safe fallback analysis');
-    } catch (error) {
-        console.warn('[DiseaseAnalysis] AI failed, using fallback:', error);
-        const farmContext = buildFarmContext(currentFarm, selectedPlant);
-        lastResult = normalizeResult(fallbackDiagnosis(selectedPlant, farmContext, true), selectedPlant);
-        saveReport(lastResult, selectedPlant, currentFarm);
-        renderResult(lastResult);
-        showToast('warning', 'AI unavailable. Showing cautious fallback analysis.');
-    } finally {
-        setLoading(false);
-    }
-}
-
-function renderResult(result) {
-    const state = document.getElementById('analysisState');
-    const target = document.getElementById('analysisResult');
-    if (state) state.style.display = 'none';
-    if (!target) return;
-
-    const confidencePercent = Math.round((result.confidence || 0) * 100);
-    target.style.display = 'block';
-    target.innerHTML = `
-        <section class="disease-result-card severity-${escapeHTML(result.severity)}">
-            <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
-                <div>
-                    <div style="font-size:11px;font-weight:900;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;">Most likely diagnosis</div>
-                    <div style="font-size:22px;font-weight:950;line-height:1.15;margin-top:5px;">${escapeHTML(result.condition)}</div>
-                    <div style="font-size:13px;color:var(--sub);margin-top:5px;">${escapeHTML(result.plant)} - Severity: ${escapeHTML(result.severity)}</div>
-                </div>
-                <button id="confidenceToggle" class="confidence-pill" type="button">
-                    <span>${confidencePercent}%</span>
-                    <small>confidence</small>
-                </button>
+      // 🌟 移除了固定的 margin-top，使用 height:100% 和 flex 布局让内部自适应网格拉伸
+      return `
+      <div style="display:flex; flex-direction:column; height:100%; background:${theme.bg}; border-radius:16px; padding:18px; border:1px solid ${theme.border}; box-sizing:border-box;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+              <div style="background:white; width:34px; height:34px; display:flex; align-items:center; justify-content:center; 
+                          border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.06); font-size:1.1rem; border:1px solid ${theme.border};">
+                  ${icon}
+              </div>
+              <div style="font-weight:800; font-size:0.95rem; color:${colorCode}; letter-spacing:0.02em;">
+                  ${title}
+              </div>
+          </div>
+          <div style="display:flex; flex-direction:column; flex:1;">
+              ${cards}
+          </div>
+      </div>`;
+  };
+   
+       document.getElementById('resultArea').innerHTML = `
+       <div style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.07);">
+   
+         <div style="padding:18px;background:${sv.bg};">
+           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+             <div style="flex:1;">
+               <div style="font-size:.68rem;color:${sv.color};font-weight:700;letter-spacing:.08em;margin-bottom:3px;">
+                 DIAGNOSIS · ${plantName.toUpperCase()}
+               </div>
+               <div style="font-weight:900;font-size:1.05rem;color:#111;line-height:1.3;">${data.condition}</div>
+             </div>
+             <div style="text-align:center;flex-shrink:0;">
+               <div style="font-size:1.8rem;">${sv.icon}</div>
+               <div style="font-size:.68rem;font-weight:700;color:${sv.color};margin-top:1px;">${sv.label}</div>
+             </div>
+           </div>
+         </div>
+   
+         <div style="padding:14px 18px;border-bottom:1px solid #F3F4F6;">
+           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">
+             <span style="font-size:.73rem;font-weight:700;color:#9CA3AF;">AI Confidence</span>
+             <span style="font-size:.82rem;font-weight:800;color:${confColor};">${pct}%</span>
+           </div>
+           <div style="background:#F3F4F6;border-radius:8px;height:7px;overflow:hidden;">
+             <div style="height:100%;width:${pct}%;background:${confColor};border-radius:8px;transition:width .6s;"></div>
+           </div>
+           ${data.confidenceExplanation ? `<div style="font-size:.71rem;color:#9CA3AF;margin-top:5px;line-height:1.4;">${data.confidenceExplanation}</div>` : ''}
+         </div>
+   
+         <div style="margin: 16px 18px 0; padding: 12px 14px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; display:flex; align-items:center; gap:10px;">
+           <span style="font-size:1.4rem;">⏳</span>
+           <div>
+             <div style="font-size: 0.72rem; color: #166534; font-weight:700; letter-spacing: 0.03em;">ESTIMATED TREATMENT TIME</div>
+             <div style="font-weight: 800; font-size: 0.95rem; color: #14532D;">${data.treatmentDuration}</div>
+           </div>
+         </div>
+   
+         <div style="padding:16px 18px; display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px; align-items:stretch;">
+           ${section('🔍','Evidence observed',    data.evidence,     '#374151')}
+           ${section('⚠️','Likely causes',        data.likelyCauses,'#92400E')}
+           ${section('💊','Recommended actions',  data.solutions,   '#065F46')}
+           ${section('🛡️','Prevention tips',       data.prevention,  '#1E40AF')}
+         </div>
+   
+         ${!data.needsMoreInfo ? `
+          <div id="cameraAuthBlock" style="padding:16px 18px; background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0; margin-top:16px;">
+            <div style="font-weight:700;font-size:.82rem;color:#334155;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+              <span>🤖</span> AI Continuous Track Setup
             </div>
-            <div id="confidenceExplain" class="confidence-explain" style="display:none;">${escapeHTML(result.confidenceExplanation)}</div>
-        </section>
+            <div style="font-size:.76rem;color:#64748B;line-height:1.4;margin-bottom:12px;">
+              Diagnosis confirmed. To ensure treatment success, would you like to allow SeedDown AI to look through the active CCTV camera at this specific zone?
+            </div>
+            <div style="display:grid;grid-template-columns: 1fr 1fr; gap:10px;">
+              <button onclick="window._daGrantCamera('${data.treatmentDuration}')" 
+                      style="padding:10px; background:#10B981; color:white; border:none; font-weight:700; font-size:.8rem; border-radius:8px; cursor:pointer; transition: all 0.2s;">
+                ✅ Grant Access
+              </button>
+              <button onclick="window._daRefuseCamera('${data.treatmentDuration}')" 
+                      style="padding:10px; background:#64748B; color:white; border:none; font-weight:700; font-size:.8rem; border-radius:8px; cursor:pointer; transition: all 0.2s;">
+                ❌ Refuse
+              </button>
+            </div>
+            <div id="cameraFeedback" style="margin-top:10px; font-size:.76rem; font-weight:600; display:none;"></div>
+          </div>
+          ` : ''}
+   
+         ${data.needsMoreInfo && data.followUpQuestions?.length ? `
+          <div style="padding:16px 18px;background:#FFFBEB;border-top:1px solid #FDE68A;">
+            <div style="font-weight:700;font-size:.84rem;color:#92400E;margin-bottom:10px;">
+              🤔 Need more info (Confidence < 80%) — please answer:
+            </div>
+            
+            ${data.followUpQuestions.map((q, i) => {
+                // 🔍 智能检测 AI 的问题是否是在请求照片
+                const isPhotoRequest = q.toLowerCase().includes('photo') || 
+                                       q.toLowerCase().includes('image') || 
+                                       q.toLowerCase().includes('picture') || 
+                                       q.includes('照片');
+ 
+                if (isPhotoRequest) {
+                    // 📷 如果是在要照片，动态生成一个优雅的相机上传组件
+                    return `
+                    <div style="margin-bottom:12px;">
+                      <label style="font-size:.78rem;color:#78350F;display:block;margin-bottom:6px;">${q}</label>
+                      
+                      <div id="fqa_photo_preview_wrap_${i}" style="display:none; margin-bottom: 8px;">
+                        <img id="fqa_photo_preview_${i}" style="max-height:120px; border-radius:6px; border:1px solid #FDE68A;">
+                      </div>
+ 
+                      <button onclick="document.getElementById('fqa_file_input_${i}').click()"
+                              id="fqa_upload_btn_${i}"
+                              style="display:flex; align-items:center; gap:8px; padding:9px 14px; background:white; 
+                                     border:1.5px dashed #F59E0B; color:#92400E; font-size:.82rem; font-weight:700; 
+                                     border-radius:8px; cursor:pointer; width:100%; justify-content:center;">
+                        📸 Click to Take Photo / Upload Image
+                      </button>
+                      <input type="file" id="fqa_file_input_${i}" accept="image/*" style="display:none;"
+                             onchange="window._daHandleFollowUpPhoto(this, ${i})">
+                      
+                      <input type="hidden" id="fqa_${i}" value="[New Photo Attached Below]">
+                    </div>`;
+                } else {
+                    // 📝 如果是普通的文本问题，依然保留原有的优雅文本输入框
+                    return `
+                    <div style="margin-bottom:10px;">
+                      <label style="font-size:.78rem;color:#78350F;display:block;margin-bottom:3px;">${q}</label>
+                      <input type="text" id="fqa_${i}" placeholder="Your answer…"
+                             style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid #FDE68A;
+                                    font-size:.84rem;box-sizing:border-box;background:white;outline:none;">
+                    </div>`;
+                }
+            }).join('')}
+ 
+            <button onclick="window._daRefine(${JSON.stringify(data.followUpQuestions).replace(/"/g,'&quot;')})"
+                    style="width:100%;margin-top:8px;padding:12px;border-radius:10px;border:none;
+                           background:#F59E0B;color:white;font-weight:800;cursor:pointer;font-size:.88rem;
+                           box-shadow: 0 2px 6px rgba(245,158,11,0.2);">
+              🔄 Re-analyse with my answers
+            </button>
+          </div>` : ''}
+   
+         <div style="padding:14px 18px;border-top:1px solid #F3F4F6;">
+           <button onclick="window._daClear();document.getElementById('resultArea').innerHTML='';window.scrollTo(0,0);"
+                   style="width:100%;padding:11px;border-radius:10px;border:1.5px solid #E5E7EB;
+                          background:white;font-weight:700;font-size:.88rem;cursor:pointer;color:#374151;">
+             📷 Scan another plant
+           </button>
+         </div>
+       </div>`;
+   
+       document.getElementById('resultArea').scrollIntoView({ behavior:'smooth', block:'start' });
+   }
+   
+   /* ── NEW: Camera Permission Flow Handlers ── */
+   window._daGrantCamera = function(duration) {
+       const feedback = document.getElementById('cameraFeedback');
+       feedback.style.display = 'block';
+       feedback.style.color = '#059669';
+       feedback.innerHTML = `🟢 Access Granted! AI has linked to Zone CCTV. Continuous tracking initialized for the next ${duration}.`;
+       
+       // 禁用选择按钮
+       const buttons = document.querySelectorAll('#cameraAuthBlock button');
+       buttons.forEach(b => b.disabled = true);
+   };
+   
+   window._daRefuseCamera = function(duration) {
+       const feedback = document.getElementById('cameraFeedback');
+       feedback.style.display = 'block';
+       feedback.style.color = '#EA580C';
+       feedback.innerHTML = `⚠️ Access Refused. We respect your choice. SeedDown has scheduled an automated system notification to remind you to manually upload a validation picture in <b>${duration}</b>.`;
+   
+       // 模拟注册在本地系统时间到期时发送的全局通知
+       console.log(`[Notification Engine] Scheduled reminder in ${duration} for manual disease health checks.`);
+       
+       if (window.Notification && Notification.permission === "granted") {
+           setTimeout(() => {
+               new Notification("SeedDown Crop Health Update", {
+                   body: `Your plant's ${duration} treatment time has arrived. Please open AI Disease Analysis and snap a new picture.`,
+                   icon: "🌱"
+               });
+           }, 5000); // 演示：5秒后模拟触发，实际可根据 duration 解析为时间戳
+       }
+   
+       const buttons = document.querySelectorAll('#cameraAuthBlock button');
+       buttons.forEach(b => b.disabled = true);
+   };
+   
+   // 🔍 定义追问图片上传的全局缓存变量
+window._daNewUploadB64 = null;
+window._daNewUploadMime = 'image/jpeg';
 
-        ${result.needsMoreInfo ? followUpHTML(result.followUpQuestions) : ''}
+/* ── NEW FUNCTION: 处理追问框里的拍照/图片选取预览 ── */
+window._daHandleFollowUpPhoto = function(inputEl, index) {
+    const file = inputEl.files[0];
+    if (!file) return;
 
-        <section class="disease-grid">
-            ${listCard('Evidence', result.evidence, 'Observed clues from photo/context')}
-            ${listCard('Likely Causes', result.likelyCauses, 'What may be triggering it')}
-            ${listCard('Solution', result.solutions, 'Action steps for the grower')}
-            ${listCard('Prevention', result.prevention, 'Avoid recurrence')}
-        </section>
-    `;
+    window._daNewUploadMime = file.type || 'image/jpeg';
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        // 将新照片的数据转化为 base64 存入全局
+        window._daNewUploadB64 = e.target.result.split(',')[1];
+        
+        // 在追问区域显示预览图
+        document.getElementById(`fqa_photo_preview_${index}`).src = e.target.result;
+        document.getElementById(`fqa_photo_preview_wrap_${index}`).style.display = 'block';
+        
+        // 变更按钮样式与文字提示
+        const btn = document.getElementById(`fqa_upload_btn_${index}`);
+        btn.innerHTML = `✅ Photo Attached (${(file.size/1024).toFixed(1)} KB) - Tap to change`;
+        btn.style.background = '#FEF3C7';
+        btn.style.borderStyle = 'solid';
+    };
+    reader.readAsDataURL(file);
+};
 
-    document.getElementById('confidenceToggle')?.addEventListener('click', () => {
-        const explain = document.getElementById('confidenceExplain');
-        if (explain) explain.style.display = explain.style.display === 'none' ? 'block' : 'none';
+/* ── 优化后的二次重分析核心逻辑 ── */
+window._daRefine = function(questions) {
+    const answers = {};
+    questions.forEach((q, i) => {
+        const v = document.getElementById(`fqa_${i}`)?.value?.trim();
+        if (v) answers[q] = v;
     });
 
-    document.getElementById('submitFollowUpBtn')?.addEventListener('click', () => {
-        const answers = {};
-        document.querySelectorAll('.follow-answer').forEach((input, index) => {
-            answers[`answer_${index + 1}`] = input.value.trim();
-        });
-        runAnalysis(answers);
-    });
-}
-
-function followUpHTML(questions) {
-    const safeQuestions = questions.length ? questions : [
-        'Are the spots powdery, watery, or dry?',
-        'Which plant part changed first: older leaves, new leaves, stem, or fruit?',
-        'Did humidity, watering, or airflow change recently?',
-    ];
-    return `
-        <section class="disease-card follow-card">
-            <div class="disease-section-title">Need more context</div>
-            <div style="font-size:13px;color:var(--sub);line-height:1.4;margin-bottom:10px;">Confidence is low, so SeedDown asks follow-up questions before making a stronger recommendation.</div>
-            ${safeQuestions.map((q, index) => `
-                <label style="display:block;margin-top:10px;">
-                    <span style="display:block;font-size:12px;font-weight:900;margin-bottom:5px;">${escapeHTML(q)}</span>
-                    <textarea class="follow-answer" rows="2" placeholder="Type answer ${index + 1}" style="width:100%;resize:vertical;border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--surface2);color:var(--text);outline:none;"></textarea>
-                </label>
-            `).join('')}
-            <button id="submitFollowUpBtn" class="disease-primary-btn" style="margin-top:12px;width:100%;">Refine Analysis</button>
-        </section>
-    `;
-}
-
-function listCard(title, items, empty) {
-    const list = items?.length ? items : [empty];
-    return `
-        <section class="disease-card small">
-            <div class="disease-section-title">${escapeHTML(title)}</div>
-            <ul style="margin:10px 0 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;">
-                ${list.map(item => `<li class="disease-list-item">${escapeHTML(item)}</li>`).join('')}
-            </ul>
-        </section>
-    `;
-}
-
-function setLoading(loading) {
-    const button = document.getElementById('runDiseaseBtn');
-    if (!button) return;
-    button.disabled = loading;
-    button.textContent = loading ? 'Analysing...' : 'Run Analysis';
-}
-
-function showHistory() {
-    const reports = loadReports().slice(0, 5);
-    const state = document.getElementById('analysisState');
-    const target = document.getElementById('analysisResult');
-    if (state) state.style.display = 'none';
-    if (!target) return;
-    target.style.display = 'block';
-    target.innerHTML = `
-        <section class="disease-card">
-            <div class="disease-section-title">Recent disease reports</div>
-            ${reports.length ? reports.map(report => `
-                <div class="history-row">
-                    <div>
-                        <strong>${escapeHTML(report.plantName)}</strong>
-                        <small>${escapeHTML(report.condition)} - ${Math.round((report.confidence || 0) * 100)}% confidence</small>
-                    </div>
-                    <span>${escapeHTML(new Date(report.createdAt).toLocaleDateString())}</span>
-                </div>
-            `).join('') : '<div style="font-size:13px;color:var(--sub);">No disease reports yet.</div>'}
-        </section>
-    `;
-}
-
-function plantOptionsHTML(plants) {
-    if (!plants.length) {
-        return `<button class="plant-choice selected" data-index="0"><span>🌱</span><strong>Unknown Plant</strong><small>Add plants first</small></button>`;
-    }
-    return plants.map((plant, index) => `
-        <button class="plant-choice ${plant === selectedPlant ? 'selected' : ''}" data-index="${index}" type="button">
-            <span>${escapeHTML(plant.emoji || '🌱')}</span>
-            <strong>${escapeHTML(plant.name || 'Plant')}</strong>
-            <small>${escapeHTML(positionLabel(plant))}</small>
-        </button>
-    `).join('');
-}
-
-function plantContextHTML(plant) {
-    return `
-        <div><strong>Plant</strong><span>${escapeHTML(plant?.name || 'Unknown Plant')}</span></div>
-        <div><strong>Species</strong><span>${escapeHTML(plant?.species || 'unknown')}</span></div>
-        <div><strong>Status</strong><span>${escapeHTML(plant?.status || 'suspected')}</span></div>
-        <div><strong>Location</strong><span>${escapeHTML(positionLabel(plant))}</span></div>
-    `;
-}
-
-function getCurrentFarm() {
-    const farms = loadFarms();
-    return AppState.currentFarm
-        || farms.find(farm => farm.id === AppState.currentFarmId)
-        || farms[farms.length - 1]
-        || null;
-}
-
-function getPlants(farm) {
-    const plants = Array.isArray(farm?.plants) ? farm.plants : [];
-    if (plants.length) return plants.map((plant, index) => ({
-        name: plant.name || plant.species || farm?.targetPlant || 'Plant',
-        species: plant.species || speciesKey(plant.name || farm?.targetPlant),
-        emoji: plant.emoji || emojiForName(plant.name || farm?.targetPlant),
-        status: plant.status || 'healthy',
-        tier: plant.tier,
-        position: plant.position,
-        slotIndex: plant.slotIndex ?? index,
-    }));
-    return [{
-        name: farm?.targetPlant || 'Unknown Plant',
-        species: speciesKey(farm?.targetPlant || 'unknown'),
-        emoji: emojiForName(farm?.targetPlant),
-        status: 'suspected',
-        tier: farm?.rackType || 'unknown',
-        position: 1,
-        slotIndex: 0,
-    }];
-}
-
-function chooseInitialPlant(plants) {
-    return plants.find(plant => ['warning', 'critical', 'danger', 'suspected'].includes(String(plant.status).toLowerCase())) || plants[0] || null;
-}
-
-function buildFarmContext(farm, plant) {
-    return {
-        farmName: farm?.name || AppState.farmName || 'Commercial Farm',
-        location: farm?.location || 'not provided',
-        targetPlant: farm?.targetPlant || plant?.name || 'Plant',
-        rackType: farm?.rackType || farm?.rackTypeId || farm?.rackLabel || 'vertical rack',
-        analysisGoal: farm?.analysisGoal || farm?.goal || 'plant health',
-        selectedPlant: plant,
-        latestSensors: AppState.sensors || {},
-    };
-}
-
-function fallbackDiagnosis(plant, context, aiFailed = false) {
-    const key = String(plant?.species || plant?.name || '').toLowerCase();
-    const base = {
-        plant: plant?.name || 'Plant',
-        severity: aiFailed ? 'unknown' : 'medium',
-        confidence: aiFailed ? 0.48 : 0.58,
-        confidenceExplanation: aiFailed
-            ? 'AI vision was unavailable, so this is a cautious rule-based estimate using plant type and farm context only.'
-            : 'Confidence is moderate because the system has plant context, but the fallback cannot inspect symptoms as deeply as vision AI.',
-        needsMoreInfo: true,
-        followUpQuestions: [
-            'Are the marks powdery, watery, dry, or yellow?',
-            'Did symptoms start on older leaves, new leaves, stem, or fruit?',
-            'Has humidity, airflow, watering, or nutrient mix changed recently?',
-        ],
-    };
-
-    if (key.includes('tomato') || key.includes('chili') || key.includes('pepper')) {
-        return {
-            ...base,
-            condition: 'Possible leaf spot or early blight stress',
-            evidence: ['Fruiting crops commonly show spots under high humidity or poor airflow', 'Known crop context points to tomato or pepper disease family'],
-            likelyCauses: ['High humidity with weak ventilation', 'Water splashing on leaves', 'Nutrient imbalance or infected older foliage'],
-            solutions: ['Remove heavily affected leaves', 'Improve airflow around the rack', 'Avoid wetting leaves during watering', 'Isolate the plant if spots spread quickly'],
-            prevention: ['Keep foliage dry', 'Space plants better', 'Check pH and nutrient EC regularly'],
-        };
+    // 如果用户既没填文字也没传新照片，进行阻断提醒
+    if (!Object.keys(answers).length && !window._daNewUploadB64) { 
+        alert('Please answer at least one question or upload a photo.'); 
+        return; 
     }
 
-    if (key.includes('lettuce') || key.includes('kale') || key.includes('spinach')) {
-        return {
-            ...base,
-            condition: 'Possible tip burn, nutrient stress, or downy mildew',
-            evidence: ['Leafy greens are sensitive to airflow, calcium movement, and humidity', 'Vertical farms can trap moisture between leaves'],
-            likelyCauses: ['Poor airflow', 'High humidity', 'Nutrient or pH imbalance'],
-            solutions: ['Check pH and nutrient concentration', 'Increase air circulation', 'Remove damaged outer leaves', 'Reduce leaf wetness'],
-            prevention: ['Maintain stable pH', 'Avoid overcrowding', 'Keep air moving between tiers'],
-        };
+    // 🔍 核心转换机制：如果检测到用户补传了新照片，自动把它“提拔”复写到系统的主图缓存变量中
+    if (window._daNewUploadB64) {
+        _b64 = window._daNewUploadB64;
+        _mime = window._daNewUploadMime;
+
+        // 同步更新主页面的顶部图片预览框，让用户有即时视觉反馈
+        const mainPreview = document.getElementById('imgPreview');
+        if (mainPreview) mainPreview.src = `data:${_mime};base64,${_b64}`;
+        const mainPreviewWrap = document.getElementById('imgPreviewWrap');
+        if (mainPreviewWrap) mainPreviewWrap.style.display = 'block';
+        const dropZone = document.getElementById('dropZone');
+        if (dropZone) dropZone.style.display = 'none';
+        
+        // 清空临时缓存，防止下次误触
+        window._daNewUploadB64 = null;
     }
 
-    if (key.includes('cucumber')) {
-        return {
-            ...base,
-            condition: 'Possible powdery mildew or water stress',
-            evidence: ['Cucumber is prone to mildew under humid indoor conditions', 'Symptoms often need close photo confirmation'],
-            likelyCauses: ['High humidity', 'Low airflow', 'Irregular watering'],
-            solutions: ['Improve ventilation', 'Remove infected leaves', 'Keep leaves dry', 'Monitor spread daily'],
-            prevention: ['Avoid crowding vines', 'Use consistent irrigation', 'Inspect leaves weekly'],
-        };
-    }
-
-    return {
-        ...base,
-        condition: 'Possible environmental stress, disease not confirmed',
-        evidence: ['The plant type is known, but symptoms need clearer confirmation'],
-        likelyCauses: ['Watering inconsistency', 'pH or nutrient imbalance', 'Low airflow or lighting stress'],
-        solutions: ['Take a closer photo of affected leaves', 'Check pH, moisture, and light readings', 'Compare new and old leaves'],
-        prevention: ['Record symptoms daily', 'Keep sensor thresholds within crop range', 'Avoid sudden changes in irrigation or light'],
-    };
-}
-
-function normalizeResult(result, plant) {
-    const confidence = Math.min(1, Math.max(0, Number(result?.confidence) || 0));
-    return {
-        plant: result?.plant || plant?.name || 'Plant',
-        condition: result?.condition || 'Unable to confirm disease',
-        severity: ['low', 'medium', 'high', 'unknown'].includes(result?.severity) ? result.severity : 'unknown',
-        confidence,
-        confidenceExplanation: result?.confidenceExplanation || 'Confidence is based on visible symptoms, image clarity, and known plant context.',
-        evidence: arrayOfText(result?.evidence),
-        likelyCauses: arrayOfText(result?.likelyCauses),
-        solutions: arrayOfText(result?.solutions),
-        prevention: arrayOfText(result?.prevention),
-        needsMoreInfo: Boolean(result?.needsMoreInfo) || confidence < 0.55,
-        followUpQuestions: arrayOfText(result?.followUpQuestions).slice(0, 4),
-    };
-}
-
-function saveReport(result, plant, farm) {
-    const reports = loadReports();
-    reports.unshift({
-        id: `disease_${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        farmId: farm?.id || AppState.currentFarmId || null,
-        farmName: farm?.name || AppState.farmName || 'Commercial Farm',
-        plantName: plant?.name || result.plant,
-        condition: result.condition,
-        confidence: result.confidence,
-        severity: result.severity,
-    });
-    localStorage.setItem(REPORTS_KEY, JSON.stringify(reports.slice(0, 20)));
-}
-
-function loadReports() {
-    try { return JSON.parse(localStorage.getItem(REPORTS_KEY)) || []; }
-    catch { return []; }
-}
-
-function loadFarms() {
-    try { return JSON.parse(localStorage.getItem(FARMS_KEY)) || []; }
-    catch { return []; }
-}
-
-function fileToDataURL(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-}
-
-function arrayOfText(value) {
-    return Array.isArray(value) ? value.map(item => String(item || '').trim()).filter(Boolean) : [];
-}
-
-function positionLabel(plant) {
-    if (!plant) return 'Unknown slot';
-    if (plant.tier && plant.position) return `Tier ${plant.tier} - Slot ${plant.position}`;
-    if (plant.slotIndex !== undefined) return `Slot ${Number(plant.slotIndex) + 1}`;
-    return 'Farm slot';
-}
-
-function speciesKey(name = '') {
-    return String(name || 'plant').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'plant';
-}
-
-function emojiForName(name = '') {
-    const key = String(name).toLowerCase();
-    if (key.includes('lettuce') || key.includes('kale') || key.includes('cabbage')) return '🥬';
-    if (key.includes('tomato')) return '🍅';
-    if (key.includes('chili') || key.includes('pepper')) return '🌶️';
-    if (key.includes('cucumber')) return '🥒';
-    if (key.includes('basil') || key.includes('mint') || key.includes('spinach')) return '🌿';
-    return '🌱';
-}
-
-function escapeHTML(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
-function ensureDiseaseStyles() {
-    if (document.getElementById('disease-analysis-style')) return;
-    const style = document.createElement('style');
-    style.id = 'disease-analysis-style';
-    style.textContent = `
-        .disease-hero,
-        .disease-card,
-        .disease-result-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            box-shadow: var(--shadow-sm);
-        }
-        .disease-hero { display:flex; gap:14px; align-items:flex-start; padding:16px; }
-        .disease-hero-icon,
-        .disease-mini-icon {
-            width:44px; height:44px; border-radius:15px; background:var(--accent-l); color:var(--accent);
-            display:flex; align-items:center; justify-content:center; font-weight:950; flex-shrink:0;
-        }
-        .disease-mini-icon { width:34px; height:34px; border-radius:12px; }
-        .disease-card { padding:16px; }
-        .disease-card.small { min-height:150px; }
-        .disease-muted-card { background:#f8fafc; }
-        .disease-section-title { font-size:11px; color:var(--muted); font-weight:950; text-transform:uppercase; letter-spacing:.08em; }
-        .plant-selector { display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:10px; margin-top:12px; }
-        .plant-choice { border:1px solid var(--border); background:var(--surface2); border-radius:16px; padding:12px; text-align:left; color:var(--text); cursor:pointer; }
-        .plant-choice.selected { border-color:var(--accent); background:var(--accent-l); box-shadow:0 0 0 2px rgba(16,185,129,.08); }
-        .plant-choice span { display:block; font-size:24px; line-height:1; }
-        .plant-choice strong { display:block; margin-top:8px; font-size:13px; }
-        .plant-choice small { display:block; margin-top:3px; color:var(--muted); font-size:10px; font-weight:800; }
-        .plant-context { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:12px; }
-        .plant-context div { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:10px; }
-        .plant-context strong { display:block; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
-        .plant-context span { display:block; font-size:13px; font-weight:850; margin-top:3px; }
-        .photo-drop { display:block; margin-top:12px; border:1px dashed rgba(16,185,129,.45); border-radius:18px; background:linear-gradient(135deg, rgba(236,253,245,.9), rgba(255,255,255,.8)); cursor:pointer; overflow:hidden; }
-        .photo-preview-empty { min-height:150px; display:flex; flex-direction:column; gap:6px; align-items:center; justify-content:center; color:var(--sub); text-align:center; padding:16px; }
-        .photo-preview-empty strong { color:var(--text); }
-        .photo-preview-empty small { color:var(--muted); font-weight:700; }
-        .photo-preview-filled { display:flex; gap:12px; align-items:center; padding:10px; }
-        .photo-preview-filled img { width:96px; height:96px; border-radius:14px; object-fit:cover; border:1px solid var(--border); }
-        .photo-preview-filled strong { display:block; font-size:13px; }
-        .photo-preview-filled small { display:block; color:var(--muted); margin-top:4px; }
-        .disease-primary-btn,
-        .disease-secondary-btn { border:none; border-radius:14px; padding:13px 12px; font-weight:950; cursor:pointer; }
-        .disease-primary-btn { background:var(--accent); color:white; }
-        .disease-primary-btn:disabled { opacity:.55; cursor:wait; }
-        .disease-secondary-btn { background:var(--surface2); border:1px solid var(--border); color:var(--accent); }
-        .disease-result-card { padding:16px; border-left:5px solid var(--accent); }
-        .severity-high { border-left-color:var(--danger); }
-        .severity-medium { border-left-color:var(--warn); }
-        .severity-low { border-left-color:var(--ok); }
-        .confidence-pill { width:76px; height:62px; border:1px solid var(--border); border-radius:18px; background:var(--surface2); color:var(--text); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; }
-        .confidence-pill span { font-size:20px; font-weight:950; color:var(--accent); }
-        .confidence-pill small { font-size:9px; color:var(--muted); font-weight:900; text-transform:uppercase; }
-        .confidence-explain { margin-top:12px; padding:12px; border-radius:14px; background:var(--surface2); color:var(--sub); font-size:13px; line-height:1.45; }
-        .disease-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:12px; }
-        .disease-list-item { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:9px 10px; font-size:13px; color:var(--sub); line-height:1.35; }
-        .follow-card { margin-top:12px; border-color:rgba(245,158,11,.35); background:#fffbeb; }
-        .history-row { display:flex; justify-content:space-between; gap:10px; align-items:center; border:1px solid var(--border); border-radius:14px; padding:11px; margin-top:10px; background:var(--surface2); }
-        .history-row strong, .history-row small { display:block; }
-        .history-row small { color:var(--muted); margin-top:3px; }
-        .history-row span { font-size:11px; color:var(--muted); font-weight:800; }
-        @media (max-width: 620px) {
-            .disease-grid { grid-template-columns:1fr; }
-            .plant-context { grid-template-columns:1fr; }
-        }
-    `;
-    document.head.appendChild(style);
-}
+    // 调用最核心的分析请求，将 answers 数据 POST 传给后端
+    window._daRun(answers);
+};
