@@ -325,6 +325,8 @@ export const CommercialFarmCanvas = {
             status: 'empty',
         };
 
+        this.addZoneFootprint(tower, config, towerIndex);
+
         const columnMat = new THREE.MeshStandardMaterial({ color: 0xe9edf0, roughness: 0.34, metalness: 0.18 });
         const supportMat = new THREE.MeshStandardMaterial({ color: 0x26342d, roughness: 0.5, metalness: 0.4 });
         const column = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.12, 3.2, 22), columnMat);
@@ -367,9 +369,11 @@ export const CommercialFarmCanvas = {
         }
 
         tower.userData.status = towerStatus(tower.userData.plants);
+        this.addZoneStatusStrip(tower, tower.userData.status);
+
         const label = this.createTextSprite(String(config.label || `ZONE ${zoneLetter}`).toUpperCase(), {
-            bg: 'rgba(9,18,13,.88)',
-            fg: '#a3e635',
+            bg: 'rgba(255,255,255,.92)',
+            fg: '#14532d',
             border: '#315d3e',
             font: '900 30px Inter, system-ui, sans-serif',
         });
@@ -379,6 +383,86 @@ export const CommercialFarmCanvas = {
 
         this.farmGroup.add(tower);
         this.interactiveRoots.push(tower);
+    },
+
+    addZoneFootprint(tower, config, towerIndex) {
+        const zoneLetter = String.fromCharCode(65 + towerIndex);
+        const padMat = new THREE.MeshStandardMaterial({
+            color: 0xf3faf4,
+            roughness: 0.72,
+            metalness: 0.02,
+        });
+        const borderMat = new THREE.MeshStandardMaterial({
+            color: 0x1f7a42,
+            roughness: 0.48,
+            metalness: 0.18,
+        });
+        const shadowMat = new THREE.MeshStandardMaterial({
+            color: 0xb7c8bb,
+            roughness: 0.82,
+            metalness: 0.02,
+            transparent: true,
+            opacity: 0.55,
+        });
+
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.035, 2.04), padMat);
+        pad.position.y = 0.022;
+        pad.receiveShadow = true;
+        tower.add(pad);
+
+        const shadow = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.004, 2.2), shadowMat);
+        shadow.position.y = 0.002;
+        shadow.receiveShadow = true;
+        tower.add(shadow);
+
+        const bars = [
+            { x: 0, z: 1.04, sx: 1.92, sz: 0.035 },
+            { x: 0, z: -1.04, sx: 1.92, sz: 0.035 },
+            { x: 0.96, z: 0, sx: 0.035, sz: 2.04 },
+            { x: -0.96, z: 0, sx: 0.035, sz: 2.04 },
+        ];
+        bars.forEach(bar => {
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(bar.sx, 0.035, bar.sz), borderMat);
+            rail.position.set(bar.x, 0.06, bar.z);
+            rail.castShadow = true;
+            tower.add(rail);
+        });
+
+        const idPlate = this.createTextSprite(`ZONE ${zoneLetter}`, {
+            bg: 'rgba(20,83,45,.92)',
+            fg: '#f7fee7',
+            font: '900 24px Inter, system-ui, sans-serif',
+        });
+        idPlate.position.set(-0.62, 0.14, 0.98);
+        idPlate.scale.set(0.26, 0.09, 1);
+        tower.add(idPlate);
+
+        const crop = String(config.crop || tower.userData?.crop || '').split(',')[0]?.trim();
+        if (crop) {
+            const cropPlate = this.createTextSprite(crop.toUpperCase().slice(0, 18), {
+                bg: 'rgba(255,255,255,.9)',
+                fg: '#166534',
+                font: '900 22px Inter, system-ui, sans-serif',
+            });
+            cropPlate.position.set(0.38, 0.14, 0.98);
+            cropPlate.scale.set(0.34, 0.085, 1);
+            tower.add(cropPlate);
+        }
+    },
+
+    addZoneStatusStrip(tower, status) {
+        const color = statusColor(status || 'healthy');
+        const mat = new THREE.MeshStandardMaterial({
+            color,
+            emissive: color,
+            emissiveIntensity: status === 'empty' ? 0.08 : 0.34,
+            roughness: 0.34,
+            metalness: 0.1,
+        });
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.028, 0.055), mat);
+        strip.position.set(0, 0.105, -1.05);
+        strip.castShadow = true;
+        tower.add(strip);
     },
 
     addPod(tower, angle, y, plant, slotIndex, level, side) {
@@ -485,15 +569,32 @@ export const CommercialFarmCanvas = {
             if (child.isMesh || child.isSprite) child.userData.root = group;
         });
 
-        const labelText = device.compact ? shortDeviceLabel(device.key) : device.label.replace(/\s+/g, '\n');
-        const tag = this.createTextSprite(labelText, {
-            bg: 'rgba(255,255,255,.9)',
-            fg: '#0f172a',
-            font: '900 26px Inter, system-ui, sans-serif',
-        });
-        tag.position.set(0, device.compact ? 0.17 : 0.24, 0);
-        tag.scale.set(device.compact ? 0.22 : 0.34, device.compact ? 0.09 : 0.13, 1);
-        group.add(tag);
+        const showTag = !device.compact || ['camera', 'pump', 'grow_light', 'zone_fan'].includes(device.key);
+        if (showTag) {
+            const labelText = device.compact ? shortDeviceLabel(device.key) : device.label.replace(/\s+/g, '\n');
+            const tag = this.createTextSprite(labelText, {
+                bg: 'rgba(255,255,255,.92)',
+                fg: '#0f172a',
+                font: '900 24px Inter, system-ui, sans-serif',
+            });
+            tag.position.set(0, device.compact ? 0.17 : 0.24, 0);
+            tag.scale.set(device.compact ? 0.2 : 0.34, device.compact ? 0.08 : 0.13, 1);
+            group.add(tag);
+        } else {
+            const ring = new THREE.Mesh(
+                new THREE.TorusGeometry(0.11, 0.006, 8, 22),
+                new THREE.MeshStandardMaterial({
+                    color: device.color,
+                    emissive: device.color,
+                    emissiveIntensity: 0.18,
+                    roughness: 0.3,
+                    metalness: 0.2,
+                })
+            );
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.02;
+            group.add(ring);
+        }
 
         this.scene.add(group);
         this.interactiveRoots.push(group);
