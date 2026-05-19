@@ -1285,6 +1285,18 @@ function ensureCommercialStyles() {
             background: #f8faf7 !important;
             border-radius: 22px !important;
         }
+        .commercial-preview-host.commercial-farm-host {
+            height: min(58dvh, 520px) !important;
+            min-height: 360px !important;
+            background: #f8faf7 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+        .commercial-preview-host .commercial-farm-canvas {
+            height: 100% !important;
+            border-radius: 0 !important;
+        }
         .commercial-command-screen.commercial-farm-host {
             position: fixed !important;
             inset: 0 !important;
