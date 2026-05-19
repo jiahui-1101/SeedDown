@@ -28,22 +28,32 @@ export async function initFirebase() {
     await _loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
     await _loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js');
     await _loadScript('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js');
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const firebaseApp = window.firebase;
+    if (!firebaseApp) throw new Error('Firebase SDK failed to load');
+    if (!firebaseApp.apps.length) firebaseApp.initializeApp(firebaseConfig);
     window._firebaseReady = true;
 }
 
-export function getAuth() { return firebase.auth(); }
-export function getDb()   { return firebase.firestore(); }
+export function getAuth() {
+    if (!window.firebase) throw new Error('Firebase is not initialized. Call initFirebase() first.');
+    return window.firebase.auth();
+}
+export function getDb() {
+    if (!window.firebase) throw new Error('Firebase is not initialized. Call initFirebase() first.');
+    return window.firebase.firestore();
+}
 
 /* ── USER DOC REF ── */
-export function userDocRef(uid) {
+export async function userDocRef(uid) {
+    await initFirebase();
     return getDb().collection('users').doc(uid);
 }
 
 /* ── LOAD ALL USER DATA FROM FIRESTORE ── */
 export async function loadUserData(uid) {
     try {
-        const doc = await userDocRef(uid).get();
+        const ref = await userDocRef(uid);
+        const doc = await ref.get();
         if (doc.exists) return doc.data();
         return null;
     } catch (e) {
@@ -56,7 +66,8 @@ export async function loadUserData(uid) {
 export async function saveFarmsToFirestore(uid, farms) {
     if (!uid) return;
     try {
-        await userDocRef(uid).set({ farms }, { merge: true });
+        const ref = await userDocRef(uid);
+        await ref.set({ farms }, { merge: true });
     } catch (e) {
         console.warn('[Firebase] saveFarmsToFirestore error:', e);
     }
@@ -66,7 +77,8 @@ export async function saveFarmsToFirestore(uid, farms) {
 export async function saveFarmProfileToFirestore(uid, farmId, profileData) {
     if (!uid || !farmId) return;
     try {
-        await userDocRef(uid).set({
+        const ref = await userDocRef(uid);
+        await ref.set({
             farmProfiles: { [farmId]: profileData }
         }, { merge: true });
     } catch (e) {
@@ -78,7 +90,8 @@ export async function saveFarmProfileToFirestore(uid, farmId, profileData) {
 export async function saveGlobalProfileToFirestore(uid, data) {
     if (!uid) return;
     try {
-        await userDocRef(uid).set({ globalProfile: data }, { merge: true });
+        const ref = await userDocRef(uid);
+        await ref.set({ globalProfile: data }, { merge: true });
     } catch (e) {
         console.warn('[Firebase] saveGlobalProfileToFirestore error:', e);
     }

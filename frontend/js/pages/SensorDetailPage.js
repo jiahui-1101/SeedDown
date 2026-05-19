@@ -23,6 +23,10 @@ export async function render(params = {}) {
     const isCommercial = params.from === 'dash-c' || AppState.mode === 'commercial';
     const backTarget = params.from || (isCommercial ? 'dash-c' : 'home');
     const container = document.getElementById('screenContainer');
+    if (!container) {
+        console.error('SensorDetailPage cannot render: #screenContainer not found');
+        return;
+    }
 
     const historyRows = await fetchHistory(meta, params);
     const chart = buildChart(historyRows);
@@ -106,7 +110,7 @@ export async function render(params = {}) {
         </div>
     `;
 
-    bindEvents({ backTarget, sensorKey, unit: meta.unit });
+    bindEvents({ backTarget, sensorKey, unit: meta.unit, params });
 }
 
 async function fetchHistory(meta, params = {}) {
@@ -157,7 +161,7 @@ function buildChart(historyRows) {
     return { linePath, areaPath, interactiveSlices };
 }
 
-function bindEvents({ backTarget, sensorKey, unit }) {
+function bindEvents({ backTarget, sensorKey, unit, params = {} }) {
    document.getElementById('detailBackBtn').onclick = () => {
     if (params?.from === 'zone-detail') {
         showScreen('zone-detail', params.returnParams || {});

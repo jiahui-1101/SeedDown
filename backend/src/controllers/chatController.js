@@ -31,6 +31,9 @@ exports.chat = async (req, res) => {
     res.json({ reply, role: 'assistant' });
   } catch (err) {
     console.error('Chat error:', err);
-    res.status(500).json({ error: err.message });
+    const fallback = req.body?.mode === 'commercial'
+      ? 'AI Advisor is temporarily offline. Sensor monitoring still works: review abnormal zones, keep gas and temperature alerts active, and avoid changing thresholds beyond safety limits.'
+      : 'Sprout is temporarily offline, but your live sensor monitoring still works. Check any warning cards first, then water or ventilate only if the dashboard recommends it.';
+    res.json({ reply: fallback, role: 'assistant', fallback: true, error: err.message });
   }
 };
