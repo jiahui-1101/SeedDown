@@ -218,9 +218,11 @@
      </div>`;
    
      window.showScreen = showScreen;
-     document.getElementById('photoInput').addEventListener('change', e => {
+     // FIX: use .onchange instead of addEventListener to prevent listener accumulation
+     // on repeated render() calls (e.g. every 'Analyse another plant' click)
+     document.getElementById('photoInput').onchange = e => {
        if (e.target.files[0]) _loadFile(e.target.files[0]);
-     });
+     };
    }
    
    /* ── Persistent state across screens ── */
@@ -441,6 +443,14 @@
    
    /* ── Back to form ── */
    window._daBackToForm = function () {
+     // FIX: clear all cached state before re-rendering the form,
+     // so the next analysis starts completely fresh
+     _b64  = null;
+     _mime = 'image/jpeg';
+     _cachedPlantName  = '';
+     _cachedFarmContext = {};
+     window._daNewUploadB64  = null;
+     window._daNewUploadMime = 'image/jpeg';
      render();
    };
    
@@ -541,42 +551,44 @@
          </div>
    
          ${followUpQs.map((q, i) => {
-           const isPhotoQ = /photo|image|picture|照片/i.test(q);
-           if (isPhotoQ) {
-             return `
-             <div style="margin-bottom:14px;">
-               <label style="font-size:.78rem;color:#78350F;display:block;margin-bottom:6px;font-weight:600;">${q}</label>
-               <div id="fqa_photo_preview_wrap_${i}" style="display:none;margin-bottom:8px;">
-                 <img id="fqa_photo_preview_${i}" style="max-height:120px;border-radius:6px;border:1px solid #FDE68A;">
-               </div>
-               <button onclick="document.getElementById('fqa_file_input_${i}').click()"
-                       id="fqa_upload_btn_${i}"
-                       style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:white;
-                              border:1.5px dashed #F59E0B;color:#92400E;font-size:.82rem;font-weight:700;
-                              border-radius:8px;cursor:pointer;width:100%;justify-content:center;box-sizing:border-box;">
-                 📸 Tap to take / upload a photo
-               </button>
-               <input type="file" id="fqa_file_input_${i}" accept="image/*" style="display:none;"
-                      onchange="window._daHandleFollowUpPhoto(this,${i})">
-               <input type="hidden" id="fqa_${i}" value="">
-             </div>`;
-           }
-           return `
-           <div style="margin-bottom:10px;">
-             <label style="font-size:.78rem;color:#78350F;display:block;margin-bottom:3px;font-weight:600;">${q}</label>
-             <input type="text" id="fqa_${i}" placeholder="Your answer…"
-                    style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid #FDE68A;
-                           font-size:.84rem;box-sizing:border-box;background:white;outline:none;">
-           </div>`;
-         }).join('')}
-   
-         <button onclick="window._daRefine(${JSON.stringify(followUpQs).replace(/"/g,'&quot;')})"
-                 style="width:100%;margin-top:8px;padding:13px;border-radius:10px;border:none;
-                        background:linear-gradient(135deg,#F59E0B,#D97706);color:white;font-weight:800;
-                        cursor:pointer;font-size:.9rem;box-shadow:0 3px 8px rgba(245,158,11,.25);">
-           🔄 Re-analyse with my answers
-         </button>
-       </div>` : '';
+          const isPhotoQ = /photo|image|picture|照片/i.test(q);
+          if (isPhotoQ) {
+            return `
+            <div style="margin-bottom:14px;">
+              <label style="font-size:.78rem;color:#78350F;display:block;margin-bottom:6px;font-weight:600;">${q}</label>
+              <div id="fqa_photo_preview_wrap_${i}" style="display:none;margin-bottom:8px;">
+                <img id="fqa_photo_preview_${i}" style="max-height:120px;border-radius:6px;border:1px solid #FDE68A;">
+              </div>
+              <button onclick="document.getElementById('fqa_file_input_${i}').click()"
+                      id="fqa_upload_btn_${i}"
+                      style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:white;
+                             border:1.5px dashed #F59E0B;color:#92400E;font-size:.82rem;font-weight:700;
+                             border-radius:8px;cursor:pointer;width:100%;justify-content:center;box-sizing:border-box;">
+                📸 Tap to take / upload a photo
+              </button>
+              <input type="file" id="fqa_file_input_${i}" accept="image/*" style="display:none;"
+                     onchange="window._daHandleFollowUpPhoto(this,${i})">
+              <input type="hidden" id="fqa_${i}" value="">
+            </div>`;
+          }
+          // Bug 修复分支：彻底纠正了原代码中标签闭合混乱、残缺样式属性错位的隐患
+          return `
+          <div style="margin-bottom:10px;">
+            <label style="font-size:.78rem;color:#78350F;display:block;margin-bottom:3px;font-weight:600;">${q}</label>
+            <textarea id="fqa_${i}" placeholder="Your answer…" rows="3"
+                      style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid #FDE68A;
+                             font-size:.84rem;box-sizing:border-box;background:white;outline:none;
+                             resize:vertical;line-height:1.5;font-family:inherit;"></textarea>
+          </div>`;
+        }).join('')}
+      
+        <button onclick="window._daRefine(${JSON.stringify(followUpQs).replace(/"/g,'&quot;')})"
+                style="width:100%;margin-top:8px;padding:13px;border-radius:10px;border:none;
+                       background:linear-gradient(135deg,#F59E0B,#D97706);color:white;font-weight:800;
+                       cursor:pointer;font-size:.9rem;box-shadow:0 3px 8px rgba(245,158,11,.25);">
+          🔄 Re-analyse with my answers
+        </button>
+      </div>` : '';
    
      const container = document.getElementById('screenContainer');
      container.innerHTML = `

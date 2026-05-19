@@ -508,15 +508,18 @@ async function doWater(farmId) {
     });
 
     let earned = 5;
-    try {
-        const res  = await fetch(`${API}/api/community/visits/interact/${farmId}`, {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ action:'water' }),
-        });
-        const data = await res.json();
-        earned     = data.earned || 5;
-        updateTopNavCoins(data.newTotal);
-    } catch (_) {}
+    // FIX: skip backend call for NPC farms to avoid polluting coin ledger
+    if (!farm.isNPC) {
+        try {
+            const res  = await fetch(`${API}/api/community/visits/interact/${farmId}`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ action:'water' }),
+            });
+            const data = await res.json();
+            earned     = data.earned || 5;
+            updateTopNavCoins(data.newTotal);
+        } catch (_) {}
+    }
 
     farm.isThirsty = false;
     const badge = document.getElementById('farmStatusBadge');
@@ -597,17 +600,19 @@ async function doCatch(farmId, dropX, dropY) {
         clampTool.style.cursor = 'not-allowed';
     }
 
-    // 5. 后端 API 奖励
+    // 5. 后端 API 奖励 (FIX: skip for NPC farms)
     let earned = 10;
-    try {
-        const res  = await fetch(`${API}/api/community/visits/interact/${farmId}`, {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ action:'catch_bug' }),
-        });
-        const data = await res.json();
-        earned     = data.earned || 10;
-        updateTopNavCoins(data.newTotal);
-    } catch (_) {}
+    if (!farm.isNPC) {
+        try {
+            const res  = await fetch(`${API}/api/community/visits/interact/${farmId}`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ action:'catch_bug' }),
+            });
+            const data = await res.json();
+            earned     = data.earned || 10;
+            updateTopNavCoins(data.newTotal);
+        } catch (_) {}
+    }
 
     const dropZone = document.getElementById('canvasDropZone');
     spawnCoinPop(dropZone, `+${earned} 🍃`);

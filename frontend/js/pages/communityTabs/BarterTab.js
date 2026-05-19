@@ -24,7 +24,15 @@ function getItemImage(item) {
 
 let currentBarterView = 'pasar';
 let allBarterItems    = [];
-const currentUser     = 'MyFarm';
+// Read the real logged-in username; fall back to 'MyFarm' only if nothing is stored
+function getCurrentUser() {
+    return (window.AppState?.currentUser?.name)
+        || localStorage.getItem('username')
+        || 'MyFarm';
+}
+// Keep a module-level alias for places that use the const directly
+const currentUser = (() => getCurrentUser())(); // evaluated once per module load; refreshed on each renderBarterTab call via _currentUser below
+let _currentUser = getCurrentUser();
 
 const BARTER_STYLE = `
 <style id="barterTabStyle">
@@ -68,6 +76,7 @@ const BARTER_STYLE = `
 </style>`;
 
 export async function renderBarterTab(containerId) {
+    _currentUser = getCurrentUser(); // refresh on every render
     const area = document.getElementById(containerId);
     if (!document.getElementById('barterTabStyle')) area.insertAdjacentHTML('beforebegin', BARTER_STYLE);
 
@@ -231,36 +240,35 @@ function bindBarterLogic() {
         r.readAsDataURL(this.files[0]);
     });
 
-    fab.addEventListener('click', () => modal.style.display = 'flex');
-    // ==========================================
-    // 💡 表单防呆逻辑：根据 Trade Type 动态禁用输入框
-    // ==========================================
+    // 💡 Trade Type input guard: dynamically disable irrelevant field
     document.getElementById('postTradeType').addEventListener('change', (e) => {
         const val = e.target.value;
         const coinInput = document.getElementById('postCoins');
         const barterInput = document.getElementById('postLookingFor');
-
         if (val === 'coins') {
-            // 只卖金币：启用金币，禁用并清空换物
             coinInput.disabled = false; coinInput.style.background = 'white'; coinInput.style.opacity = '1';
             barterInput.disabled = true; barterInput.style.background = '#f3f4f6'; barterInput.style.opacity = '0.4'; barterInput.value = '';
         } else if (val === 'barter') {
-            // 只换物：启用换物，禁用并清空金币
             coinInput.disabled = true; coinInput.style.background = '#f3f4f6'; coinInput.style.opacity = '0.4'; coinInput.value = '';
             barterInput.disabled = false; barterInput.style.background = 'white'; barterInput.style.opacity = '1';
         } else {
-            // Both：两个都启用
             coinInput.disabled = false; coinInput.style.background = 'white'; coinInput.style.opacity = '1';
             barterInput.disabled = false; barterInput.style.background = 'white'; barterInput.style.opacity = '1';
         }
     });
 
-    // 顺便在打开弹窗的时候，重置一下它们的状态（防止上次填完关掉后的残留）
+    // FIX: merged into single FAB listener (was two separate listeners before — caused double-fire)
+    // Also resets ALL form fields and image on open, preventing stale data from leaking into new posts
     fab.addEventListener('click', () => {
         modal.style.display = 'flex';
-        // 触发一次 change 事件，让界面重置为默认的 "both" 状态
         document.getElementById('postTradeType').value = 'both';
         document.getElementById('postTradeType').dispatchEvent(new Event('change'));
+        ['postTitle', 'postCoins', 'postLookingFor', 'postLocation', 'postContact']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        base64Img = null;
+        document.getElementById('barterImagePreview').innerHTML = '';
+        const imgInput = document.getElementById('barterImageUpload');
+        if (imgInput) imgInput.value = '';
     });
 
     document.getElementById('btnCancelBarter').addEventListener('click', () => modal.style.display = 'none');
@@ -283,7 +291,7 @@ function bindBarterLogic() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                title, tradeType: type, author: currentUser, image: base64Img,
+                title, tradeType: type, author: _currentUser, image: base64Img,
                 priceCoins: document.getElementById('postCoins').value,
                 lookingFor: document.getElementById('postLookingFor').value,
                 location: combinedLocation // 👈 传给后端拼接好的字符串
@@ -363,7 +371,7 @@ function bindBarterLogic() {
                 const res = await fetch(`${API}/api/community/barter/${id}/reserve`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ buyer: currentUser, paymentMethod: selectedMethod })
+                    body: JSON.stringify({ buyer: _currentUser, paymentMethod: selectedMethod })
                 });
                 const data = await res.json();
                 
@@ -434,15 +442,15 @@ function renderList() {
     // ==========================================
     if (currentBarterView === 'pasar') {
         // 逛市集：别人卖的、还没卖出去的
-        displayItems = allBarterItems.filter(i => i.status === 'available' && i.author !== currentUser);
+        displayItems = allBarterItems.filter(i => i.status === 'available' && i.author !== _currentUser);
     } 
     else if (currentBarterView === 'myshop') {
         // 我的店铺：我发布的所有商品
-        displayItems = allBarterItems.filter(i => i.author === currentUser);
+        displayItems = allBarterItems.filter(i => i.author === _currentUser);
     } 
     else if (currentBarterView === 'myorders') {
         // 我的订单：我买的东西 (正在进行的排前面，已完成的排后面)
-        const myPurchases = allBarterItems.filter(i => i.buyer === currentUser);
+        const myPurchases = allBarterItems.filter(i => i.buyer === _currentUser);
         displayItems = myPurchases.sort((a, b) => {
             if (a.status === 'reserved' && b.status === 'completed') return -1;
             if (a.status === 'completed' && b.status === 'reserved') return 1;
@@ -466,8 +474,8 @@ function renderList() {
     // 3. 渲染卡片
     // ==========================================
     list.innerHTML = displayItems.map(item => {
-        const isMine   = item.author === currentUser;
-        const amIBuyer = item.buyer  === currentUser;
+        const isMine   = item.author === _currentUser;
+        const amIBuyer = item.buyer  === _currentUser;
 
         // 拆解后端的 location 字段 (提取出地点和隐藏的盲盒联系方式)
         const locString = item.location || '';
