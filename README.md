@@ -19,6 +19,7 @@
 - [Track & Problem Statement](#track--problem-statement)
 - [Introduction](#introduction)
 - [System Flow](#system-flow)
+- [System Architecture](#system-architecture)
 - [Core Features](#core-features)
 - [Beginner vs Commercial](#beginner-vs-commercial)
 - [IoT Packages](#iot-packages)
@@ -98,6 +99,31 @@ flowchart LR
 ```
 
 The older `farm_001` demo fallback is still supported, but the current architecture uses device registration and `x-device-token` headers.
+
+---
+
+## System Architecture
+
+> Add the final SeedDown system architecture diagram here.
+
+Recommended image format:
+
+```html
+<p align="center">
+  <img src="assets/system-architecture.png" alt="SeedDown System Architecture" width="900">
+</p>
+```
+
+Suggested diagram layers:
+
+```text
+Frontend Web App
+-> Node.js / Express API
+-> Firebase Firestore
+-> AI Provider Chain
+-> ESP32 Device Nodes
+-> Sensors and Actuators
+```
 
 ---
 
