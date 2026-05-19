@@ -28,6 +28,14 @@ const DEFAULT_COMMERCIAL_ZONES = [
     { id: 'zone_C', label: 'Zone C', crop: 'Herbs' },
 ];
 
+const DEMO_COMMERCIAL_ZONE_DEVICES = {
+    zone_A: 'commercial-zone-node-1',
+    zone_B: 'commercial-zone-node-2',
+    zone_C: 'commercial-zone-node-3',
+};
+
+const DEMO_COMMERCIAL_FARM_MASTER = 'commercial-farm-master-1';
+
 export function render() {
     const container = document.getElementById('screenContainer');
     const farm = getCurrentFarm();
@@ -273,8 +281,7 @@ function initProDashboard() {
     const syncData = async () => {
         try {
             await updateZoneOverview();
-            const res = await fetch(`${API_BASE}/api/sensors/latest?${buildSensorQuery().toString()}`);
-            const data = await res.json();
+            const data = await fetchLatestCommercialReading(selectedZoneId);
             if (!data || !data.reading) return;
             const r = data.reading;
 
@@ -328,18 +335,66 @@ function buildSensorQuery() {
     return query;
 }
 
+function commercialSensorQueryCandidates(zoneId = selectedZoneId) {
+    const farm = getCurrentFarm();
+    const normalizedZone = normalizeZoneId(zoneId);
+    const candidates = [];
+    const push = (key, value) => {
+        if (!value) return;
+        const query = new URLSearchParams();
+        query.set(key, value);
+        const signature = query.toString();
+        if (!candidates.some(item => item.toString() === signature)) candidates.push(query);
+    };
+
+    const zoneDevice = findDeviceForZone(farm, normalizedZone);
+    push('deviceId', zoneDevice?.deviceId);
+    push('zoneId', normalizedZone);
+    push('deviceId', DEMO_COMMERCIAL_ZONE_DEVICES[normalizedZone]);
+
+    if (normalizedZone === 'farm_master') {
+        push('deviceId', farm?.farmMaster?.deviceId);
+        push('deviceId', farm?.deviceId);
+        push('deviceId', DEMO_COMMERCIAL_FARM_MASTER);
+    }
+
+    push('farmId', farm?.id);
+    push('farmId', farm?.backendFarmId);
+    push('farmId', 'farm_commercial_demo_001');
+    push('deviceId', 'farm_001');
+    return candidates;
+}
+
+async function fetchLatestCommercialReading(zoneId = selectedZoneId) {
+    const candidates = commercialSensorQueryCandidates(zoneId);
+    for (const query of candidates) {
+        try {
+            const res = await fetchWithTimeout(`${API_BASE}/api/sensors/latest?${query.toString()}`, {}, 4500);
+            const data = await res.json();
+            if (data?.reading) return { ...data, sourceQuery: query.toString() };
+        } catch (error) {
+            console.warn('[CommercialPage] sensor query failed:', query.toString(), error.message);
+        }
+    }
+    return { reading: null };
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 4500) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 async function updateZoneOverview() {
     const farm = getCurrentFarm();
     const zones = buildCommercialZones(farm, resolveRack(farm));
     const entries = await Promise.all(zones.map(async zone => {
-        const query = new URLSearchParams();
-        const device = findDeviceForZone(farm, zone.id);
-        if (device?.deviceId) query.set('deviceId', device.deviceId);
-        else query.set('zoneId', zone.id);
-
         try {
-            const response = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
-            const data = await response.json();
+            const data = await fetchLatestCommercialReading(zone.id);
             return [zone.id, data.reading || null];
         } catch (error) {
             return [zone.id, null];
@@ -352,8 +407,7 @@ async function updateZoneOverview() {
 
 async function syncSelectedZoneData() {
     try {
-        const res = await fetch(`${API_BASE}/api/sensors/latest?${buildSensorQuery().toString()}`);
-        const data = await res.json();
+        const data = await fetchLatestCommercialReading(selectedZoneId);
         if (data?.reading) {
             applySensorReading(data.reading);
             fetchAIGlobalAdvice(data.reading);

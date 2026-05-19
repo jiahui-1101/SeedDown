@@ -121,6 +121,14 @@ const PACKAGE_QR_OPTIONS = [
     { id: 'commercial_master', label: 'Legacy Commercial Farm Master', serial: 'SD-COM-MST-03001', accountType: 'commercial_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'legacy master node for multi-zone farms' },
 ];
 
+const DEMO_DEVICE_BY_SERIAL = {
+    'SD-COM-FRM-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1' },
+    'SD-COM-MST-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1' },
+    'SD-COM-ZON-01001': { deviceId: 'commercial-zone-node-1', deviceToken: 'sd_demo_commercial_zone_node_1' },
+    'SD-COM-ZON-01002': { deviceId: 'commercial-zone-node-2', deviceToken: 'sd_demo_commercial_zone_node_2' },
+    'SD-COM-ZON-01003': { deviceId: 'commercial-zone-node-3', deviceToken: 'sd_demo_commercial_zone_node_3' },
+};
+
 const PACKAGE_CAPABILITIES = {
     starter: {
         label: 'Starter',
@@ -1296,15 +1304,28 @@ function commercialEnergyLimitBySize() {
 }
 
 function assignCommercialDeviceRecord(device, targetId) {
+    const normalizedDevice = normalizeCommercialDemoDevice(device);
     commercialDeviceAssignments = [
-        ...commercialDeviceAssignments.filter(item => item.targetId !== targetId && item.deviceId !== device.deviceId),
+        ...commercialDeviceAssignments.filter(item => item.targetId !== targetId && item.deviceId !== normalizedDevice.deviceId),
         {
-            ...device,
+            ...normalizedDevice,
             targetId,
             zoneId: targetId === 'farm_master' ? null : targetId,
             role: targetId === 'farm_master' ? 'farm_master' : 'zone_node',
         },
     ];
+}
+
+function normalizeCommercialDemoDevice(device = {}) {
+    const serial = String(device.serial || '').toUpperCase();
+    const demo = DEMO_DEVICE_BY_SERIAL[serial];
+    if (!demo) return device;
+    return {
+        ...device,
+        deviceId: demo.deviceId,
+        deviceToken: demo.deviceToken,
+        status: device.status || 'demo-assigned',
+    };
 }
 
 function buildLocalCommercialDevice(option = {}, targetId, farmId) {
