@@ -4,12 +4,12 @@
  */
 
 import { AppState } from '../store.js';
+import { saveFarmsToFirestore } from '../utils/firebase.js';
 import { showToast } from '../utils/toast.js';
 import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js';
 import jsQR from 'jsqr';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-
 
 const FARMS_STORAGE_KEY = 'user_farms';
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -2292,6 +2292,7 @@ async function generateThresholdsForField() {
         if (button) button.disabled = false;
     }
 }
+
 async function handleNext() {
     if (isCommercialFlow()) {
         await handleCommercialNext();
@@ -2464,6 +2465,7 @@ async function syncDevicePreferences(thresholds = {}) {
     return { synced: true, preferences: data.preferences || data };
 }
 
+
 async function createField() {
     const button = document.getElementById('bfNext');
     if (button) {
@@ -2553,6 +2555,17 @@ async function createField() {
     };
     saved.push(farm);
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
+
+    // ---- ADDED FIREBASE SYNC LOGIC ----
+    if (AppState.uid) {
+        try {
+            await saveFarmsToFirestore(AppState.uid, saved);
+            console.log('[BuildFarm] ✅ Farm synced to Firebase');
+        } catch (err) {
+            console.error('[BuildFarm] ❌ Failed to sync farm to Firebase', err);
+        }
+    }
+    // -----------------------------------
 
     AppState.newFarm = payload;
     AppState.currentFarm = farm;
