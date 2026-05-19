@@ -37,6 +37,8 @@ function parseSerial(serial) {
 function validateAccountType(parsed, accountType = '') {
   const normalized = String(accountType || '').trim().toLowerCase();
   if (!normalized) return;
+  if (parsed.deviceType === 'commercial' && normalized.startsWith('commercial')) return;
+  if (parsed.deviceType === 'beginner' && normalized.startsWith('beginner')) return;
   if (!parsed.accountTypes.includes(normalized)) {
     throw new Error(`Serial ${parsed.serial} is for ${parsed.deviceType}/${parsed.packageLevel}, not ${accountType}`);
   }

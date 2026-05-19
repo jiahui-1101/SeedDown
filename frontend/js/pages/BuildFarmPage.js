@@ -37,6 +37,7 @@ let fieldInfo = {
 let detectedPlants = [];
 let commercialStructure = null;
 let commercialGoals = ['maximum_yield'];
+let commercialFarmThresholds = null;
 let commercialZoneThresholds = {};
 let commercialDeviceAssignments = [];
 let commercialPendingDevice = null;
@@ -92,9 +93,17 @@ const PACKAGE_QR_OPTIONS = [
     { id: 'beginner_starter', label: 'Beginner Starter', serial: 'SD-BGN-STR-00101', accountType: 'beginner_starter', packageLevel: 'starter', deviceType: 'beginner', desc: 'basic home sensor kit' },
     { id: 'beginner_standard', label: 'Beginner Standard', serial: 'SD-BGN-STD-00456', accountType: 'beginner_standard', packageLevel: 'standard', deviceType: 'beginner', desc: 'balanced home vertical farm kit' },
     { id: 'beginner_pro', label: 'Beginner Pro', serial: 'SD-BGN-PRO-00901', accountType: 'beginner_pro', packageLevel: 'pro', deviceType: 'beginner', desc: 'advanced home kit with more automation' },
-    { id: 'commercial_farm_master', label: 'Commercial Farm Master Node', serial: 'SD-COM-FRM-03001', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'farm-level controller, one per commercial farm' },
-    { id: 'commercial_farm_zone', label: 'Commercial Farm + Zone Combo', serial: 'SD-COM-FZK-02001', accountType: 'commercial_farm_zone', packageLevel: 'farm_zone', deviceType: 'commercial', desc: 'combo commercial node for farm or zone assignment' },
-    { id: 'commercial_zone', label: 'Commercial Zone Node', serial: 'SD-COM-ZON-01001', accountType: 'commercial_zone', packageLevel: 'zone_node', deviceType: 'commercial', desc: 'zone-level sensor and actuator node' },
+    { id: 'commercial_farm_master_1', label: 'Commercial Farm Master Node 1', serial: 'SD-COM-FRM-03001', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'farm-level controller, one per commercial farm' },
+    { id: 'commercial_farm_master_2', label: 'Commercial Farm Master Node 2', serial: 'SD-COM-FRM-03002', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'spare farm-level controller for demo or second farm' },
+    { id: 'commercial_farm_master_3', label: 'Commercial Farm Master Node 3', serial: 'SD-COM-FRM-03003', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'spare farm-level controller for demo or second farm' },
+    { id: 'commercial_farm_zone_1', label: 'Commercial Farm + Zone Combo 1', serial: 'SD-COM-FZK-02001', accountType: 'commercial_farm_zone', packageLevel: 'farm_zone', deviceType: 'commercial', desc: 'combo commercial node for farm or zone assignment' },
+    { id: 'commercial_farm_zone_2', label: 'Commercial Farm + Zone Combo 2', serial: 'SD-COM-FZK-02002', accountType: 'commercial_farm_zone', packageLevel: 'farm_zone', deviceType: 'commercial', desc: 'combo commercial node for farm or zone assignment' },
+    { id: 'commercial_farm_zone_3', label: 'Commercial Farm + Zone Combo 3', serial: 'SD-COM-FZK-02003', accountType: 'commercial_farm_zone', packageLevel: 'farm_zone', deviceType: 'commercial', desc: 'combo commercial node for farm or zone assignment' },
+    { id: 'commercial_zone_1', label: 'Commercial Zone Node 1', serial: 'SD-COM-ZON-01001', accountType: 'commercial_zone', packageLevel: 'zone_node', deviceType: 'commercial', desc: 'zone-level sensor and actuator node' },
+    { id: 'commercial_zone_2', label: 'Commercial Zone Node 2', serial: 'SD-COM-ZON-01002', accountType: 'commercial_zone', packageLevel: 'zone_node', deviceType: 'commercial', desc: 'zone-level sensor and actuator node' },
+    { id: 'commercial_zone_3', label: 'Commercial Zone Node 3', serial: 'SD-COM-ZON-01003', accountType: 'commercial_zone', packageLevel: 'zone_node', deviceType: 'commercial', desc: 'zone-level sensor and actuator node' },
+    { id: 'commercial_zone_4', label: 'Commercial Zone Node 4', serial: 'SD-COM-ZON-01004', accountType: 'commercial_zone', packageLevel: 'zone_node', deviceType: 'commercial', desc: 'zone-level sensor and actuator node' },
+    { id: 'commercial_zone_5', label: 'Commercial Zone Node 5', serial: 'SD-COM-ZON-01005', accountType: 'commercial_zone', packageLevel: 'zone_node', deviceType: 'commercial', desc: 'zone-level sensor and actuator node' },
     { id: 'commercial_zone_basic', label: 'Legacy Commercial Zone Node', serial: 'SD-COM-ZNB-01001', accountType: 'commercial_zone_basic', packageLevel: 'zone_basic', deviceType: 'commercial', desc: 'legacy zone-level node, still supported' },
     { id: 'commercial_zone_pro', label: 'Legacy Commercial Zone Node Pro', serial: 'SD-COM-ZNP-02001', accountType: 'commercial_zone_pro', packageLevel: 'zone_pro', deviceType: 'commercial', desc: 'legacy expanded zone-level node, still supported' },
     { id: 'commercial_master', label: 'Legacy Commercial Farm Master', serial: 'SD-COM-MST-03001', accountType: 'commercial_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'legacy master node for multi-zone farms' },
@@ -165,6 +174,7 @@ export function render() {
     detectedPlants = [];
     commercialStructure = null;
     commercialGoals = ['maximum_yield'];
+    commercialFarmThresholds = null;
     commercialZoneThresholds = {};
     commercialDeviceAssignments = [];
     commercialPendingDevice = null;
@@ -476,6 +486,7 @@ function renderCommercialGoalStep(content) {
             if (commercialGoals.includes(id)) commercialGoals = commercialGoals.filter(item => item !== id);
             else if (commercialGoals.length < 3) commercialGoals = [...commercialGoals, id];
             else showToast('warning', 'Choose up to 3 commercial goals');
+            commercialFarmThresholds = null;
             commercialZoneThresholds = {};
             renderCommercialGoalStep(content);
         });
@@ -490,11 +501,12 @@ function renderCommercialZoneThresholdStep(content) {
                 <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px;">
                     <div>
                         <div style="font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.08em;">ZONE PLANTS + THRESHOLDS</div>
-                        <div style="font-size:12px;color:var(--muted);margin-top:4px;">Each zone gets its own plant list and AI threshold recipe.</div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;">Farm Master gets safety thresholds. Each zone gets its own crop recipe.</div>
                     </div>
                     <button id="generateCommercialThresholdsBtn" style="padding:8px 10px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-l);color:var(--accent);font-size:11px;font-weight:900;cursor:pointer;">Generate All</button>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:10px;">
+                    ${farmThresholdCardHtml()}
                     ${commercialStructure.zones.map(zoneThresholdCardHtml).join('')}
                 </div>
             </section>
@@ -507,6 +519,7 @@ function renderCommercialZoneThresholdStep(content) {
             if (!zone) return;
             zone.plants = parseTargetPlants(event.target.value).map(name => name.toLowerCase());
             zone.crop = parseTargetPlants(event.target.value).join(', ') || zone.crop;
+            commercialFarmThresholds = null;
             delete commercialZoneThresholds[zone.zone_id];
         });
     });
@@ -516,6 +529,24 @@ function renderCommercialZoneThresholdStep(content) {
             const key = event.target.dataset.key;
             const value = event.target.value === '' ? undefined : Number(event.target.value);
             if (!zoneId || !key || !Number.isFinite(value)) return;
+            if (zoneId === 'farm_master') {
+                if (!commercialFarmThresholds) {
+                    commercialFarmThresholds = {
+                        thresholds: {},
+                        notes: 'Manual farm-level threshold adjustment',
+                        source: 'manual',
+                    };
+                }
+                commercialFarmThresholds.thresholds[key] = value;
+                const warning = commercialSafetyWarning(key, value);
+                const warningEl = document.getElementById('commercialSafety_farm_master');
+                if (warningEl) {
+                    warningEl.textContent = warning || '';
+                    warningEl.style.display = warning ? 'block' : 'none';
+                }
+                if (warning) showToast('warning', warning);
+                return;
+            }
             if (!commercialZoneThresholds[zoneId]) {
                 commercialZoneThresholds[zoneId] = {
                     thresholds: {},
@@ -673,6 +704,31 @@ function commercialStructureHtml() {
     `;
 }
 
+function farmThresholdCardHtml() {
+    const thresholds = commercialFarmThresholds?.thresholds || {};
+    return `
+        <div style="background:linear-gradient(135deg,var(--accent-l),#fff);border:1.5px solid rgba(22,163,74,.22);border-radius:14px;padding:12px;">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px;">
+                <div>
+                    <div style="font-size:13px;font-weight:900;color:var(--accent);">Farm Master Node</div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:3px;">Farm-level safety policy · shared emergency and monitoring thresholds</div>
+                </div>
+                <span style="font-size:10px;font-weight:900;color:${commercialFarmThresholds ? 'var(--accent)' : 'var(--muted)'};">${commercialFarmThresholds ? 'READY' : 'PENDING'}</span>
+            </div>
+            <div id="commercialSafety_farm_master" style="display:none;margin-bottom:10px;padding:8px 10px;border-radius:10px;background:rgba(245,158,11,.12);color:#b45309;font-size:11px;font-weight:800;line-height:1.35;"></div>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;">
+                ${commercialThresholdInputsHtml({ zone_id: 'farm_master' }, thresholds, 'farm')}
+            </div>
+            <div style="padding:11px;border-radius:12px;background:rgba(255,255,255,.76);border:1px solid rgba(22,163,74,.14);">
+                <div style="font-size:10px;font-weight:900;color:var(--sub);letter-spacing:.08em;margin-bottom:6px;">AI ANALYSIS</div>
+                <div style="font-size:11px;color:var(--muted);line-height:1.55;">
+                    ${commercialThresholdAnalysis({ zone_id: 'farm_master', name: 'Farm Master Node', plants: allCommercialPlants(), crop: 'whole farm' }, commercialFarmThresholds, 'farm')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function zoneThresholdCardHtml(zone) {
     const threshold = commercialZoneThresholds[zone.zone_id];
     const plants = (zone.plants || []).join(', ');
@@ -690,37 +746,93 @@ function zoneThresholdCardHtml(zone) {
                 style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font-size:13px;outline:none;margin-bottom:10px;">
             <div id="commercialSafety_${zone.zone_id}" style="display:none;margin-bottom:10px;padding:8px 10px;border-radius:10px;background:rgba(245,158,11,.12);color:#b45309;font-size:11px;font-weight:800;line-height:1.35;"></div>
             <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;">
-                ${commercialThresholdInputsHtml(zone, thresholds)}
+                ${commercialThresholdInputsHtml(zone, thresholds, 'zone')}
             </div>
             <div style="padding:11px;border-radius:12px;background:var(--surface);border:1px solid var(--border);">
                 <div style="font-size:10px;font-weight:900;color:var(--sub);letter-spacing:.08em;margin-bottom:6px;">AI ANALYSIS</div>
                 <div style="font-size:11px;color:var(--muted);line-height:1.5;">
-                    ${commercialThresholdAnalysis(zone, threshold)}
+                    ${commercialThresholdAnalysis(zone, threshold, 'zone')}
                 </div>
             </div>
         </div>
     `;
 }
 
-function commercialThresholdInputsHtml(zone, thresholds = {}) {
-    return thresholdItems().map(({ key, label }) => `
+function commercialThresholdInputsHtml(zone, thresholds = {}, scope = 'zone') {
+    const items = scope === 'farm' ? commercialFarmThresholdItems() : commercialZoneThresholdItems();
+    return items.map(({ key, label, unit, placeholder }) => `
         <label style="display:block;">
             <span style="display:block;font-size:10px;font-weight:900;color:var(--sub);margin-bottom:4px;text-transform:uppercase;">${escapeHTML(label)}</span>
             <input class="commercial-threshold-input" data-zone="${zone.zone_id}" data-key="${key}" type="number"
-                value="${thresholds[key] ?? ''}" placeholder="${thresholds[key] === undefined ? 'generate' : ''}"
+                value="${thresholds[key] ?? ''}" placeholder="${thresholds[key] === undefined ? (placeholder || 'generate') : ''}"
                 style="width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);font-size:13px;font-weight:800;color:var(--text);outline:none;">
+            ${unit ? `<span style="display:block;font-size:9px;color:var(--muted);margin-top:3px;">${escapeHTML(unit)}</span>` : ''}
         </label>
     `).join('');
 }
 
-function commercialThresholdAnalysis(zone, threshold) {
+function commercialFarmThresholdItems() {
+    return [
+        { key: 'co2MinPpm', label: 'CO2 min', unit: 'CO2 Sensor · ppm', placeholder: '800' },
+        { key: 'co2MaxPpm', label: 'CO2 max', unit: 'CO2 Sensor · ppm', placeholder: '1500' },
+        { key: 'waterLowCm', label: 'Reservoir low', unit: 'HC-SR04 · cm distance', placeholder: '20' },
+        { key: 'waterCriticalCm', label: 'Reservoir critical', unit: 'HC-SR04 · cm distance', placeholder: '35' },
+        { key: 'gasDangerThreshold', label: 'Gas danger', unit: 'MQ-2 raw limit', placeholder: '3000' },
+        { key: 'energyDailyLimitKwh', label: 'Energy limit', unit: 'Power Meter · kWh/day', placeholder: '8' },
+        { key: 'mainFanDurationSeconds', label: 'Main fan sec', unit: 'Main Ventilation Fan output', placeholder: '20' },
+        { key: 'emergencyBuzzerSeconds', label: 'Emergency buzz sec', unit: 'Emergency Buzzer output', placeholder: '10' },
+        { key: 'sensorIntervalSeconds', label: 'Farm poll sec', unit: 'Farm master telemetry interval', placeholder: '300' },
+    ];
+}
+
+function commercialZoneThresholdItems() {
+    return [
+        { key: 'tempMin', label: 'Temp min', unit: 'DHT11 · °C', placeholder: '18' },
+        { key: 'tempMax', label: 'Temp max', unit: 'DHT11 · °C', placeholder: '28' },
+        { key: 'humidityMin', label: 'Humid min', unit: 'DHT11 · %RH', placeholder: '50' },
+        { key: 'humidityMax', label: 'Humid max', unit: 'DHT11 · %RH', placeholder: '80' },
+        { key: 'soilDryThreshold', label: 'Soil dry', unit: 'Soil Moisture raw', placeholder: '2500' },
+        { key: 'darkThreshold', label: 'Light dark', unit: 'LDR raw', placeholder: '1500' },
+        { key: 'phMin', label: 'pH min', unit: 'pH Sensor', placeholder: '5.8' },
+        { key: 'phMax', label: 'pH max', unit: 'pH Sensor', placeholder: '6.8' },
+        { key: 'ecMin', label: 'EC min', unit: 'EC Sensor · mS/cm', placeholder: '1.2' },
+        { key: 'ecMax', label: 'EC max', unit: 'EC Sensor · mS/cm', placeholder: '2.0' },
+        { key: 'waterFlowMinLpm', label: 'Flow min', unit: 'YF-S201 · L/min', placeholder: '0.5' },
+        { key: 'wateringDurationSeconds', label: 'Pump sec', unit: 'Water Pump output', placeholder: '10' },
+        { key: 'growLightDurationSeconds', label: 'Grow light sec', unit: 'LED Grow Light output', placeholder: '30' },
+        { key: 'zoneFanDurationSeconds', label: 'Zone fan sec', unit: 'Zone Fan output', placeholder: '15' },
+        { key: 'activeBuzzerSeconds', label: 'Alert buzz sec', unit: 'Active Buzzer output', placeholder: '5' },
+        { key: 'cameraScanIntervalMinutes', label: 'Camera scan min', unit: 'Camera analysis interval', placeholder: '60' },
+        { key: 'diseaseConfidenceMin', label: 'Disease confidence', unit: 'Camera AI threshold · %', placeholder: '70' },
+    ];
+}
+
+function commercialThresholdAnalysis(zone, threshold, scope = 'zone') {
     const goals = commercialGoals.map(labelCommercialGoal).join(', ') || 'Commercial optimisation';
     const plants = (zone.plants || []).join(', ') || zone.crop || 'mixed crops';
+    const zoneLabel = scope === 'farm' ? 'the whole farm' : zone.name;
     if (!threshold) {
-        return `Generate thresholds to explain recommended sensor ranges and output durations for ${escapeHTML(zone.name)}. Plants: ${escapeHTML(plants)}. Commercial goals: ${escapeHTML(goals)}.`;
+        return `Generate thresholds to explain recommended sensor ranges, safety limits, and actuator timing for ${escapeHTML(zoneLabel)}. SeedDown will use the selected commercial goals, detected crops, and available device package to decide which thresholds should be active. Plants: ${escapeHTML(plants)}. Goals: ${escapeHTML(goals)}.`;
     }
     const source = threshold.source === 'ai' ? 'AI provider' : threshold.source === 'fallback' ? 'deterministic fallback' : 'manual edit';
-    return `${escapeHTML(threshold.notes || 'Thresholds generated for this zone.')} Source: ${escapeHTML(source)}. Plants: ${escapeHTML(plants)}. Goals: ${escapeHTML(goals)}. Safety limits stay protected for gas, temperature, pH, water, and actuator duration.`;
+    const modeReason = commercialGoals.includes('profit_optimisation')
+        ? 'Because profit optimisation is selected, the recipe avoids over-watering and long fan or light cycles unless readings show real risk.'
+        : commercialGoals.includes('maximum_yield')
+            ? 'Because maximum yield is selected, the recipe keeps the crop closer to its ideal growth band instead of only reacting at emergency levels.'
+            : commercialGoals.includes('compliance_audit')
+                ? 'Because compliance and audit is selected, the recipe keeps conservative sensor intervals and clearer safety boundaries for traceable operation.'
+                : 'Because commercial operation is selected, the recipe balances crop health, automation cost, and operational safety.';
+    const scopeReason = scope === 'farm'
+        ? 'Farm-level thresholds only cover shared infrastructure: CO2, reservoir depth from HC-SR04, MQ-2 gas, power meter consumption, main ventilation fan, and the emergency buzzer. These values protect the whole site even when each zone has a different crop recipe.'
+        : `Zone-level thresholds only cover independent growing zones: DHT11 temperature and humidity, soil moisture, LDR light, pH, EC, YF-S201 water flow, pump duration, grow light timing, zone fan timing, active buzzer warning, and camera scan confidence for ${escapeHTML(plants)}.`;
+    const note = threshold.notes || (scope === 'farm' ? 'Farm-level thresholds generated for master safety control.' : 'Thresholds generated for this zone.');
+    return `${escapeHTML(note)} Source: ${escapeHTML(source)}. ${scopeReason} ${modeReason} Plants considered: ${escapeHTML(plants)}. Goals considered: ${escapeHTML(goals)}. Safety guardrails are not relaxed for gas, abnormal temperature, pH, water level, or actuator duration, so manual edits outside a safe range will trigger warnings.`;
+}
+
+function allCommercialPlants() {
+    ensureCommercialStructure();
+    const plants = commercialStructure.zones.flatMap(zone => zone.plants?.length ? zone.plants : [zone.crop || 'lettuce']);
+    return [...new Set(plants.map(plant => String(plant).trim()).filter(Boolean))];
 }
 
 function commercialSafetyWarning(key, value) {
@@ -733,8 +845,19 @@ function commercialSafetyWarning(key, value) {
         phMax: value < 5.0 || value > 8.5 ? 'pH maximum is outside common hydroponic safety range.' : '',
         gasDangerThreshold: value > 4000 ? 'Gas danger threshold is too high and may delay emergency alerts.' : '',
         waterLowCm: value < 1 || value > 35 ? 'Water-low distance may be unsafe for reservoir monitoring.' : '',
+        waterCriticalCm: value < 5 || value > 60 ? 'Reservoir critical distance is outside practical HC-SR04 monitoring range.' : '',
+        co2MaxPpm: value < 800 || value > 2500 ? 'CO2 maximum is outside safe commercial ventilation planning range.' : '',
+        energyDailyLimitKwh: value < 0.5 || value > 80 ? 'Energy daily limit looks unrealistic for a commercial farm size.' : '',
+        mainFanDurationSeconds: value > 600 ? 'Main ventilation fan duration is very long; check energy impact.' : '',
+        emergencyBuzzerSeconds: value > 120 ? 'Emergency buzzer duration is too long for practical alerts.' : '',
         wateringDurationSeconds: value > 120 ? 'Watering duration is very long and may flood the zone.' : '',
         fanDurationSeconds: value > 300 ? 'Fan duration is very long; check energy and crop stress impact.' : '',
+        growLightDurationSeconds: value > 14400 ? 'Grow light duration is very long and may waste energy.' : '',
+        zoneFanDurationSeconds: value > 600 ? 'Zone fan duration is very long; check energy and crop stress impact.' : '',
+        activeBuzzerSeconds: value > 120 ? 'Active buzzer duration is too long for a zone warning.' : '',
+        waterFlowMinLpm: value < 0 || value > 10 ? 'Water flow threshold is outside practical YF-S201 range.' : '',
+        cameraScanIntervalMinutes: value < 1 || value > 1440 ? 'Camera scan interval should stay between 1 minute and 24 hours.' : '',
+        diseaseConfidenceMin: value < 40 || value > 95 ? 'Disease confidence threshold should stay practical to avoid false alarms or missed cases.' : '',
         sensorIntervalSeconds: value < 5 || value > 86400 ? 'Sensor interval is outside practical monitoring range.' : '',
         ecMin: value < 0.2 || value > 4 ? 'EC minimum is outside practical nutrient monitoring range.' : '',
         ecMax: value < 0.5 || value > 6 ? 'EC maximum is outside practical nutrient monitoring range.' : '',
@@ -885,6 +1008,24 @@ async function generateCommercialZoneThresholds() {
     }
 
     try {
+        const farmPlants = allCommercialPlants().map((plant, index) => ({ tier: index + 1, plant_type: plant }));
+        const farmResponse = await fetch(`${API_BASE}/api/ai/generate-thresholds`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                plants: farmPlants,
+                goal_priority: commercialGoals,
+                packageLevel: 'farm_master',
+            }),
+        });
+        const farmData = await safeJson(farmResponse);
+        if (!farmResponse.ok || !farmData.ok) throw new Error(farmData.error || 'Farm-level threshold generation failed');
+        commercialFarmThresholds = {
+            thresholds: normalizeCommercialFarmThresholds(farmData.thresholds || {}),
+            notes: farmData.notes,
+            source: farmData.source,
+        };
+
         for (const zone of commercialStructure.zones) {
             const plants = (zone.plants?.length ? zone.plants : ['lettuce'])
                 .map((plant, index) => ({ tier: index + 1, plant_type: plant }));
@@ -900,12 +1041,12 @@ async function generateCommercialZoneThresholds() {
             const data = await safeJson(response);
             if (!response.ok || !data.ok) throw new Error(data.error || `Threshold generation failed for ${zone.name}`);
             commercialZoneThresholds[zone.zone_id] = {
-                thresholds: data.thresholds,
+                thresholds: normalizeCommercialZoneThresholds(data.thresholds || {}, zone),
                 notes: data.notes,
                 source: data.source,
             };
         }
-        showToast('success', 'Zone thresholds generated');
+        showToast('success', 'Farm and zone thresholds generated');
         drawStep();
         return commercialZoneThresholds;
     } catch (error) {
@@ -921,7 +1062,7 @@ function handleCommercialDeviceQrFile(file) {
     reader.onload = async event => {
         try {
             const payload = await decodeDeviceQr(event.target.result);
-            const option = PACKAGE_QR_OPTIONS.find(item => item.serial === payload.serial) || payload;
+            const option = normalizeDeviceQrPayload(payload);
             if (option.deviceType !== 'commercial') {
                 throw new Error('This QR is for Beginner. Commercial setup requires COM device QR.');
             }
@@ -1012,26 +1153,93 @@ async function assignPendingCommercialDevice(targetId) {
         });
         const data = await safeJson(response);
         if (!response.ok || !data.ok) throw new Error(data.error || 'Device assignment failed');
-        commercialDeviceAssignments = [
-            ...commercialDeviceAssignments.filter(item => item.targetId !== targetId && item.deviceId !== data.device.deviceId),
-            {
-                ...data.device,
-                targetId,
-                zoneId: targetId === 'farm_master' ? null : targetId,
-                role: targetId === 'farm_master' ? 'farm_master' : 'zone_node',
-            },
-        ];
-        commercialPendingDevice = null;
+        assignCommercialDeviceRecord(data.device, targetId);
         showToast('success', 'Device assigned');
-        drawStep();
     } catch (error) {
-        showToast('error', error.message);
+        const fallback = buildLocalCommercialDevice(commercialPendingDevice, targetId, farmId);
+        assignCommercialDeviceRecord(fallback, targetId);
+        showToast('warning', `Backend register failed, using demo device: ${error.message}`);
     }
+    commercialPendingDevice = null;
+    drawStep();
+}
+
+function normalizeCommercialFarmThresholds(thresholds = {}) {
+    return {
+        co2MinPpm: Number(thresholds.co2MinPpm ?? 800),
+        co2MaxPpm: Number(thresholds.co2MaxPpm ?? 1500),
+        waterLowCm: Number(thresholds.waterLowCm ?? 20),
+        waterCriticalCm: Number(thresholds.waterCriticalCm ?? 35),
+        gasDangerThreshold: Number(thresholds.gasDangerThreshold ?? 3000),
+        energyDailyLimitKwh: Number(thresholds.energyDailyLimitKwh ?? commercialEnergyLimitBySize()),
+        mainFanDurationSeconds: Number(thresholds.mainFanDurationSeconds ?? thresholds.fanDurationSeconds ?? 20),
+        emergencyBuzzerSeconds: Number(thresholds.emergencyBuzzerSeconds ?? 10),
+        sensorIntervalSeconds: Number(thresholds.sensorIntervalSeconds ?? 300),
+    };
+}
+
+function normalizeCommercialZoneThresholds(thresholds = {}, zone = {}) {
+    return {
+        tempMin: Number(thresholds.tempMin ?? 18),
+        tempMax: Number(thresholds.tempMax ?? 28),
+        humidityMin: Number(thresholds.humidityMin ?? 50),
+        humidityMax: Number(thresholds.humidityMax ?? 80),
+        soilDryThreshold: Number(thresholds.soilDryThreshold ?? 2500),
+        darkThreshold: Number(thresholds.darkThreshold ?? 1500),
+        phMin: Number(thresholds.phMin ?? 5.8),
+        phMax: Number(thresholds.phMax ?? 6.8),
+        ecMin: Number(thresholds.ecMin ?? 1.2),
+        ecMax: Number(thresholds.ecMax ?? 2.0),
+        waterFlowMinLpm: Number(thresholds.waterFlowMinLpm ?? 0.5),
+        wateringDurationSeconds: Number(thresholds.wateringDurationSeconds ?? 10),
+        growLightDurationSeconds: Number(thresholds.growLightDurationSeconds ?? (String(zone.crop || '').toLowerCase().includes('lettuce') ? 45 : 30)),
+        zoneFanDurationSeconds: Number(thresholds.zoneFanDurationSeconds ?? thresholds.fanDurationSeconds ?? 15),
+        activeBuzzerSeconds: Number(thresholds.activeBuzzerSeconds ?? 5),
+        cameraScanIntervalMinutes: Number(thresholds.cameraScanIntervalMinutes ?? 60),
+        diseaseConfidenceMin: Number(thresholds.diseaseConfidenceMin ?? 70),
+    };
+}
+
+function commercialEnergyLimitBySize() {
+    const size = fieldInfo.rackType || 'medium';
+    if (size === 'small') return 4;
+    if (size === 'large') return 20;
+    return 10;
+}
+
+function assignCommercialDeviceRecord(device, targetId) {
+    commercialDeviceAssignments = [
+        ...commercialDeviceAssignments.filter(item => item.targetId !== targetId && item.deviceId !== device.deviceId),
+        {
+            ...device,
+            targetId,
+            zoneId: targetId === 'farm_master' ? null : targetId,
+            role: targetId === 'farm_master' ? 'farm_master' : 'zone_node',
+        },
+    ];
+}
+
+function buildLocalCommercialDevice(option = {}, targetId, farmId) {
+    const serial = String(option.serial || `SD-COM-DEMO-${Date.now()}`).toUpperCase();
+    const suffix = serial.split('-').pop() || String(Date.now()).slice(-5);
+    const packageLevel = option.packageLevel || (targetId === 'farm_master' ? 'farm_master' : 'zone_node');
+    return {
+        deviceId: `dev_commercial_${packageLevel}_${suffix}`.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+        deviceToken: `demo_token_${suffix}`,
+        serial,
+        deviceType: 'commercial',
+        packageLevel,
+        farmId,
+        zoneId: targetId === 'farm_master' ? null : targetId,
+        nodeType: packageLevel,
+        status: 'demo-assigned',
+        isDemoFallback: true,
+    };
 }
 
 function commercialThresholdsReady() {
     ensureCommercialStructure();
-    return commercialStructure.zones.every(zone => Boolean(commercialZoneThresholds[zone.zone_id]));
+    return Boolean(commercialFarmThresholds) && commercialStructure.zones.every(zone => Boolean(commercialZoneThresholds[zone.zone_id]));
 }
 
 function commercialDevicesReady() {
@@ -1198,17 +1406,34 @@ function parseDeviceQrPayload(raw) {
     }
 
     if (!payload.serial) throw new Error('QR does not contain a device serial');
-    const known = PACKAGE_QR_OPTIONS.find(option => option.serial === payload.serial);
-    return { ...(known || {}), ...payload };
+    return normalizeDeviceQrPayload(payload);
 }
 
 async function applyScannedDevicePayload(payload) {
-    const option = PACKAGE_QR_OPTIONS.find(item => item.serial === payload.serial) || payload;
+    const option = normalizeDeviceQrPayload(payload);
     deviceSetup.serial = option.serial;
     deviceSetup.accountType = option.accountType;
     registeredDevice = null;
     showToast('info', `Scanned ${option.label || option.serial}`);
     await registerDeviceFromStep(option);
+}
+
+function normalizeDeviceQrPayload(payload = {}) {
+    const serial = String(payload.serial || '').trim().toUpperCase();
+    const known = PACKAGE_QR_OPTIONS.find(option => option.serial === serial);
+    if (known) return { ...known, ...payload, serial };
+    const inferred = inferDeviceOptionFromSerial(serial);
+    return { ...inferred, ...payload, serial };
+}
+
+function inferDeviceOptionFromSerial(serial) {
+    if (serial.startsWith('SD-BGN-STR')) return { label: 'Beginner Starter', accountType: 'beginner_starter', packageLevel: 'starter', deviceType: 'beginner', desc: 'basic home sensor kit' };
+    if (serial.startsWith('SD-BGN-STD')) return { label: 'Beginner Standard', accountType: 'beginner_standard', packageLevel: 'standard', deviceType: 'beginner', desc: 'balanced home vertical farm kit' };
+    if (serial.startsWith('SD-BGN-PRO')) return { label: 'Beginner Pro', accountType: 'beginner_pro', packageLevel: 'pro', deviceType: 'beginner', desc: 'advanced home kit with more automation' };
+    if (serial.startsWith('SD-COM-FRM') || serial.startsWith('SD-COM-MST')) return { label: 'Commercial Farm Master Node', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'farm-level controller' };
+    if (serial.startsWith('SD-COM-FZK')) return { label: 'Commercial Farm + Zone Combo', accountType: 'commercial_farm_zone', packageLevel: 'farm_zone', deviceType: 'commercial', desc: 'farm or zone compatible node' };
+    if (serial.startsWith('SD-COM-ZON') || serial.startsWith('SD-COM-ZNB') || serial.startsWith('SD-COM-ZNP')) return { label: 'Commercial Zone Node', accountType: 'commercial_zone', packageLevel: 'zone_node', deviceType: 'commercial', desc: 'zone-level sensor and actuator node' };
+    return { label: serial || 'Unknown QR', accountType: '', packageLevel: '', deviceType: '', desc: 'unknown device QR' };
 }
 function renderStep1(content) {
     content.innerHTML = `
@@ -2626,6 +2851,9 @@ async function createCommercialFarm() {
         zones,
         commercialDevices: commercialDeviceAssignments,
         farmMaster: masterDevice,
+        farmThresholds: commercialFarmThresholds?.thresholds || {},
+        farmThresholdNotes: commercialFarmThresholds?.notes || '',
+        farmThresholdSource: commercialFarmThresholds?.source || 'manual',
         commercialStructure,
         goalPriority: commercialGoals,
         targetPlant: zones.map(zone => zone.crop).join(', '),
@@ -2655,6 +2883,7 @@ async function createCommercialFarm() {
         console.warn('[BuildFarm] commercial farm API unavailable:', error.message);
     }
 
+    await syncCommercialFarmPreferences(farmId, masterDevice);
     await syncCommercialZonePreferences(farmId, zones);
 
     const saved = loadSavedFarms();
@@ -2669,6 +2898,9 @@ async function createCommercialFarm() {
         zones,
         commercialDevices: commercialDeviceAssignments.map(device => ({ ...device })),
         farmMaster: masterDevice,
+        farmThresholds: payload.farmThresholds,
+        farmThresholdNotes: payload.farmThresholdNotes,
+        farmThresholdSource: payload.farmThresholdSource,
         commercialStructure,
         goalPriority: [...commercialGoals],
         analysisGoal: payload.analysisGoal,
@@ -2719,6 +2951,32 @@ async function syncCommercialZonePreferences(farmId, zones) {
         } catch (error) {
             console.warn(`[BuildFarm] commercial preference sync skipped for ${zone.zone_id}:`, error.message);
         }
+    }
+}
+
+async function syncCommercialFarmPreferences(farmId, masterDevice) {
+    if (!masterDevice?.deviceId) return;
+    const headers = { 'Content-Type': 'application/json' };
+    if (masterDevice.deviceToken) headers['x-device-token'] = masterDevice.deviceToken;
+    try {
+        const response = await fetch(`${API_BASE}/api/sensors/preferences`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({
+                deviceId: masterDevice.deviceId,
+                farmId,
+                zoneId: 'farm_master',
+                packageLevel: masterDevice.packageLevel || 'farm_master',
+                goalPriority: commercialGoals,
+                thresholdSource: commercialFarmThresholds?.source || 'manual',
+                thresholdNotes: commercialFarmThresholds?.notes || '',
+                ...(commercialFarmThresholds?.thresholds || {}),
+            }),
+        });
+        const data = await safeJson(response);
+        if (!response.ok || data.ok === false) throw new Error(data.error || 'Farm master preference sync failed');
+    } catch (error) {
+        console.warn('[BuildFarm] farm master preference sync skipped:', error.message);
     }
 }
 
