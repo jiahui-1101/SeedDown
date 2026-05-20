@@ -1,0 +1,670 @@
+[
+  {
+    "species": "tomato",
+    "commonName": "Cherry Tomato",
+    "emoji": "🍅",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 27,
+      "humidityMin": 60,
+      "humidityMax": 80,
+      "lightHours": 8,
+      "waterPerDay": 250,
+      "fertilizerPerWeek": 5,
+      "growthDays": 70
+    },
+    "yield": {
+      "avgGramsPerPlant": 500,
+      "harvestsPerCycle": 8,
+      "peakWeek": 10
+    },
+    "cost": {
+      "mktPricePerKg": 7.2,
+      "waterSavePerRow": 2.1,
+      "energySavePerRow": 0.9,
+      "fertilizerPerRow": 1.1,
+      "note": "Tomatoes fetched RM 7.20/kg at Pasar Borong this week."
+    },
+    "impacts": {
+      "tempChange": 1,
+      "humidChange": 4,
+      "lightChange": 1.5,
+      "waterChange": 10,
+      "nutrientChange": 10
+    },
+    "recipeKeywords": [
+      "tomato",
+      "tomatoes",
+      "cherry tomato"
+    ]
+  },
+  {
+    "species": "lettuce",
+    "commonName": "Butter Lettuce",
+    "emoji": "🥬",
+    "requirements": {
+      "tempMin": 15,
+      "tempMax": 22,
+      "humidityMin": 50,
+      "humidityMax": 70,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "cost": {
+      "mktPricePerKg": 4.8,
+      "waterSavePerRow": 3.2,
+      "energySavePerRow": 1.1,
+      "fertilizerPerRow": 0.8,
+      "note": "Lettuce grows fast — your rows beat supermarket prices by 2x this month."
+    },
+    "impacts": {
+      "tempChange": 0.3,
+      "humidChange": 2,
+      "lightChange": -0.5,
+      "waterChange": 5,
+      "nutrientChange": 4
+    },
+    "recipeKeywords": [
+      "lettuce",
+      "salad",
+      "greens"
+    ]
+  },
+  {
+    "species": "carrot",
+    "commonName": "Carrot",
+    "emoji": "🥕",
+    "requirements": {
+      "tempMin": 15,
+      "tempMax": 24,
+      "humidityMin": 50,
+      "humidityMax": 70,
+      "lightHours": 6,
+      "waterPerDay": 180,
+      "fertilizerPerWeek": 3,
+      "growthDays": 75
+    },
+    "yield": {
+      "avgGramsPerPlant": 300,
+      "harvestsPerCycle": 2,
+      "peakWeek": 11
+    },
+    "cost": {
+      "mktPricePerKg": 3.5,
+      "waterSavePerRow": 1.8,
+      "energySavePerRow": 0.7,
+      "fertilizerPerRow": 0.6,
+      "note": "Carrots are low-maintenance and high-value for home growing."
+    },
+    "impacts": {
+      "tempChange": 0.3,
+      "humidChange": 2,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "carrot",
+      "carrots"
+    ]
+  },
+  {
+    "species": "basil",
+    "commonName": "Sweet Basil",
+    "emoji": "🌿",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 30,
+      "humidityMin": 40,
+      "humidityMax": 60,
+      "lightHours": 6,
+      "waterPerDay": 100,
+      "fertilizerPerWeek": 2,
+      "growthDays": 30
+    },
+    "yield": {
+      "avgGramsPerPlant": 80,
+      "harvestsPerCycle": 10,
+      "peakWeek": 5
+    },
+    "cost": {
+      "mktPricePerKg": 12,
+      "waterSavePerRow": 0.9,
+      "energySavePerRow": 0.5,
+      "fertilizerPerRow": 0.4,
+      "note": "Fresh basil at supermarkets is expensive. Your rows are a gold mine."
+    },
+    "impacts": {
+      "tempChange": 0,
+      "humidChange": 2,
+      "lightChange": 1,
+      "waterChange": 4,
+      "nutrientChange": 4
+    },
+    "recipeKeywords": [
+      "basil",
+      "herb",
+      "pesto"
+    ]
+  },
+  {
+    "species": "cabbage",
+    "commonName": "Green Cabbage",
+    "emoji": "🥬",
+    "requirements": {
+      "tempMin": 10,
+      "tempMax": 20,
+      "humidityMin": 60,
+      "humidityMax": 80,
+      "lightHours": 6,
+      "waterPerDay": 200,
+      "fertilizerPerWeek": 4,
+      "growthDays": 90
+    },
+    "yield": {
+      "avgGramsPerPlant": 1200,
+      "harvestsPerCycle": 1,
+      "peakWeek": 13
+    },
+    "cost": {
+      "mktPricePerKg": 3.2,
+      "waterSavePerRow": 2.5,
+      "energySavePerRow": 0.8,
+      "fertilizerPerRow": 0.7,
+      "note": "Cabbage is a bulk producer — great for soups and stir-fries."
+    },
+    "impacts": {
+      "tempChange": 0.3,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "cabbage",
+      "coleslaw",
+      "slaw"
+    ]
+  },
+  {
+    "species": "eggplant",
+    "commonName": "Eggplant",
+    "emoji": "🍆",
+    "requirements": {
+      "tempMin": 20,
+      "tempMax": 30,
+      "humidityMin": 60,
+      "humidityMax": 75,
+      "lightHours": 8,
+      "waterPerDay": 220,
+      "fertilizerPerWeek": 5,
+      "growthDays": 80
+    },
+    "yield": {
+      "avgGramsPerPlant": 400,
+      "harvestsPerCycle": 6,
+      "peakWeek": 12
+    },
+    "cost": {
+      "mktPricePerKg": 5.5,
+      "waterSavePerRow": 2.4,
+      "energySavePerRow": 1.3,
+      "fertilizerPerRow": 0.9,
+      "note": "Eggplant uses more water but market price makes it worthwhile."
+    },
+    "impacts": {
+      "tempChange": 1,
+      "humidChange": -2,
+      "lightChange": 1.5,
+      "waterChange": 8,
+      "nutrientChange": 9
+    },
+    "recipeKeywords": [
+      "eggplant",
+      "aubergine",
+      "brinjal"
+    ]
+  },
+  {
+    "species": "spinach",
+    "commonName": "Baby Spinach",
+    "emoji": "🥬",
+    "requirements": {
+      "tempMin": 10,
+      "tempMax": 20,
+      "humidityMin": 50,
+      "humidityMax": 70,
+      "lightHours": 5,
+      "waterPerDay": 120,
+      "fertilizerPerWeek": 3,
+      "growthDays": 40
+    },
+    "yield": {
+      "avgGramsPerPlant": 150,
+      "harvestsPerCycle": 4,
+      "peakWeek": 5
+    },
+    "cost": {
+      "mktPricePerKg": 6,
+      "waterSavePerRow": 2,
+      "energySavePerRow": 0.6,
+      "fertilizerPerRow": 0.5,
+      "note": "Spinach is fast and nutritious — a great starter crop."
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": -0.5,
+      "waterChange": 8,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "spinach",
+      "greens",
+      "leafy green"
+    ]
+  },
+  {
+    "species": "strawberry",
+    "commonName": "Strawberry",
+    "emoji": "🍓",
+    "requirements": {
+      "tempMin": 15,
+      "tempMax": 25,
+      "humidityMin": 65,
+      "humidityMax": 75,
+      "lightHours": 8,
+      "waterPerDay": 200,
+      "fertilizerPerWeek": 4,
+      "growthDays": 90
+    },
+    "yield": {
+      "avgGramsPerPlant": 300,
+      "harvestsPerCycle": 5,
+      "peakWeek": 13
+    },
+    "cost": {
+      "mktPricePerKg": 12,
+      "waterSavePerRow": 2.2,
+      "energySavePerRow": 1,
+      "fertilizerPerRow": 0.8,
+      "note": "Strawberries command premium prices — great ROI for indoor growing."
+    },
+    "impacts": {
+      "tempChange": -1,
+      "humidChange": 2,
+      "lightChange": 1.5,
+      "waterChange": 8,
+      "nutrientChange": 10
+    },
+    "recipeKeywords": [
+      "strawberry",
+      "strawberries"
+    ]
+  },
+  {
+    "species": "pepper",
+    "commonName": "Bell Pepper",
+    "emoji": "🫑",
+    "requirements": {
+      "tempMin": 20,
+      "tempMax": 30,
+      "humidityMin": 50,
+      "humidityMax": 70,
+      "lightHours": 8,
+      "waterPerDay": 200,
+      "fertilizerPerWeek": 5,
+      "growthDays": 80
+    },
+    "yield": {
+      "avgGramsPerPlant": 400,
+      "harvestsPerCycle": 6,
+      "peakWeek": 12
+    },
+    "cost": {
+      "mktPricePerKg": 8,
+      "waterSavePerRow": 2,
+      "energySavePerRow": 1,
+      "fertilizerPerRow": 0.9,
+      "note": "Bell peppers are high-value and sell well at farmers markets."
+    },
+    "impacts": {
+      "tempChange": 1,
+      "humidChange": -2,
+      "lightChange": 1.5,
+      "waterChange": 8,
+      "nutrientChange": 8
+    },
+    "recipeKeywords": [
+      "bell pepper",
+      "green pepper",
+      "capsicum",
+      "pepper"
+    ]
+  },
+  {
+    "species": "mint",
+    "commonName": "Mint",
+    "emoji": "🌿",
+    "requirements": {
+      "tempMin": 15,
+      "tempMax": 25,
+      "humidityMin": 50,
+      "humidityMax": 70,
+      "lightHours": 5,
+      "waterPerDay": 120,
+      "fertilizerPerWeek": 2,
+      "growthDays": 30
+    },
+    "yield": {
+      "avgGramsPerPlant": 100,
+      "harvestsPerCycle": 8,
+      "peakWeek": 4
+    },
+    "cost": {
+      "mktPricePerKg": 15,
+      "waterSavePerRow": 0.8,
+      "energySavePerRow": 0.4,
+      "fertilizerPerRow": 0.3,
+      "note": "Mint grows aggressively — contain it and harvest often."
+    },
+    "impacts": {
+      "tempChange": 0,
+      "humidChange": 5,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "mint",
+      "peppermint",
+      "spearmint"
+    ]
+  },
+  {
+    "species": "chili",
+    "commonName": "Chili",
+    "emoji": "🌶️",
+    "requirements": {
+      "tempMin": 20,
+      "tempMax": 32,
+      "humidityMin": 50,
+      "humidityMax": 70,
+      "lightHours": 8,
+      "waterPerDay": 180,
+      "fertilizerPerWeek": 4,
+      "growthDays": 90
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 8,
+      "peakWeek": 13
+    },
+    "cost": {
+      "mktPricePerKg": 10,
+      "waterSavePerRow": 1.8,
+      "energySavePerRow": 1.1,
+      "fertilizerPerRow": 0.8,
+      "note": "Chili is high-demand year-round — great for consistent income."
+    },
+    "impacts": {
+      "tempChange": 1.5,
+      "humidChange": -4,
+      "lightChange": 2,
+      "waterChange": 10,
+      "nutrientChange": 15
+    },
+    "recipeKeywords": [
+      "chili",
+      "chilli",
+      "hot pepper",
+      "cayenne"
+    ]
+  },
+  {
+    "species": "cucumber",
+    "commonName": "Cucumber",
+    "emoji": "🥒",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 60,
+      "humidityMax": 80,
+      "lightHours": 7,
+      "waterPerDay": 300,
+      "fertilizerPerWeek": 5,
+      "growthDays": 60
+    },
+    "yield": {
+      "avgGramsPerPlant": 600,
+      "harvestsPerCycle": 6,
+      "peakWeek": 9
+    },
+    "cost": {
+      "mktPricePerKg": 4.5,
+      "waterSavePerRow": 3,
+      "energySavePerRow": 1.2,
+      "fertilizerPerRow": 1,
+      "note": "Cucumbers are water-heavy but fast-growing and popular."
+    },
+    "impacts": {
+      "tempChange": 1,
+      "humidChange": 6,
+      "lightChange": 1,
+      "waterChange": 12,
+      "nutrientChange": 10
+    },
+    "recipeKeywords": [
+      "cucumber",
+      "cucumbers"
+    ]
+  },
+  {
+    "species": "banana",
+    "commonName": "banana",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "banana"
+    ]
+  },
+  {
+    "species": "cherry",
+    "commonName": "cherry",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 12
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "cherry"
+    ]
+  },
+  {
+    "species": "cc",
+    "commonName": "cc",
+    "emoji": "",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 70.25,
+      "lightHours": 6.5,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      ""
+    ]
+  },
+  {
+    "species": "kangkung",
+    "commonName": "kangkung",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "kangkung"
+    ],
+    "indoorGardenData": {
+      "lightType": "LED",
+      "pHLevel": 6,
+      "soilType": "Peat Moss",
+      "wateringMethod": "Drip Irrigation",
+      "temperatureStability": 0.1,
+      "humidityStability": 2,
+      "lightStability": 1,
+      "waterStability": 4,
+      "nutrientStability": 3,
+      "growthRate": 0.8,
+      "yieldPercentage": 80
+    }
+  },
+  {
+    "species": "petai",
+    "commonName": "petai",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "petai"
+    ],
+    "indoorGardenData": {
+      "avgPlantsPerSquareMeter": 4,
+      "avgGrowthRate": 0.5,
+      "avgYieldPerSquareMeter": 800,
+      "avgDaysToMaturity": 45,
+      "avgWaterUsagePerSquareMeter": 600,
+      "avgFertilizerUsagePerSquareMeter": 12
+    }
+  },
+  {
+    "species": "watermelon",
+    "commonName": "watermelon",
+    "emoji": "🌱",
+    "requirements": {
+      "tempMin": 18,
+      "tempMax": 28,
+      "humidityMin": 50,
+      "humidityMax": 75,
+      "lightHours": 6,
+      "waterPerDay": 150,
+      "fertilizerPerWeek": 3,
+      "growthDays": 45
+    },
+    "yield": {
+      "avgGramsPerPlant": 200,
+      "harvestsPerCycle": 3,
+      "peakWeek": 6
+    },
+    "impacts": {
+      "tempChange": 0.5,
+      "humidChange": 3,
+      "lightChange": 0,
+      "waterChange": 6,
+      "nutrientChange": 5
+    },
+    "recipeKeywords": [
+      "watermelon"
+    ]
+  }
+]
