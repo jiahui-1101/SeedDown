@@ -824,25 +824,26 @@ Return ONLY valid JSON.`;
 
   try {
     raw = await askText(system, prompt, 400);
-  } catch {
-    return _resourceFallback(prompt);
+  } catch (err) {
+    throw new Error(`AI resource prediction unavailable: ${err.message}`);
   }
 
   try {
     const parsed = JSON.parse(stripJson(raw));
+    const waterLitresPerWeek = Number(parsed.waterLitresPerWeek);
+    const fertMLPerWeek = Number(parsed.fertMLPerWeek);
+    if (!Number.isFinite(waterLitresPerWeek) || !Number.isFinite(fertMLPerWeek)) {
+      throw new Error('AI response missing resource numbers');
+    }
 
     return {
-      waterLitresPerWeek: Number(
-        Number(parsed.waterLitresPerWeek).toFixed(1)
-      ),
+      waterLitresPerWeek: Number(waterLitresPerWeek.toFixed(1)),
       waterTrend: ['up', 'stable', 'down'].includes(
         parsed.waterTrend
       )
         ? parsed.waterTrend
         : 'stable',
-      fertMLPerWeek: Number(
-        Number(parsed.fertMLPerWeek).toFixed(0)
-      ),
+      fertMLPerWeek: Number(fertMLPerWeek.toFixed(0)),
       fertTrend: ['up', 'stable', 'down'].includes(
         parsed.fertTrend
       )
@@ -858,8 +859,8 @@ Return ONLY valid JSON.`;
         120
       ),
     };
-  } catch {
-    return _resourceFallback(prompt);
+  } catch (err) {
+    throw new Error(`AI resource prediction returned invalid JSON: ${err.message}`);
   }
 }
 

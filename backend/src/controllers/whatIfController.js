@@ -4,38 +4,63 @@ const { forecastYieldAndRecipes, askText } = require('../services/aiService');
 const { getMarketPricesForCrops } = require('../services/marketPriceService');
 const sensorService = require('../services/sensorService');
 
-// ── Historical sensor data fetcher ────────────────────────────────────────────────
-async function fetchHistoricalStats(body = {}) {
+function sensorFilterCandidates(body = {}) {
   const seen = new Set();
   const candidates = [];
-  const push = (key, value) => {
-    if (!value || value === 'farm_001') return;
-    const sig = key + '=' + value;
+  const push = (filters) => {
+    const clean = Object.fromEntries(
+      Object.entries(filters || {}).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    );
+    if (!Object.keys(clean).length) return;
+    const sig = JSON.stringify(clean);
     if (seen.has(sig)) return;
     seen.add(sig);
-    candidates.push({ key, value });
+    candidates.push(clean);
   };
 
-  push('deviceId', body.deviceId);
-  push('deviceId', body.sensors && body.sensors.deviceId);
-  push('zoneId',   body.zoneId   || (body.sensors && body.sensors.zoneId));
-  push('farmId',   body.farmId   || (body.sensors && body.sensors.farmId));
-  push('fieldId',  body.fieldId  || (body.sensors && body.sensors.fieldId));
+  push({ deviceId: body.deviceId || body.sensors?.deviceId });
+  push({ zoneId: body.zoneId || body.sensors?.zoneId });
+  push({ farmId: body.farmId || body.sensors?.farmId });
+  push({ fieldId: body.fieldId || body.sensors?.fieldId });
+  push({ deviceId: body.farmLevelDeviceId || body.farmLevelSensors?.deviceId });
 
-  let readings = [];
-  for (const cand of candidates) {
+  return candidates;
+}
+
+async function fetchFirebaseSensorContext(body = {}, limit = 200) {
+  const candidates = sensorFilterCandidates(body);
+  let lastError = null;
+
+  if (!candidates.length) {
+    const err = new Error('No farm, field, zone, or device id supplied for Firebase sensor lookup');
+    err.status = 400;
+    throw err;
+  }
+
+  for (const filters of candidates) {
     try {
-      const batch = await sensorService.getReadings({ [cand.key]: cand.value }, 200);
-      if (Array.isArray(batch) && batch.length > 0) {
-        readings = batch;
-        console.log('[WhatIf] Historical data via ' + cand.key + '=' + cand.value + ' - ' + batch.length + ' readings');
-        break;
-      }
+      const latest = await sensorService.getLatestReading(filters);
+      if (!latest) continue;
+      const history = await sensorService.getReadings(filters, limit);
+      return {
+        latest,
+        history: Array.isArray(history) ? history : [],
+        filters,
+        source: `Firebase sensorReadings ${JSON.stringify(filters)}`,
+      };
     } catch (err) {
-      console.warn('[WhatIf] History candidate ' + cand.key + '=' + cand.value + ' failed:', err.message);
+      lastError = err;
+      console.warn('[WhatIf] Firebase sensor candidate failed:', filters, err.message);
     }
   }
 
+  const err = new Error(lastError ? `No Firebase sensor readings found (${lastError.message})` : 'No Firebase sensor readings found');
+  err.status = 404;
+  throw err;
+}
+
+// ── Historical sensor data fetcher ────────────────────────────────────────────────
+function buildHistoricalStats(readings = [], usedQuery = 'Firebase sensorReadings') {
   if (!readings.length) return null;
 
   const avg = function(arr) { return arr.length ? arr.reduce(function(s, v) { return s + v; }, 0) / arr.length : null; };
@@ -47,13 +72,27 @@ async function fetchHistoricalStats(body = {}) {
     const delta = late - early;
     return delta > 1 ? 'rising' : delta < -1 ? 'falling' : 'stable';
   };
-  const extract = function(field, rawField) {
+  const extractPercent = function(fields, rawField) {
+    const fieldList = Array.isArray(fields) ? fields : [fields];
     return readings.map(function(r) {
-      const v = r[field];
-      if (v !== undefined && v !== null && Number.isFinite(Number(v))) return Number(v);
+      for (const field of fieldList) {
+        const v = r[field];
+        if (v !== undefined && v !== null && Number.isFinite(Number(v))) return Number(v);
+      }
       const raw = r[rawField];
-      if (raw !== undefined && raw !== null && Number.isFinite(Number(raw)))
+      if (raw !== undefined && raw !== null && Number.isFinite(Number(raw))) {
         return Math.max(0, Math.min(100, Number(raw) / 4095 * 100));
+      }
+      return null;
+    }).filter(function(v) { return v !== null; });
+  };
+  const extractNumber = function(fields) {
+    const fieldList = Array.isArray(fields) ? fields : [fields];
+    return readings.map(function(r) {
+      for (const field of fieldList) {
+        const v = r[field];
+        if (v !== undefined && v !== null && Number.isFinite(Number(v))) return Number(v);
+      }
       return null;
     }).filter(function(v) { return v !== null; });
   };
@@ -62,14 +101,18 @@ async function fetchHistoricalStats(body = {}) {
     return readings.length ? Math.round(triggered / readings.length * 100) : 0;
   };
 
-  const moisture = extract('soilMoisture', 'soilRaw');
-  const ec       = extract('ec', 'ecRaw');
-  const temp     = extract('temperature', 'temp');
-  const humid    = extract('humidity', 'humid');
-  const ph       = extract('ph');
+  const moisture = extractPercent(['soilMoisture', 'moisture', 'water'], 'soilRaw');
+  const ec       = extractNumber('ec');
+  const temp     = extractNumber(['temperature', 'temp']);
+  const humid    = extractNumber(['humidity', 'humid']);
+  const ph       = extractNumber('ph');
+  const energy   = extractNumber(['energyKwh', 'powerKwh']);
+  const flow     = extractNumber('waterFlowLpm');
+  const reservoir = extractNumber('waterDistanceCm');
 
   return {
     totalReadings: readings.length,
+    usedQuery,
     moisture: moisture.length ? {
       avg:              parseFloat(avg(moisture).toFixed(1)),
       min:              parseFloat(Math.min.apply(null, moisture).toFixed(1)),
@@ -85,7 +128,63 @@ async function fetchHistoricalStats(body = {}) {
     temp:  temp.length  ? { avg: parseFloat(avg(temp).toFixed(1)),  trend: trendDir(temp)  } : null,
     humid: humid.length ? { avg: parseFloat(avg(humid).toFixed(1)), trend: trendDir(humid) } : null,
     ph:    ph.length    ? { avg: parseFloat(avg(ph).toFixed(2)),    trend: trendDir(ph)    } : null,
+    energy: energy.length ? {
+      latestKwh: parseFloat(energy[0].toFixed(3)),
+      avgKwh: parseFloat(avg(energy).toFixed(3)),
+      minKwh: parseFloat(Math.min.apply(null, energy).toFixed(3)),
+      maxKwh: parseFloat(Math.max.apply(null, energy).toFixed(3)),
+      trend: trendDir(energy),
+    } : null,
+    waterFlow: flow.length ? {
+      avgLpm: parseFloat(avg(flow).toFixed(2)),
+      minLpm: parseFloat(Math.min.apply(null, flow).toFixed(2)),
+      maxLpm: parseFloat(Math.max.apply(null, flow).toFixed(2)),
+      trend: trendDir(flow),
+    } : null,
+    reservoir: reservoir.length ? {
+      avgCm: parseFloat(avg(reservoir).toFixed(1)),
+      latestCm: parseFloat(reservoir[0].toFixed(1)),
+      trend: trendDir(reservoir),
+    } : null,
   };
+}
+
+async function fetchHistoricalStats(body = {}) {
+  const seen = new Set();
+  const candidates = [];
+  const push = (key, value) => {
+    if (!value) return;
+    const sig = key + '=' + value;
+    if (seen.has(sig)) return;
+    seen.add(sig);
+    candidates.push({ key, value });
+  };
+
+  push('deviceId', body.deviceId);
+  push('deviceId', body.sensors && body.sensors.deviceId);
+  push('zoneId',   body.zoneId   || (body.sensors && body.sensors.zoneId));
+  push('farmId',   body.farmId   || (body.sensors && body.sensors.farmId));
+  push('fieldId',  body.fieldId  || (body.sensors && body.sensors.fieldId));
+  push('deviceId', body.farmLevelDeviceId || (body.farmLevelSensors && body.farmLevelSensors.deviceId));
+
+  let readings = [];
+  let usedQuery = '';
+  for (const cand of candidates) {
+    try {
+      const batch = await sensorService.getReadings({ [cand.key]: cand.value }, 200);
+      if (Array.isArray(batch) && batch.length > 0) {
+        readings = batch;
+        usedQuery = cand.key + '=' + cand.value;
+        console.log('[WhatIf] Historical data via ' + cand.key + '=' + cand.value + ' - ' + batch.length + ' readings');
+        break;
+      }
+    } catch (err) {
+      console.warn('[WhatIf] History candidate ' + cand.key + '=' + cand.value + ' failed:', err.message);
+    }
+  }
+
+  if (!readings.length) return null;
+  return buildHistoricalStats(readings, usedQuery);
 }
 
 // ── Data helpers ──────────────────────────────────────────────────────────────
@@ -105,7 +204,7 @@ const DEFAULT_ENV_PROFILE = {
 const RATES = {
   waterRM:  0.042,   // RM / litre  — Syabas domestic block 1
   energyRM: 1.10,    // RM / kWh    — TNB domestic block 1
-  fertRM:   0.085,   // RM / mL     — hydroponic nutrient solution avg
+  fertRM:   0.009,   // RM / mL     — hydroponic A+B concentrate avg
 };
 
 function loadCrops() {
@@ -114,6 +213,27 @@ function loadCrops() {
 
 function findCrop(species) {
   return loadCrops().find(c => c.species === String(species).toLowerCase()) || null;
+}
+
+function verticalFarmBlocker(species) {
+  const raw = String(species || '').toLowerCase();
+  const key = cropKey(raw);
+  const explicitSprout = /\b(sprout|sprouts|microgreen|microgreens|seedling|seedlings)\b/.test(raw);
+  if (explicitSprout) return null;
+
+  const orchardCrops = [
+    'apple', 'pear', 'peach', 'plum', 'apricot', 'cherry',
+    'mango', 'durian', 'rambutan', 'lychee', 'longan',
+    'coconut', 'jackfruit', 'avocado', 'orange', 'lemon', 'lime',
+    'grapefruit', 'pomelo', 'fig', 'olive', 'guava',
+  ];
+  const matched = orchardCrops.find(name => key === name || key.includes(`${name}_`) || key.includes(`_${name}`));
+  if (!matched) return null;
+
+  return {
+    crop: matched,
+    reason: `${species} is an orchard/tree crop, not a practical indoor vertical-farm crop. A vertical rack can germinate seedlings, but it cannot economically support the mature tree canopy, root volume, pollination, crop cycle, or multi-year fruiting space required for ${species}. Choose compact herbs, leafy greens, strawberries, tomatoes, peppers, or other short-cycle crops instead.`,
+  };
 }
 
 function cropKey(value) {
@@ -201,6 +321,22 @@ function normaliseImpact(value = {}, fallback = {}) {
   };
 }
 
+function normaliseCropResourceProfile(value = {}, fallbackReq = {}, fallbackYield = {}) {
+  const fallbackKgPerPlant = finiteNumber(
+    fallbackYield.kgPerPlant,
+    finiteNumber(fallbackYield.avgGramsPerPlant, 250) / 1000
+  );
+  return {
+    waterMLPerPlantDay: finiteNumber(value.waterMLPerPlantDay, finiteNumber(fallbackReq.waterPerDay, 150)),
+    fertilizerMLPerPlantWeek: finiteNumber(value.fertilizerMLPerPlantWeek, finiteNumber(fallbackReq.fertilizerPerWeek, 3)),
+    lightHoursPerDay: finiteNumber(value.lightHoursPerDay, finiteNumber(fallbackReq.lightHours, 6)),
+    lightWattsPerRow: finiteNumber(value.lightWattsPerRow, 40),
+    yieldKgPerPlant: finiteNumber(value.yieldKgPerPlant, fallbackKgPerPlant),
+    harvestsPerCycle: Math.max(1, Math.round(finiteNumber(value.harvestsPerCycle, finiteNumber(fallbackYield.harvestsPerCycle, 1)))),
+    sourceBasis: String(value.sourceBasis || '').trim(),
+  };
+}
+
 function normaliseResourceLinks(links = []) {
   if (!Array.isArray(links)) return [];
   return links
@@ -254,7 +390,7 @@ function cropEnvironmentProfile(species, cropSpec, aiSuitability) {
   };
 }
 
-function normalizeMoisture(sensors = {}) {
+function normalizeMoisture(sensors = {}, { allowFallback = true } = {}) {
   const raw = firstNumber(sensors.soilRaw);
   const explicit = firstNumber(sensors.moisture, sensors.soilMoisture, sensors.water);
 
@@ -311,28 +447,31 @@ function normalizeMoisture(sensors = {}) {
   }
 
   return {
-    value: 45,
-    source: 'fallback default',
-    basis: 'fallback',
+    value: allowFallback ? 45 : null,
+    source: allowFallback ? 'fallback default' : 'Firebase reading missing moisture fields',
+    basis: allowFallback ? 'fallback' : 'missing',
     unit: '%',
     rawValue: null,
     rawUnit: null,
-    normalizedFormula: 'soil moisture % = fallback default — no Firebase moisture field available',
+    normalizedFormula: allowFallback
+      ? 'soil moisture % = fallback default — no Firebase moisture field available'
+      : 'no moisture calculation — Firebase reading has no soilMoisture, moisture, water, or soilRaw field',
     calibrated: false,
   };
 }
 
-function normalizeSensorState(sensors = {}) {
-  const moisture = normalizeMoisture(sensors);
+function normalizeSensorState(sensors = {}, { allowFallback = true } = {}) {
+  const fallback = (value) => allowFallback ? value : null;
+  const moisture = normalizeMoisture(sensors, { allowFallback });
   const ec = firstNumber(sensors.ec, sensors.nutrientEc);
   const ecRaw = firstNumber(sensors.ecRaw);
   const nutrientFromEc = ec !== null ? clamp(ec / 2.4 * 100, 0, 100) : null;
   const nutrientFromRaw = ecRaw !== null ? clamp(ecRaw / 4095 * 100, 0, 100) : null;
 
   return {
-    temp: finiteNumber(sensors.temp ?? sensors.temperature, 28),
-    humid: finiteNumber(sensors.humid ?? sensors.humidity, 68),
-    light: finiteNumber(sensors.light ?? sensors.lux, 82),
+    temp: finiteNumber(sensors.temp ?? sensors.temperature, fallback(28)),
+    humid: finiteNumber(sensors.humid ?? sensors.humidity, fallback(68)),
+    light: finiteNumber(sensors.light ?? sensors.lux, fallback(82)),
     water: moisture.value,
     moistureSource: moisture.source,
     moistureBasis: moisture.basis,
@@ -341,18 +480,37 @@ function normalizeSensorState(sensors = {}) {
     soilRaw: moisture.rawValue,
     sensorRawUnit: moisture.rawUnit,
     normalizedMoistureFormula: moisture.normalizedFormula,
-    nutrient: finiteNumber(sensors.nutrient, nutrientFromEc ?? nutrientFromRaw ?? 78),
+    nutrient: finiteNumber(sensors.nutrient, nutrientFromEc ?? nutrientFromRaw ?? fallback(78)),
     ph: firstNumber(sensors.ph),
     ec,
+    waterDistanceCm: firstNumber(sensors.waterDistanceCm),
+    waterFlowLpm: firstNumber(sensors.waterFlowLpm),
+    energyKwh: firstNumber(sensors.energyKwh, sensors.powerKwh),
     createdAt: sensors.createdAt || null,
     source: sensors.source || moisture.source || 'sensor snapshot',
   };
 }
 
 function metricPlan({ key, label, current, ideal, unit = '', lowAction, highAction, maintainAction, hardMargin = 0 }) {
+  const numericCurrent = finiteNumber(current, null);
   const min = round1(Number(ideal[0]));
   const max = round1(Number(ideal[1]));
-  const value = round1(current);
+  if (numericCurrent === null) {
+    return {
+      key,
+      label,
+      current: null,
+      idealMin: min,
+      idealMax: max,
+      target: null,
+      adjustment: null,
+      unit,
+      status: 'no_data',
+      action: 'no Firebase reading available',
+      severe: false,
+    };
+  }
+  const value = round1(numericCurrent);
   const status = value < min ? 'low' : value > max ? 'high' : 'ideal';
   const target = status === 'ideal' ? value : round1(rangeMid([min, max]));
   const adjustment = round1(target - value);
@@ -372,7 +530,7 @@ function metricPlan({ key, label, current, ideal, unit = '', lowAction, highActi
 
 function environmentPlan({ species, quantity, planting, cropSpec, aiSuitability, sensors, impacts }) {
   const profile = cropEnvironmentProfile(species, cropSpec, aiSuitability);
-  const current = normalizeSensorState(sensors);
+  const current = normalizeSensorState(sensors, { allowFallback: false });
   const moisture = metricPlan({
     key: 'moisture', label: 'Root moisture', current: current.water,
     ideal: profile.moistureIdeal, unit: '%',
@@ -412,7 +570,9 @@ function environmentPlan({ species, quantity, planting, cropSpec, aiSuitability,
   const metrics = [moisture, temp, humidity, ph, ec].filter(Boolean);
   const warnings = metrics
     .filter(m => m.status !== 'ideal')
-    .map(m => `${m.label} is ${m.status}: ${m.current}${m.unit} vs ideal ${m.idealMin}-${m.idealMax}${m.unit}`);
+    .map(m => m.status === 'no_data'
+      ? `${m.label} has no Firebase reading`
+      : `${m.label} is ${m.status}: ${m.current}${m.unit} vs ideal ${m.idealMin}-${m.idealMax}${m.unit}`);
 
   if (impacts.nutrientChange > 20) warnings.push(`nutrient demand increases significantly (+${impacts.nutrientChange}%)`);
   if (impacts.waterChange > 20)    warnings.push(`water demand increases significantly (+${impacts.waterChange}%)`);
@@ -479,9 +639,9 @@ function buildSensorGap(plan) {
       idealMin: m.idealMin,
       idealMax: m.idealMax,
       target:   m.target,
-      delta:    round1(m.target - m.current),
+      delta:    m.current === null || m.target === null ? null : round1(m.target - m.current),
       action:   mapAction(m.action),
-      status:   mapStatus(m.status),
+      status:   m.status === 'no_data' ? 'no_data' : mapStatus(m.status),
       unit:     unitOverride || m.unit || '',
       ...(calibrated !== undefined ? { calibrated } : {}),
     };
@@ -509,25 +669,23 @@ function buildSensorGap(plan) {
  */
 function buildDemand(planting, cropSpec, aiSuitability) {
   const req          = cropSpec?.requirements || {};
+  const profile      = normaliseCropResourceProfile(aiSuitability?.cropResourceProfile, req, cropSpec?.yield);
   const rows         = Math.max(1, planting.rowCount || 1);
   const plantsPerRow = Math.max(1, planting.unitsPerRow || 1);
   const growDays     = finiteNumber(req.growthDays || aiSuitability?.estimatedHarvestDays, 60);
   const weeksPerMonth = 4.33;
 
-  // Water: waterPerDay is mL/plant/day
-  const waterMLPerDayPerPlant  = finiteNumber(req.waterPerDay, 150);
+  const waterMLPerDayPerPlant  = profile.waterMLPerPlantDay;
   const waterLPerDay           = parseFloat(((waterMLPerDayPerPlant * plantsPerRow * rows) / 1000).toFixed(2));
   const waterLPerMonth         = parseFloat((waterLPerDay * 30).toFixed(1));
   const waterCostPerMonth      = parseFloat((waterLPerMonth * RATES.waterRM).toFixed(2));
 
-  // Fertilizer: fertilizerPerWeek is g/plant
-  const fertMLPerWeekPerPlant  = finiteNumber(req.fertilizerPerWeek, 3);
+  const fertMLPerWeekPerPlant  = profile.fertilizerMLPerPlantWeek;
   const fertMLPerWeek          = parseFloat((fertMLPerWeekPerPlant * plantsPerRow * rows).toFixed(1));
   const fertCostPerMonth       = parseFloat((fertMLPerWeek * weeksPerMonth * RATES.fertRM).toFixed(2));
 
-  // Light: lightHours/day, assume 40W LED per row
-  const lightHoursPerDay       = finiteNumber(req.lightHours, 6);
-  const lightWattsPerRow       = 40;
+  const lightHoursPerDay       = profile.lightHoursPerDay;
+  const lightWattsPerRow       = profile.lightWattsPerRow;
   const lightKWhPerMonth       = parseFloat((lightHoursPerDay * lightWattsPerRow * rows / 1000 * 30).toFixed(2));
   const lightCostPerMonth      = parseFloat((lightKWhPerMonth * RATES.energyRM).toFixed(2));
 
@@ -546,6 +704,7 @@ function buildDemand(planting, cropSpec, aiSuitability) {
     lightCostPerMonth,
     totalMonthlyCostRM,
     totalCycleRM,
+    cropResourceProfile: profile,
   };
 }
 
@@ -557,6 +716,9 @@ function advisorInsight(species, planting, plan) {
     : '';
   const moisture = plan.moisture;
   const safety = plan.safeToPlant ? 'Safe' : 'Not ready';
+  if (moisture.status === 'no_data') {
+    return `${safety} to add ${count} ${species} ${unit}${unitText}: Firebase has no soil moisture reading for this farm, so the advisor cannot calculate an irrigation target.`;
+  }
   const ideal = `${moisture.idealMin}-${moisture.idealMax}${moisture.unit}`;
   const current = `${moisture.current}${moisture.unit}`;
   const target = `${moisture.target}${moisture.unit}`;
@@ -635,30 +797,44 @@ async function askAiCropProfile({ species, quantity, planting, currentCrops, sen
     '  "estimatedHarvestDays": 60,\n' +
     '  "impacts": { "tempChange": 0, "humidChange": 0, "lightChange": 0, "waterChange": 0, "nutrientChange": 0 },\n' +
     '  "environmentProfile": {\n' +
-    '    "tempIdeal": [18, 28],\n' +
-    '    "humidityIdeal": [50, 75],\n' +
-    '    "moistureIdeal": [45, 65],\n' +
+    '    "tempIdeal": [<crop_min_c>, <crop_max_c>],\n' +
+    '    "humidityIdeal": [<crop_min_pct>, <crop_max_pct>],\n' +
+    '    "moistureIdeal": [<crop_min_pct>, <crop_max_pct>],\n' +
     '    "moistureBasis": "Explain whether this is a direct source range or an inferred sensor target. Reference historical avg if available.",\n' +
     '    "phIdeal": [5.8, 6.5],\n' +
     '    "ecIdeal": [1.2, 2.0],\n' +
     '    "waterDemand": "low | moderate | high | very high"\n' +
+    '  },\n' +
+    '  "cropResourceProfile": {\n' +
+    '    "waterMLPerPlantDay": <number>,\n' +
+    '    "fertilizerMLPerPlantWeek": <number>,\n' +
+    '    "lightHoursPerDay": <number>,\n' +
+    '    "lightWattsPerRow": <number>,\n' +
+    '    "yieldKgPerPlant": <number>,\n' +
+    '    "harvestsPerCycle": <number>,\n' +
+    '    "sourceBasis": "short note naming the research basis used"\n' +
     '  },\n' +
     '  "warnings": ["specific operational warning grounded in historical data if available"],\n' +
     '  "resourceLinks": [{ "label": "source name", "url": "https://example.com", "note": "what this source supports" }]\n' +
     '}\n\n' +
     'Rules:\n' +
     '- For species that are impractical for rack/shelf vertical farming, set suitable and suitableForVerticalFarm to false.\n' +
+    '- Never reinterpret tree/orchard crops such as apple, mango, coconut, durian, avocado, citrus, or pear as sprouts unless the user explicitly typed sprout or microgreen.\n' +
+    '- Do not reuse generic ideal bands. tempIdeal, humidityIdeal, moistureIdeal, pH, and EC must fit the selected species.\n' +
     '- resourceLinks must be real public URLs from credible sources (university extension, FAO, government, reputable crop guides).\n' +
     '- If you cannot identify credible source links, return an empty resourceLinks array rather than inventing URLs.\n' +
     '- Firebase soil moisture usually arrives as soilRaw ADC counts; the app normalizes that to a 0-100 root-moisture percentage.\n' +
     '- moistureIdeal is a SeedDown target range for the normalized root-moisture percentage; say so in moistureBasis.\n' +
     '- If historical moisture trend is falling, increase waterChange impact and add a drying-conditions warning.\n' +
-    '- If historical EC trend is falling, increase nutrientChange impact and add a nutrient-depletion warning.';
+    '- If historical EC trend is falling, increase nutrientChange impact and add a nutrient-depletion warning.\n' +
+    '- cropResourceProfile must be crop-specific, based on public growing references where possible, not generic defaults.\n' +
+    '- yieldKgPerPlant should be kg per plant per harvest, and harvestsPerCycle should be the expected number of harvests in the crop cycle.';
 
   const raw = await askText('Respond only with valid JSON, no markdown.', prompt, 900);
   const parsed = parseAiJson(raw);
   const fallbackImpact = cropSpec?.impacts || {};
   const profile = parsed.environmentProfile || {};
+  const resourceProfile = normaliseCropResourceProfile(parsed.cropResourceProfile, cropSpec?.requirements || {}, cropSpec?.yield || {});
   return {
     suitable: parsed.suitable !== false && parsed.suitableForVerticalFarm !== false,
     suitableForVerticalFarm: parsed.suitableForVerticalFarm !== false && parsed.suitable !== false,
@@ -674,6 +850,7 @@ async function askAiCropProfile({ species, quantity, planting, currentCrops, sen
       ecIdeal: normaliseRange(profile.ecIdeal, DEFAULT_ENV_PROFILE.ecIdeal),
       waterDemand: String(profile.waterDemand || cropWaterDemand(cropSpec?.requirements?.waterPerDay)).trim(),
     },
+    cropResourceProfile: resourceProfile,
     warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String).filter(Boolean).slice(0, 5) : [],
     resourceLinks: normaliseResourceLinks(parsed.resourceLinks),
     source: 'ai',
@@ -770,9 +947,11 @@ exports.getRecipesBySpecies = async (req, res) => {
 
 exports.getCostAnalysis = async (req, res) => {
   try {
-    const { plant, units, weeks, sensors } = req.body;
-
-    const state     = normalizeSensorState(sensors || {});
+    const { plant, units, weeks } = req.body;
+    const sensorContext = await fetchFirebaseSensorContext(req.body, 200);
+    const sensors = sensorContext.latest;
+    const historicalStats = buildHistoricalStats(sensorContext.history, sensorContext.source);
+    const state     = normalizeSensorState(sensors || {}, { allowFallback: false });
     const temp      = state.temp;
     const humid     = state.humid;
     const light     = state.light;
@@ -781,50 +960,77 @@ exports.getCostAnalysis = async (req, res) => {
     const unitCount = Math.max(1, finiteNumber(units, 1));
     const weekCount = Math.max(1, finiteNumber(weeks, 4));
 
-    // ── Deterministic calculations ──────────────────────────────────────────
-    const tempScore     = temp  >= 18 && temp  <= 28 ? 100 : temp  < 18 ? (temp  / 18)  * 100 : ((40 - temp)   / 12) * 100;
-    const humidScore    = humid >= 50 && humid <= 80 ? 100 : humid < 50 ? (humid / 50)  * 100 : ((100 - humid) / 20) * 100;
-    const moistureScore = water >= 40 && water <= 70 ? 100 : water < 40 ? (water / 40)  * 100 : 80;
-    const nutrientScore = nutrient >= 60 ? 100 : (nutrient / 60) * 100;
-    const conditionScore = Math.round((tempScore + humidScore + moistureScore + nutrientScore) / 4);
-    const conditionLabel = conditionScore >= 85 ? 'Optimal' : conditionScore >= 70 ? 'Good' : conditionScore >= 50 ? 'Fair' : 'Poor';
+    // ── Deterministic calculations from Firebase readings only ───────────────
+    const scores = [];
+    if (temp !== null) scores.push(temp >= 18 && temp <= 28 ? 100 : temp < 18 ? (temp / 18) * 100 : ((40 - temp) / 12) * 100);
+    if (humid !== null) scores.push(humid >= 50 && humid <= 80 ? 100 : humid < 50 ? (humid / 50) * 100 : ((100 - humid) / 20) * 100);
+    if (water !== null) scores.push(water >= 40 && water <= 70 ? 100 : water < 40 ? (water / 40) * 100 : 80);
+    if (nutrient !== null) scores.push(nutrient >= 60 ? 100 : (nutrient / 60) * 100);
+    const conditionScore = scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length) : null;
+    const conditionLabel = conditionScore === null
+      ? 'Unknown'
+      : conditionScore >= 85 ? 'Optimal' : conditionScore >= 70 ? 'Good' : conditionScore >= 50 ? 'Fair' : 'Poor';
 
-    const manualWaterPerPlantPerWeek = 3.5;
-    const autoWaterPerPlantPerWeek   = water < 40 ? 2.5 : water > 70 ? 0.8 : 1.5;
-    const manualWaterLiters = parseFloat((manualWaterPerPlantPerWeek * unitCount * weekCount).toFixed(1));
-    const autoWaterLiters   = parseFloat((autoWaterPerPlantPerWeek   * unitCount * weekCount).toFixed(1));
-    const waterSavedLiters  = parseFloat((manualWaterLiters - autoWaterLiters).toFixed(1));
-    const waterCostSaved    = parseFloat((waterSavedLiters * RATES.waterRM).toFixed(2));
-
-    const manualLightHrs  = 12;
-    const autoLightHrs    = light > 70 ? 6 : light > 40 ? 8 : 10;
-    const energySavedkWh  = parseFloat(((manualLightHrs - autoLightHrs) * 0.04 * weekCount * 7).toFixed(2));
-    const energyCostSaved = parseFloat((energySavedkWh * RATES.energyRM).toFixed(2));
-    const totalSavedRM    = parseFloat((waterCostSaved + energyCostSaved).toFixed(2));
+    const waterUsedLiters = (() => {
+      const exact = sensorContext.history
+        .map(r => {
+          const lpm = finiteNumber(r.waterFlowLpm, null);
+          const seconds = finiteNumber(r.intervalSeconds, null);
+          return lpm !== null && seconds !== null ? lpm * (seconds / 60) : null;
+        })
+        .filter(value => value !== null);
+      return exact.length ? parseFloat(exact.reduce((sum, value) => sum + value, 0).toFixed(2)) : null;
+    })();
+    const energyValues = sensorContext.history
+      .map(r => finiteNumber(r.energyKwh ?? r.powerKwh, null))
+      .filter(value => value !== null);
+    const energyUsedKwh = energyValues.length >= 2
+      ? parseFloat(Math.max(0, energyValues[0] - energyValues[energyValues.length - 1]).toFixed(3))
+      : (state.energyKwh !== null ? parseFloat(state.energyKwh.toFixed(3)) : null);
+    const waterCost = waterUsedLiters !== null ? parseFloat((waterUsedLiters * RATES.waterRM).toFixed(2)) : null;
+    const energyCost = energyUsedKwh !== null ? parseFloat((energyUsedKwh * RATES.energyRM).toFixed(2)) : null;
+    const totalUsageCostRM = parseFloat(((waterCost || 0) + (energyCost || 0)).toFixed(2));
 
     // ── AI explains the result only — no number invention ──────────────────
     const prompt =
       `Agricultural AI for SeedDown. Write exactly 2 complete sentences about ${plant} garden conditions.\n` +
-      `Temp ${temp}°C ${temp > 30 ? '(too hot)' : temp < 18 ? '(too cold)' : '(optimal)'}, ` +
-      `Humidity ${humid}% ${humid < 50 ? '(too dry)' : humid > 80 ? '(too humid)' : '(good)'}, ` +
-      `Moisture ${water}% ${water < 40 ? '(needs watering)' : '(good)'}, ` +
-      `Nutrients ${nutrient}% ${nutrient < 60 ? '(low)' : '(ok)'}.\n` +
-      `Condition: ${conditionScore}/100 (${conditionLabel}). Automation saved ${waterSavedLiters}L water + ${energySavedkWh}kWh energy = RM ${totalSavedRM}.\n` +
-      `Sentence 1: describe current ${plant} conditions. Sentence 2: mention RM ${totalSavedRM} saved by automation.`;
+      `Use ONLY this Firebase sensor data, do not invent missing readings:\n` +
+      JSON.stringify({
+        source: sensorContext.source,
+        latest: sensors,
+        normalized: state,
+        historicalStats,
+        calculatedUsage: { waterUsedLiters, energyUsedKwh, waterCost, energyCost, totalUsageCostRM },
+      }, null, 2) + '\n' +
+      `Sentence 1: describe current ${plant} conditions from Firebase. Sentence 2: mention exact Firebase water/energy usage if available, otherwise say the reading is not available.`;
 
     const raw     = await askText('', prompt, 200);
     const insight = raw.replace(/```/g, '').trim();
 
     res.json({
+      source: sensorContext.source,
+      latestSensorReading: sensors,
+      historicalStats,
       conditionScore, conditionLabel,
-      manualWaterLiters, autoWaterLiters, waterSavedLiters,
-      manualEnergykWh: parseFloat((manualLightHrs * 0.04 * weekCount * 7).toFixed(2)),
-      autoEnergykWh:   parseFloat((autoLightHrs   * 0.04 * weekCount * 7).toFixed(2)),
-      energySavedkWh, waterCostSaved, energyCostSaved, totalSavedRM, insight,
+      waterUsedLiters,
+      energyUsedKwh,
+      waterCost,
+      energyCost,
+      totalUsageCostRM,
+      manualWaterLiters: null,
+      autoWaterLiters: waterUsedLiters,
+      waterSavedLiters: 0,
+      manualEnergykWh: null,
+      autoEnergykWh: energyUsedKwh,
+      energySavedkWh: 0,
+      waterCostSaved: 0,
+      energyCostSaved: 0,
+      totalSavedRM: totalUsageCostRM,
+      insight,
     });
   } catch (err) {
     console.error('Cost analysis error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 };
 
@@ -839,23 +1045,54 @@ exports.getNewPlantImpact = async (req, res) => {
     }
 
     const planting = normalizePlantingScale(req.body);
-
-    // ── 1. Fetch live sensor data ─────────────────────────────────────────────
-    let sensors = req.body.sensors;
-    if (!sensors || !Object.keys(sensors).length) {
-      try {
-        sensors = await sensorService.getLatestReading({
-          deviceId: req.body.deviceId || req.query.deviceId || 'farm_001',
-          farmId:   req.body.farmId   || req.query.farmId,
-          fieldId:  req.body.fieldId  || req.query.fieldId,
-          zoneId:   req.body.zoneId   || req.query.zoneId,
-        });
-      } catch (err) {
-        console.warn('[WhatIf] Firebase sensor fetch failed:', err.message);
-        sensors = {};
-      }
+    const cropSpec = findCrop(species);
+    const blockedCrop = verticalFarmBlocker(species);
+    if (blockedCrop) {
+      return res.json({
+        unsuitable: true,
+        impacts: { tempChange: 0, humidChange: 0, lightChange: 0, waterChange: 0, nutrientChange: 0 },
+        projected: null,
+        sensorGap: null,
+        demand: null,
+        warnings: [`${species} is not suitable for rack/shelf vertical farming.`],
+        insight: blockedCrop.reason,
+        planting,
+        analysis: {
+          suitable: false,
+          suitableForVerticalFarm: false,
+          reason: blockedCrop.reason,
+          cropType: 'orchard_tree',
+        },
+        cropResourceProfile: null,
+        resourceLinks: [],
+      });
     }
-    sensors = sensors || {};
+
+    // ── 1. Fetch live sensor data from Firebase first ─────────────────────────
+    // Frontend sensor values are intentionally not trusted for calculations.
+    const sensorContext = await fetchFirebaseSensorContext(req.body, 200);
+    let sensors = sensorContext.latest;
+    const zoneSnapshot = req.body.zoneSensors && typeof req.body.zoneSensors === 'object'
+      ? req.body.zoneSensors
+      : null;
+    const farmLevelSnapshot = req.body.farmLevelSensors && typeof req.body.farmLevelSensors === 'object'
+      ? req.body.farmLevelSensors
+      : null;
+    if (zoneSnapshot && Object.keys(zoneSnapshot).length) {
+      sensors = {
+        ...sensors,
+        ...zoneSnapshot,
+        zoneSnapshot,
+        source: `${sensorContext.source} with zone environment snapshot`,
+      };
+    }
+    if (farmLevelSnapshot && Object.keys(farmLevelSnapshot).length) {
+      sensors = {
+        ...sensors,
+        farmLevel: farmLevelSnapshot,
+        source: `${sensors.source || sensorContext.source} and farm-level resource snapshot`,
+      };
+    }
 
     // ── 2. Merge calibration constants from frontend (farm.sensorCalibration) ─
     // The frontend sends these so normalizeMoisture() can convert soilRaw to
@@ -865,19 +1102,10 @@ exports.getNewPlantImpact = async (req, res) => {
       sensors = { ...sensors, calibration };
     }
 
-    // ── 3. Fetch 30-day historical stats from Firebase ───────────────────────
-    let historicalStats = null;
-    try {
-      historicalStats = await fetchHistoricalStats(req.body);
-      if (historicalStats) {
-        console.log('[WhatIf] Historical stats loaded:', historicalStats.totalReadings, 'readings');
-      }
-    } catch (err) {
-      console.warn('[WhatIf] Historical stats fetch failed (non-fatal):', err.message);
-    }
+    // ── 3. Build historical stats from the same Firebase query ────────────────
+    const historicalStats = buildHistoricalStats(sensorContext.history, sensorContext.source);
 
     // ── 4. AI crop profile ────────────────────────────────────────────────────
-    const cropSpec = findCrop(species);
     let aiSuitability = null;
 
     try {
@@ -994,12 +1222,34 @@ exports.getNewPlantImpact = async (req, res) => {
       insight,
       analysis: aiSuitability,
       historicalStats: historicalStats || null,
+      latestSensorReading: sensors,
+      sensorSource: sensorContext.source,
+      cropResourceProfile: aiSuitability?.cropResourceProfile || demand.cropResourceProfile,
       resourceLinks: normaliseResourceLinks(aiSuitability?.resourceLinks || plan.sources),
     });
 
   } catch (err) {
+    if (err.status === 400 || err.status === 404) {
+      return res.json({
+        impacts: null,
+        resourceDelta: null,
+        projected: null,
+        targets: null,
+        sensorGap: null,
+        demand: null,
+        environmentPlan: null,
+        planting: null,
+        warnings: [err.message],
+        insight: `No Firebase sensor readings were found for this selected farm/device. Connect a real deviceId/farmId with sensorReadings before running new plant suitability.`,
+        analysis: { suitable: null, reason: err.message },
+        historicalStats: null,
+        latestSensorReading: null,
+        sensorSource: 'Firebase sensorReadings unavailable',
+        resourceLinks: [],
+      });
+    }
     console.error('New plant impact error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 };
 
@@ -1007,7 +1257,7 @@ exports.getNewPlantImpact = async (req, res) => {
 
 exports.newPlantAiAnalysis = async (req, res) => {
   try {
-    const { species, quantity, currentCrops, sensors } = req.body;
+    const { species, quantity, currentCrops } = req.body;
 
     if (!species) {
       return res.status(400).json({ error: 'species is required' });
@@ -1015,17 +1265,30 @@ exports.newPlantAiAnalysis = async (req, res) => {
 
     const cropSpec = findCrop(species);
     const planting = normalizePlantingScale(req.body);
-    const parsed   = await askAiCropProfile({ species, quantity, planting, currentCrops, sensors, cropSpec });
+    const sensorContext = await fetchFirebaseSensorContext(req.body, 200);
+    const historicalStats = buildHistoricalStats(sensorContext.history, sensorContext.source);
+    const parsed   = await askAiCropProfile({
+      species,
+      quantity,
+      planting,
+      currentCrops,
+      sensors: sensorContext.latest,
+      cropSpec,
+      historicalStats,
+    });
 
     res.json({
       species,
       quantity: quantity || 1,
       planting,
+      latestSensorReading: sensorContext.latest,
+      historicalStats,
+      sensorSource: sensorContext.source,
       cropSpec: cropSpec || null,
       analysis: parsed,
     });
   } catch (err) {
     console.error('New plant AI analysis error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 };

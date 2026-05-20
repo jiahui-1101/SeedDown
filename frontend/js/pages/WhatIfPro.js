@@ -26,7 +26,7 @@
 
 import { AppState } from '../store.js';
 import { showScreen } from '../utils/navigation.js';
-import { initFirebase, loadUserData } from '../utils/firebase.js';
+import { initFirebase, loadUserData, getDb } from '../utils/firebase.js';
 
 /* ─────────────────────────────────────────────
    CONSTANTS & RATES
@@ -38,7 +38,7 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
 const RATES = {
   waterRM:  0.042,  // RM/litre — Syabas domestic block 1
   energyRM: 1.10,   // RM/kWh  — TNB domestic block 1
-  fertRM:   0.085,  // RM/mL   — hydroponic nutrient solution avg
+  fertRM:   0.009,  // RM/mL   — hydroponic A+B concentrate avg
 };
 
 const RACK_LAYOUTS = {
@@ -121,11 +121,13 @@ let _allFarms    = [];   // all farms from localStorage
 let _activeFarmIdx = 0;  // index into _allFarms
 let _marketPrices = {};
 let _historicalResourceData = null;  // { water: [...], ec: [...], fetchedAt: ts }
+let _historicalResourcePromise = null;
 let _resourcePrediction = null;      // { waterPrediction, fertPrediction, confidence, source }
 let _resourcePredictionKey = '';     // cache key to avoid redundant AI calls
 let _marketSources = [...MARKET_SOURCE_LINKS];
 let _marketStatus = { loading: false, error: null, generatedAt: null };
 let _sensorSnapshot = null;
+let _farmLevelSensorSnapshot = null;
 let _npAdvisorKey = '';
 let _npAiAnalysis = null;
 let _npAiUnsuitable = false;
@@ -343,29 +345,157 @@ function _zoneHarvestDays(plants = []) {
 }
 
 function _sensorFallback() {
-  return {
-    temp:     AppState.sensors?.temp?.val     ?? 28,
-    humid:    AppState.sensors?.humid?.val    ?? 68,
-    light:    AppState.sensors?.light?.val    ?? 82,
-    water:    AppState.sensors?.water?.val    ?? 45,
-    nutrient: AppState.sensors?.nutrient?.val ?? 78,
-    moistureUnit: '%',
-    moistureBasis: 'fallback normalized percent',
-    soilMoistureUnit: '%',
-    source:   AppState.latestReading ? 'AppState live cache' : 'local fallback',
-  };
+  return null;
+}
+
+const DEMO_SENSOR_DEVICE_IDS = new Set(['farm_001']);
+const DEMO_COMMERCIAL_ZONE_DEVICES = {
+  zone_A: 'commercial-zone-node-1',
+  zone_B: 'commercial-zone-node-2',
+  zone_C: 'commercial-zone-node-3',
+  zone_D: 'commercial-zone-node-4',
+  zone_E: 'commercial-zone-node-5',
+  zone_F: 'commercial-zone-node-6',
+};
+const DEMO_COMMERCIAL_FARM_MASTER = 'commercial-farm-master-1';
+
+function _isDemoSensorDevice(value) {
+  return value && DEMO_SENSOR_DEVICE_IDS.has(String(value));
 }
 
 function _sensorQueryForFarm(farm) {
-  const deviceId = farm?.deviceId || farm?.farmMaster?.deviceId || AppState.currentFarm?.deviceId || 'farm_001';
-  const params = new URLSearchParams();
-  if (deviceId) params.set('deviceId', deviceId);
-  return params.toString();
+  return _latestSensorQueryCandidates(farm)[0]?.toString() || '';
+}
+
+function _normaliseCommercialZoneId(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+  const singleLetter = raw.match(/^([a-z])$/);
+  const zoneWord = raw.match(/^zone[_ ]([a-z])$/);
+  const letter = singleLetter?.[1] || zoneWord?.[1];
+  if (letter) return `zone_${letter.toUpperCase()}`;
+  return raw.startsWith('zone_') ? `zone_${raw.slice(5).toUpperCase()}` : raw;
+}
+
+function _findCommercialDeviceForZone(farm, zoneId) {
+  const normalizedZone = _normaliseCommercialZoneId(zoneId);
+  if (!normalizedZone) return null;
+  const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
+  return devices.find(item => _normaliseCommercialZoneId(item.zoneId || item.zone) === normalizedZone)
+    || (_normaliseCommercialZoneId(farm?.zoneId) === normalizedZone ? farm : null);
+}
+
+function _farmLevelDeviceId(farm = _getActiveFarm(_allFarms)) {
+  const explicit =
+    farm?.farmMaster?.deviceId ||
+    farm?.farmMasterDeviceId ||
+    farm?.masterDeviceId ||
+    AppState.currentFarm?.farmMaster?.deviceId ||
+    AppState.currentFarm?.farmMasterDeviceId;
+  if (explicit) return explicit;
+  if (
+    farm?.id === 'farm_commercial_demo_001' ||
+    farm?.farmId === 'farm_commercial_demo_001' ||
+    farm?.backendFarmId === 'farm_commercial_demo_001'
+  ) {
+    return DEMO_COMMERCIAL_FARM_MASTER;
+  }
+  return '';
+}
+
+function _farmLevelSensorQueryCandidates(farm = _getActiveFarm(_allFarms)) {
+  const candidates = [];
+  const seen = new Set();
+  const push = (key, value) => {
+    if (!value) return;
+    const query = new URLSearchParams();
+    query.set(key, value);
+    const signature = query.toString();
+    if (seen.has(signature)) return;
+    seen.add(signature);
+    candidates.push(query);
+  };
+
+  push('deviceId', _farmLevelDeviceId(farm));
+  push('deviceId', DEMO_COMMERCIAL_FARM_MASTER);
+  return candidates;
+}
+
+function _latestSensorQueryCandidates(farm = _getActiveFarm(_allFarms)) {
+  const candidates = [];
+  const seen = new Set();
+  const push = (key, value) => {
+    if (!value) return;
+    if (key === 'deviceId' && _isDemoSensorDevice(value)) return;
+    const query = new URLSearchParams();
+    query.set(key, value);
+    const signature = query.toString();
+    if (seen.has(signature)) return;
+    seen.add(signature);
+    candidates.push(query);
+  };
+
+  const zoneId = _normaliseCommercialZoneId(AppState.currentZoneId || farm?.zoneId);
+  const zoneDevice = _findCommercialDeviceForZone(farm, zoneId);
+
+  push('deviceId', zoneDevice?.deviceId);
+  push('deviceId', farm?.deviceId);
+  push('deviceId', farm?.farmMaster?.deviceId);
+  push('deviceId', AppState.currentFarm?.deviceId);
+  push('zoneId', zoneId);
+  push('deviceId', DEMO_COMMERCIAL_ZONE_DEVICES[zoneId]);
+
+  if (zoneId === 'farm_master') {
+    push('deviceId', farm?.farmMaster?.deviceId);
+    push('deviceId', farm?.deviceId);
+    push('deviceId', DEMO_COMMERCIAL_FARM_MASTER);
+  }
+
+  if (Array.isArray(farm?.commercialDevices)) {
+    farm.commercialDevices.forEach(device => push('deviceId', device?.deviceId));
+  }
+
+  push('farmId', farm?.id);
+  push('farmId', farm?.farmId);
+  push('farmId', farm?.backendFarmId);
+  push('fieldId', farm?.fieldId);
+  push('fieldId', farm?.id);
+  push('farmId', 'farm_commercial_demo_001');
+
+  if (!zoneId) {
+    Object.values(DEMO_COMMERCIAL_ZONE_DEVICES).forEach(deviceId => push('deviceId', deviceId));
+  }
+
+  return candidates;
+}
+
+function _sensorFilterPayloadForFarm(farm = _getActiveFarm(_allFarms)) {
+  const zoneId = _normaliseCommercialZoneId(AppState.currentZoneId || farm?.zoneId);
+  const zoneDevice = _findCommercialDeviceForZone(farm, zoneId);
+  const deviceId = zoneDevice?.deviceId || farm?.deviceId || farm?.farmMaster?.deviceId || AppState.currentFarm?.deviceId || undefined;
+  return {
+    deviceId: _isDemoSensorDevice(deviceId) ? undefined : deviceId,
+    zoneId: zoneId || undefined,
+    farmId: farm?.id || farm?.farmId || farm?.backendFarmId || undefined,
+    fieldId: farm?.fieldId || undefined,
+  };
+}
+
+function _sensorIdentifierSummary(farm = _getActiveFarm(_allFarms)) {
+  const filters = _sensorFilterPayloadForFarm(farm);
+  const entries = Object.entries(filters).filter(([, value]) => value);
+  return entries.length
+    ? entries.map(([key, value]) => `${key}=${value}`).join(' · ')
+    : 'No deviceId, farmId, fieldId, or zoneId available';
+}
+
+function _hasFirebaseSensorProof() {
+  return Boolean(_sensorSnapshot || (_historicalResourceData && _historicalResourceData.totalReadings));
 }
 
 function _normaliseSensorPayload(payload = {}) {
   const reading = payload.reading || payload;
-  const fallback = _sensorFallback();
+  if (!reading || payload.reading === null || !Object.keys(reading).length) return null;
   const lightRaw = Number(reading.lightRaw);
   const soilRaw  = Number(reading.soilRaw);
   const ecRaw    = Number(reading.ecRaw);
@@ -387,23 +517,23 @@ function _normaliseSensorPayload(payload = {}) {
   // Prefer explicit Firebase percent fields; only fall back to uncalibrated rawPct
   // as a rough approximation — backend will recalibrate when soilRaw is present.
   const soilRawApproxPct = rawPctUncalibrated(soilRaw);
-  const moistureValue    = reading.moisture ?? reading.soilMoisture ?? reading.water ?? soilRawApproxPct ?? fallback.water;
+  const moistureValue    = reading.moisture ?? reading.soilMoisture ?? reading.water ?? soilRawApproxPct ?? null;
   const moistureSource   = hasSoilMoisture
     ? 'Firebase soilMoisture percent'
     : hasWaterPercent
       ? 'Firebase water percent'
       : Number.isFinite(soilRaw)
         ? 'Firebase soilRaw ADC (uncalibrated approx) — backend will recalibrate'
-        : fallback.source;
+        : 'Firebase reading missing soil moisture field';
   return {
-    temp:     reading.temperature  ?? reading.temp     ?? fallback.temp,
-    humid:    reading.humidity     ?? reading.humid    ?? fallback.humid,
-    light:    reading.light        ?? reading.lux      ?? rawPctUncalibrated(lightRaw) ?? fallback.light,
+    temp:     reading.temperature  ?? reading.temp     ?? null,
+    humid:    reading.humidity     ?? reading.humid    ?? null,
+    light:    reading.light        ?? reading.lux      ?? rawPctUncalibrated(lightRaw) ?? null,
     water:    moistureValue,
     moisture: moistureValue,
     soilMoisture: moistureValue,
-    nutrient: reading.nutrient     ?? ecPct            ?? rawPctUncalibrated(ecRaw)    ?? fallback.nutrient,
-    ph:       reading.ph           ?? fallback.ph,
+    nutrient: reading.nutrient     ?? ecPct            ?? rawPctUncalibrated(ecRaw)    ?? null,
+    ph:       reading.ph           ?? null,
     soilRaw:  Number.isFinite(soilRaw) ? soilRaw : undefined,
     soilRawUnit: Number.isFinite(soilRaw) ? 'ADC count (0-4095)' : undefined,
     moistureUnit: '%',
@@ -418,22 +548,112 @@ function _normaliseSensorPayload(payload = {}) {
     ecRaw:    Number.isFinite(ecRaw) ? ecRaw : undefined,
     ec:       Number.isFinite(ec) ? ec : undefined,
     waterDistanceCm: reading.waterDistanceCm,
+    gasRaw: reading.gasRaw,
+    co2Raw: reading.co2Raw,
+    co2Ppm: reading.co2Ppm,
+    energyKwh: reading.energyKwh,
+    packageLevel: reading.packageLevel,
+    deviceId: reading.deviceId,
+    farmId: reading.farmId,
+    zoneId: reading.zoneId,
+    fieldId: reading.fieldId,
+    sourceQuery: reading.sourceQuery,
     moistureSource,
-    createdAt: reading.createdAt || reading.updatedAt || null,
+    createdAt: _normaliseFirebaseTimestamp(reading.createdAt || reading.updatedAt),
     source:   'Firebase Cloud Firestore sensorReadings',
   };
 }
 
+function _normaliseFirebaseTimestamp(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (Number.isFinite(value.seconds)) return new Date(value.seconds * 1000);
+  return value;
+}
+
+function _firebaseDocToReading(doc, sourceQuery = '') {
+  const data = typeof doc.data === 'function' ? doc.data() : doc;
+  return {
+    id: doc.id || data.id,
+    ...data,
+    createdAt: _normaliseFirebaseTimestamp(data.createdAt),
+    updatedAt: _normaliseFirebaseTimestamp(data.updatedAt),
+    sourceQuery,
+  };
+}
+
+function _looksLikeSensorReading(reading) {
+  if (!reading) return false;
+  return [
+    reading.temperature,
+    reading.temp,
+    reading.humidity,
+    reading.humid,
+    reading.soilMoisture,
+    reading.moisture,
+    reading.water,
+    reading.soilRaw,
+    reading.waterDistanceCm,
+    reading.ec,
+    reading.ecRaw,
+    reading.light,
+    reading.lightRaw,
+  ].some(value => value !== undefined && value !== null);
+}
+
 async function fetchSensorData(farm = _getActiveFarm(_allFarms)) {
-  try {
-    const query = _sensorQueryForFarm(farm);
-    const res  = await fetch(`${API_BASE}/api/sensors/latest?${query}`);
-    if (!res.ok) throw new Error('sensor HTTP ' + res.status);
-    const data = await res.json();
-    return _normaliseSensorPayload(data);
-  } catch {
-    return _sensorFallback();
+  let lastError = null;
+  const candidates = _latestSensorQueryCandidates(farm);
+
+  for (const query of candidates) {
+    try {
+      const res = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
+      if (!res.ok) throw new Error('sensor HTTP ' + res.status);
+      const data = await res.json();
+      const normalised = _normaliseSensorPayload({
+        ...data,
+        reading: data?.reading ? { ...data.reading, sourceQuery: `rest:${query.toString()}` } : data?.reading,
+      });
+      if (normalised) return normalised;
+    } catch (err) {
+      lastError = err;
+    }
   }
+
+  try {
+    const fbResult = await _fetchHistoricalReadingsFromFirebase(farm, 1);
+    const reading = fbResult?.readings?.[0];
+    if (reading) return _normaliseSensorPayload({ ...reading, sourceQuery: `firebase:${fbResult.usedQuery}` });
+  } catch (err) {
+    lastError = err;
+  }
+
+  console.warn('[WhatIfPro] Firebase latest sensor unavailable:', lastError?.message || 'no matching sensorReadings');
+  return null;
+}
+
+async function fetchFarmLevelSensorData(farm = _getActiveFarm(_allFarms)) {
+  let lastError = null;
+  const candidates = _farmLevelSensorQueryCandidates(farm);
+
+  for (const query of candidates) {
+    try {
+      const res = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
+      if (!res.ok) throw new Error('sensor HTTP ' + res.status);
+      const data = await res.json();
+      const normalised = _normaliseSensorPayload({
+        ...data,
+        reading: data?.reading ? { ...data.reading, sourceQuery: `farm-level:${query.toString()}` } : data?.reading,
+      });
+      if (normalised) return normalised;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  console.warn('[WhatIfPro] Farm-level sensor unavailable:', lastError?.message || 'no farm master reading');
+  return null;
 }
 
 /* ─────────────────────────────────────────────
@@ -449,6 +669,7 @@ function _historyCandidates(farm = _getActiveFarm(_allFarms)) {
 
   const push = (key, value) => {
     if (!value) return;
+    if (key === 'deviceId' && _isDemoSensorDevice(value)) return;
     const q = new URLSearchParams();
     q.set(key, value);
     q.set('limit', '200');
@@ -458,14 +679,28 @@ function _historyCandidates(farm = _getActiveFarm(_allFarms)) {
     candidates.push(q);
   };
 
-  // 1. Explicit deviceId (highest priority, same as CommercialPage)
+  const zoneId = _normaliseCommercialZoneId(AppState.currentZoneId || farm?.zoneId);
+  const zoneDevice = _findCommercialDeviceForZone(farm, zoneId);
+
+  // 1. Explicit zone/farm deviceId (highest priority, same as CommercialPage)
+  push('deviceId', zoneDevice?.deviceId);
   push('deviceId', farm?.deviceId);
   push('deviceId', farm?.farmMaster?.deviceId);
   push('deviceId', AppState.currentFarm?.deviceId);
 
   // 2. Zone-level identifiers
-  const zoneId = AppState.currentZoneId || farm?.zoneId;
   push('zoneId', zoneId);
+  push('deviceId', DEMO_COMMERCIAL_ZONE_DEVICES[zoneId]);
+
+  if (zoneId === 'farm_master') {
+    push('deviceId', farm?.farmMaster?.deviceId);
+    push('deviceId', farm?.deviceId);
+    push('deviceId', DEMO_COMMERCIAL_FARM_MASTER);
+  }
+
+  if (Array.isArray(farm?.commercialDevices)) {
+    farm.commercialDevices.forEach(device => push('deviceId', device?.deviceId));
+  }
 
   // 3. Farm / field level (broader, catches more readings)
   push('farmId',  farm?.id);
@@ -473,46 +708,154 @@ function _historyCandidates(farm = _getActiveFarm(_allFarms)) {
   push('farmId',  farm?.backendFarmId);
   push('fieldId', farm?.fieldId);
   push('fieldId', farm?.id);
+  push('farmId', 'farm_commercial_demo_001');
 
-  // 4. Last resort demo device (same fallback CommercialPage uses)
-  push('deviceId', 'farm_001');
+  if (!zoneId) {
+    Object.values(DEMO_COMMERCIAL_ZONE_DEVICES).forEach(deviceId => push('deviceId', deviceId));
+  }
 
   return candidates;
 }
 
-// Fetches up to 200 historical readings from the first candidate that returns data.
-// Mirrors CommercialPage fetchLatestCommercialReading() fallback-chain pattern exactly.
+/* ─────────────────────────────────────────────
+   FIREBASE DIRECT HISTORY FETCH
+   Queries Firestore `sensorReadings` collection directly, ordered by
+   createdAt descending. Tries identifiers in priority order:
+     1. deviceId  (most specific — matches your document schema)
+     2. zoneId
+     3. farmId / fieldId
+   Returns raw document data array, or [] if nothing found / not authed.
+─────────────────────────────────────────────── */
+async function _fetchHistoricalReadingsFromFirebase(farm = _getActiveFarm(_allFarms), limitCount = 200) {
+  try {
+    await initFirebase();
+    const db = getDb();
+    if (!db) throw new Error('Firebase Firestore is not initialized');
+
+    // Build ordered list of (field, value) pairs to try — mirrors _historyCandidates()
+    const zoneId = _normaliseCommercialZoneId(AppState.currentZoneId || farm?.zoneId);
+    const zoneDevice = _findCommercialDeviceForZone(farm, zoneId);
+    const idCandidates = [
+      ['deviceId', zoneDevice?.deviceId],
+      ['deviceId', farm?.deviceId],
+      ['deviceId', farm?.farmMaster?.deviceId],
+      ['deviceId', AppState.currentFarm?.deviceId],
+      ['zoneId',   zoneId],
+      ['deviceId', DEMO_COMMERCIAL_ZONE_DEVICES[zoneId]],
+      ['deviceId', zoneId === 'farm_master' ? DEMO_COMMERCIAL_FARM_MASTER : null],
+      ...(Array.isArray(farm?.commercialDevices)
+        ? farm.commercialDevices.map(device => ['deviceId', device?.deviceId])
+        : []),
+      ['farmId',   farm?.id],
+      ['farmId',   farm?.farmId],
+      ['farmId',   farm?.backendFarmId],
+      ['fieldId',  farm?.fieldId],
+      ['fieldId',  farm?.id],
+      ['farmId',   'farm_commercial_demo_001'],
+      ...(!zoneId
+        ? Object.values(DEMO_COMMERCIAL_ZONE_DEVICES).map(deviceId => ['deviceId', deviceId])
+        : []),
+    ].filter(([field, v]) => Boolean(v) && !(field === 'deviceId' && _isDemoSensorDevice(v)));
+
+    // Deduplicate so we don't repeat the same (field, value) pair
+    const seen = new Set();
+    const uniqueCandidates = idCandidates.filter(([field, value]) => {
+      const key = `${field}:${value}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const col = db.collection('sensorReadings');
+    const maxDocs = Math.max(1, Math.min(500, Number(limitCount) || 200));
+
+    for (const [field, value] of uniqueCandidates) {
+      try {
+        const snapshot = await col
+          .where(field, '==', value)
+          .orderBy('createdAt', 'desc')
+          .limit(maxDocs)
+          .get();
+        if (!snapshot.empty) {
+          const readings = snapshot.docs
+            .map(doc => _firebaseDocToReading(doc, `${field}=${value}`))
+            .filter(reading => _looksLikeSensorReading(reading) && !_isDemoSensorDevice(reading.deviceId));
+          if (readings.length) {
+            console.log(`[WhatIfPro] Firebase direct: ${readings.length} readings via ${field}=${value}`);
+            return { readings, usedQuery: `${field}=${value}` };
+          }
+        }
+      } catch (innerErr) {
+        // A missing index or permission error on one field shouldn't abort — try next
+        console.warn(`[WhatIfPro] Firebase direct query failed (${field}=${value}):`, innerErr.message);
+      }
+    }
+
+    console.info('[WhatIfPro] Firebase direct: no sensorReadings documents found for known identifiers');
+    return { readings: [], usedQuery: '' };
+  } catch (err) {
+    console.warn('[WhatIfPro] Firebase direct history unavailable:', err.message);
+    return null; // signals caller to fall back to REST API
+  }
+}
+
+// Fetches up to 200 historical readings.
+// Strategy:
+//   1. Try Firestore directly (fastest, no backend hop, works if SDK is configured)
+//   2. Fall back to REST API /api/sensors/history (legacy path, kept for compatibility)
 async function _fetchHistoricalReadings(farm = _getActiveFarm(_allFarms)) {
   // Return cached data if still fresh (< 5 min)
   if (_historicalResourceData && (Date.now() - _historicalResourceData.fetchedAt) < 5 * 60 * 1000) {
     return _historicalResourceData;
   }
+  if (_historicalResourcePromise) return _historicalResourcePromise;
 
-  const candidates = _historyCandidates(farm);
+  _historicalResourcePromise = _fetchHistoricalReadingsFresh(farm).finally(() => {
+    _historicalResourcePromise = null;
+  });
+  return _historicalResourcePromise;
+}
+
+async function _fetchHistoricalReadingsFresh(farm = _getActiveFarm(_allFarms)) {
   let rawReadings = [];
   let usedQuery   = '';
 
-  for (const query of candidates) {
-    try {
-      const res = await fetch(`${API_BASE}/api/sensors/history?${query}`);
-      if (!res.ok) continue;
-      const data = await res.json();
-      const batch = Array.isArray(data.readings) ? data.readings
-                  : Array.isArray(data)           ? data
-                  : [];
-      if (batch.length > 0) {
-        rawReadings = batch;
-        usedQuery   = query.toString();
-        console.log('[WhatIfPro] History loaded via ' + usedQuery + ' - ' + batch.length + ' readings');
-        break;
+  // ── Strategy 1: Direct Firestore SDK query ──────────────────────────────
+  const fbResult = await _fetchHistoricalReadingsFromFirebase(farm);
+  if (fbResult && fbResult.readings.length > 0) {
+    rawReadings = fbResult.readings;
+    usedQuery   = `firebase:${fbResult.usedQuery}`;
+    console.log(`[WhatIfPro] History source: Firebase direct (${rawReadings.length} readings)`);
+  }
+
+  // ── Strategy 2: REST API fallback ───────────────────────────────────────
+  if (!rawReadings.length) {
+    console.log('[WhatIfPro] Falling back to REST API for history...');
+    const candidates = _historyCandidates(farm);
+    for (const q of candidates) {
+      try {
+        const res = await fetch(`${API_BASE}/api/sensors/history?${q}`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const batch = (Array.isArray(data.readings) ? data.readings
+                    : Array.isArray(data)           ? data
+                    : [])
+          .filter(reading => _looksLikeSensorReading(reading) && !_isDemoSensorDevice(reading.deviceId));
+        if (batch.length > 0) {
+          rawReadings = batch;
+          usedQuery   = `rest:${q.toString()}`;
+          console.log('[WhatIfPro] History loaded via REST ' + q.toString() + ' - ' + batch.length + ' readings');
+          break;
+        }
+      } catch (err) {
+        console.warn('[WhatIfPro] REST history candidate failed:', q.toString(), err.message);
       }
-    } catch (err) {
-      console.warn('[WhatIfPro] History candidate failed:', query.toString(), err.message);
     }
   }
 
   if (!rawReadings.length) {
-    console.warn('[WhatIfPro] No historical readings found on any candidate query');
+    console.info('[WhatIfPro] No Firebase sensor history found for active farm identifiers');
+    _renderSensorProofCard();
     return null;
   }
 
@@ -555,10 +898,12 @@ async function _fetchHistoricalReadings(farm = _getActiveFarm(_allFarms)) {
     temp:  tempSeries,
     humid: humidSeries,
     ph:    phSeries,
+    rawReadings: rawReadings.slice(0, 200),
     totalReadings: rawReadings.length,
     usedQuery,
     fetchedAt: Date.now(),
   };
+  _renderSensorProofCard();
   return _historicalResourceData;
 }
 
@@ -585,9 +930,57 @@ function _seriesStats(series = []) {
   return { avg, median, min, max, alertCount, alertPct, trend, count: series.length };
 }
 
+function _sensorFiltersFromHistory(histData, farm = _getActiveFarm(_allFarms)) {
+  const base = _sensorFilterPayloadForFarm(farm);
+  const reading = histData?.rawReadings?.find(r => r && !_isDemoSensorDevice(r.deviceId)) || {};
+  return {
+    deviceId: reading.deviceId || base.deviceId,
+    zoneId:   reading.zoneId   || base.zoneId,
+    farmId:   reading.farmId   || base.farmId,
+    fieldId:  reading.fieldId  || base.fieldId,
+  };
+}
+
+function _predictResourcesFromHistory(sp, planting, histData, reason = '') {
+  const waterStats = _seriesStats(histData?.water || []);
+  const ecStats = _seriesStats(histData?.ec || []);
+  const waterPerUnit = sp.waterLpR / Math.max(1, planting.baseUnitsPerRow);
+  const fertPerUnit = sp.fertMLpR / Math.max(1, planting.baseUnitsPerRow);
+  const energyPerUnit = (sp.energyKWhpR || 0) / Math.max(1, planting.baseUnitsPerRow);
+  const moistureAlertPct = Number(waterStats?.alertPct || 0);
+  const fertAlertPct = Number(ecStats?.alertPct || 0);
+  const moistureTrend = Number(waterStats?.trend || 0);
+  const ecTrend = Number(ecStats?.trend || 0);
+  const waterMultiplier = 1
+    + (moistureAlertPct > 30 ? 0.18 : moistureAlertPct > 10 ? 0.08 : 0)
+    + (moistureTrend < -1 ? 0.08 : moistureTrend > 1 ? -0.04 : 0);
+  const fertMultiplier = 1
+    + (fertAlertPct > 30 ? 0.16 : fertAlertPct > 10 ? 0.07 : 0)
+    + (ecTrend < -0.05 ? 0.08 : ecTrend > 0.05 ? -0.04 : 0);
+
+  return {
+    waterLitresPerWeek: Number((waterPerUnit * planting.totalUnits * Math.max(0.75, waterMultiplier)).toFixed(1)),
+    waterTrend: moistureTrend < -1 || moistureAlertPct > 20 ? 'up' : moistureTrend > 1 ? 'down' : 'stable',
+    fertMLPerWeek: Number((fertPerUnit * planting.totalUnits * Math.max(0.75, fertMultiplier)).toFixed(0)),
+    fertTrend: ecTrend < -0.05 || fertAlertPct > 20 ? 'up' : ecTrend > 0.05 ? 'down' : 'stable',
+    energyKWhPerMonth: Number((energyPerUnit * planting.totalUnits * 4.33).toFixed(2)),
+    energyTrend: 'stable',
+    topRisk: moistureAlertPct > fertAlertPct ? 'Moisture demand may rise' : 'Nutrient demand may rise',
+    confidence: histData?.totalReadings >= 50 ? 'medium' : 'low',
+    insight: reason
+      ? 'Using Firebase history fallback because AI response was unavailable.'
+      : 'Estimated from Firebase history and crop defaults.',
+    source: `Firebase history fallback (${histData?.totalReadings || 0} readings${reason ? `; ${reason}` : ''})`,
+  };
+}
+
 // Builds AI prompt from real historical sensor stats + new planting parameters.
 // Now includes temp/humid/pH context and richer analysis tasks.
 async function _predictResourcesWithAI(sp, planting, histData) {
+  if (!histData || !histData.totalReadings) {
+    throw new Error('Firebase sensor history is required for AI resource prediction');
+  }
+
   const waterStats = histData ? _seriesStats(histData.water) : null;
   const ecStats    = histData ? _seriesStats(histData.ec)    : null;
 
@@ -599,8 +992,7 @@ async function _predictResourcesWithAI(sp, planting, histData) {
     : 'N/A';
   const trendLabel = delta => delta > 1 ? 'rising' : delta < -1 ? 'falling' : 'stable';
 
-  const histSummary = histData
-    ? [
+  const histSummary = [
         `Farm sensor history (${histData.totalReadings} readings, source: ${histData.usedQuery}):`,
         waterStats
           ? `- Soil moisture: avg ${waterStats.avg.toFixed(1)}%, median ${waterStats.median.toFixed(1)}%, ` +
@@ -620,8 +1012,7 @@ async function _predictResourcesWithAI(sp, planting, histData) {
         histData.ph?.length
           ? `- pH: avg ${avgOf(histData.ph)} (${histData.ph.length} readings)`
           : '- pH: no data',
-      ].join('\n')
-    : 'No historical sensor data available - using species defaults only.';
+      ].join('\n');
 
   const prompt =
     `You are a precision vertical farming resource analyst for a Malaysian IoT farm.\n` +
@@ -643,15 +1034,18 @@ async function _predictResourcesWithAI(sp, planting, histData) {
     `2. FERTILIZER: Estimate the ADDITIONAL weekly fertilizer (mL) for this new planting.\n` +
     `   - If EC trend is falling or FERT_ALERTs are frequent, increase estimate.\n` +
     `   - Consider whether pH is within optimal range for ${sp.name} (typical 5.5-6.5).\n` +
-    `3. RISK: Identify the single biggest resource risk for adding ${sp.name} to this farm.\n` +
-    `4. CONFIDENCE: Rate your confidence as high / medium / low based on data quality.\n` +
-    `5. INSIGHT: One actionable sentence (max 20 words) the farmer should know.\n\n` +
+    `3. ENERGY: Estimate the ADDITIONAL monthly lighting energy (kWh) for this new planting.\n` +
+    `4. RISK: Identify the single biggest resource risk for adding ${sp.name} to this farm.\n` +
+    `5. CONFIDENCE: Rate your confidence as high / medium / low based on data quality.\n` +
+    `6. INSIGHT: One actionable sentence (max 20 words) the farmer should know.\n\n` +
     `Return ONLY a JSON object, no markdown, no preamble:\n` +
     `{\n` +
     `  "waterLitresPerWeek": <number>,\n` +
     `  "waterTrend": "up" | "stable" | "down",\n` +
     `  "fertMLPerWeek": <number>,\n` +
     `  "fertTrend": "up" | "stable" | "down",\n` +
+    `  "energyKWhPerMonth": <number>,\n` +
+    `  "energyTrend": "up" | "stable" | "down",\n` +
     `  "topRisk": "<string, max 15 words>",\n` +
     `  "confidence": "high" | "medium" | "low",\n` +
     `  "insight": "<string, max 20 words>"\n` +
@@ -660,7 +1054,10 @@ async function _predictResourcesWithAI(sp, planting, histData) {
   const response = await fetch(`${API_BASE}/api/ai/predict-resources`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({
+      prompt,
+      sensorFilters: _sensorFiltersFromHistory(histData),
+    }),
   });
 
   if (!response.ok) throw new Error('AI HTTP ' + response.status);
@@ -668,22 +1065,41 @@ async function _predictResourcesWithAI(sp, planting, histData) {
   const raw = data.text ?? data.content?.map(b => b.text || '').join('') ?? '';
   const clean = raw.replace(/```json|```/g, '').trim();
   const parsed = JSON.parse(clean);
+  if (parsed.error) {
+    throw new Error(parsed.insight || 'AI resource prediction unavailable');
+  }
+  const waterLitresPerWeek = Number(parsed.waterLitresPerWeek);
+  const fertMLPerWeek = Number(parsed.fertMLPerWeek);
+  const energyKWhPerMonth = Number(parsed.energyKWhPerMonth);
+  const fallbackEnergy = ((sp.energyKWhpR || 0) / Math.max(1, planting.baseUnitsPerRow)) * planting.totalUnits * 4.33;
+  if (!Number.isFinite(waterLitresPerWeek) || !Number.isFinite(fertMLPerWeek)) {
+    throw new Error('AI resource response missing water or fertilizer number');
+  }
 
   return {
-    waterLitresPerWeek: Number(parsed.waterLitresPerWeek) || (currentWaterLPerUnit * planting.totalUnits),
+    waterLitresPerWeek,
     waterTrend:   parsed.waterTrend   || 'stable',
-    fertMLPerWeek: Number(parsed.fertMLPerWeek) || (currentFertMLPerUnit * planting.totalUnits),
+    fertMLPerWeek,
     fertTrend:    parsed.fertTrend    || 'stable',
+    energyKWhPerMonth: Number((Number.isFinite(energyKWhPerMonth) ? energyKWhPerMonth : fallbackEnergy).toFixed(2)),
+    energyTrend: parsed.energyTrend || 'stable',
     topRisk:      parsed.topRisk      || '',
     confidence:   parsed.confidence   || 'low',
     insight:      parsed.insight      || '',
-    source: histData ? `AI + ${histData.totalReadings} real sensor readings` : 'AI species defaults',
+    source: `AI + ${histData.totalReadings} Firebase sensor readings`,
   };
 }
 
 // Orchestrates history fetch + AI prediction, then re-renders the impact grid.
 async function _loadAndRenderResourcePrediction(sp, planting) {
   const cacheKey = `${sp.id}|${planting.rows}|${planting.unitsPerRow}|${_activeFarmId() || ''}`;
+  const backendPrediction = _predictionFromBackendDemand(sp, planting, _npServerData(sp));
+  if (backendPrediction) {
+    _resourcePrediction = backendPrediction;
+    _resourcePredictionKey = cacheKey;
+    _renderResourceDelta(sp, planting, backendPrediction);
+    return;
+  }
   if (cacheKey === _resourcePredictionKey && _resourcePrediction) {
     _renderResourceDelta(sp, planting, _resourcePrediction);
     return;
@@ -694,27 +1110,102 @@ async function _loadAndRenderResourcePrediction(sp, planting) {
 
   try {
     const histData = _historicalResourceData || await _fetchHistoricalReadings();
+    if (!histData || !histData.totalReadings) {
+      _resourcePrediction = {
+        error: true,
+        confidence: 'low',
+        insight: 'No Firebase sensor history found for the active farm identifiers.',
+        source: _sensorIdentifierSummary(),
+      };
+      _resourcePredictionKey = cacheKey;
+      _renderResourceDelta(sp, planting, _resourcePrediction);
+      return;
+    }
     const prediction = await _predictResourcesWithAI(sp, planting, histData);
     _resourcePrediction = prediction;
     _resourcePredictionKey = cacheKey;
     _renderResourceDelta(sp, planting, prediction);
   } catch (err) {
-    console.warn('[WhatIfPro] Resource prediction failed:', err);
-    // Fallback: compute from species defaults without AI
-    const wPerUnit = sp.waterLpR / Math.max(1, planting.baseUnitsPerRow);
-    const fPerUnit = sp.fertMLpR / Math.max(1, planting.baseUnitsPerRow);
-    _resourcePrediction = {
-      waterLitresPerWeek: wPerUnit * planting.totalUnits,
-      waterTrend: 'stable',
-      fertMLPerWeek: fPerUnit * planting.totalUnits,
-      fertTrend: 'stable',
-      confidence: 'low',
-      insight: 'Using species default values — sensor history unavailable.',
-      source: 'Species defaults (fallback)',
-    };
+    const histData = _historicalResourceData;
+    _resourcePrediction = histData?.totalReadings
+      ? _predictResourcesFromHistory(sp, planting, histData, err.message)
+      : {
+          error: true,
+          confidence: 'low',
+          insight: err.message || 'Firebase sensor history and AI response are required before calculating water and fertilizer impact.',
+          source: 'Firebase sensor history unavailable',
+        };
     _resourcePredictionKey = cacheKey;
     _renderResourceDelta(sp, planting, _resourcePrediction);
   }
+}
+
+function _npServerData(sp = _npSpecies) {
+  return _npAiAnalysis?.species === sp.id ? _npAiAnalysis.data : null;
+}
+
+function _predictionFromBackendDemand(sp, planting, data) {
+  const demand = data?.demand;
+  if (!demand) return null;
+  return {
+    waterLitresPerWeek: Number((Number(demand.waterLPerDay || 0) * 7).toFixed(1)),
+    waterTrend: 'stable',
+    fertMLPerWeek: Number(demand.fertMLPerWeek || 0),
+    fertTrend: 'stable',
+    energyKWhPerMonth: Number(demand.lightKWhPerMonth || 0),
+    energyTrend: 'stable',
+    topRisk: data.warnings?.[0] || '',
+    confidence: data.analysis?.source === 'ai' ? 'medium' : 'low',
+    insight: data.cropResourceProfile?.sourceBasis
+      ? `Crop-specific resource profile: ${data.cropResourceProfile.sourceBasis}`
+      : 'Crop-specific resource needs from suitability analysis.',
+    source: data.resourceLinks?.length ? 'AI crop profile + Firebase history' : 'Crop profile + Firebase history',
+  };
+}
+
+function _fmtSensorValue(value, suffix = '') {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${n.toFixed(Math.abs(n) >= 100 ? 0 : 1)}${suffix}` : 'missing';
+}
+
+function _renderSensorProofCard() {
+  const el = document.getElementById('pro-sensor-proof');
+  if (!el) return;
+
+  const latest = _sensorSnapshot;
+  const farmLevel = _farmLevelSensorSnapshot;
+  const hist = _historicalResourceData;
+  const idText = latest
+    ? [latest.deviceId && `deviceId=${latest.deviceId}`, latest.farmId && `farmId=${latest.farmId}`, latest.zoneId && `zoneId=${latest.zoneId}`]
+      .filter(Boolean)
+      .join(' · ') || 'Firebase latest reading'
+    : _sensorIdentifierSummary();
+
+  const status = latest || hist
+    ? 'Firebase sensorReadings connected'
+    : 'No Firebase sensor reading loaded';
+
+  el.innerHTML = `
+    <div class="pro-sensor-proof-title">Firebase sensor proof</div>
+    <div><strong>${_esc(status)}</strong></div>
+    <div style="margin-top:3px;color:#475569;">${_esc(idText)}</div>
+    <div style="margin-top:3px;color:#64748b;">
+      Latest: ${_esc(latest?.createdAt ? new Date(latest.createdAt).toLocaleString() : 'not available')}
+      ${farmLevel ? ` · Farm level: ${_esc(farmLevel.deviceId || 'loaded')}` : ' · Farm level: not loaded'}
+      ${hist ? ` · History: ${hist.totalReadings} readings via ${_esc(hist.usedQuery)}` : ' · History: not loaded'}
+    </div>
+    <div class="pro-sensor-proof-grid">
+      <div class="pro-sensor-proof-stat"><b>${_esc(_fmtSensorValue(latest?.temp, '°C'))}</b><span>temperature</span></div>
+      <div class="pro-sensor-proof-stat"><b>${_esc(_fmtSensorValue(latest?.humid, '%'))}</b><span>humidity</span></div>
+      <div class="pro-sensor-proof-stat"><b>${_esc(_fmtSensorValue(latest?.soilMoisture, '%'))}</b><span>soil moisture</span></div>
+      <div class="pro-sensor-proof-stat"><b>${_esc(latest?.soilRaw !== undefined ? `${latest.soilRaw} ADC` : 'missing')}</b><span>soil raw unit</span></div>
+      <div class="pro-sensor-proof-stat"><b>${_esc(_fmtSensorValue(latest?.light, '%'))}</b><span>light</span></div>
+      <div class="pro-sensor-proof-stat"><b>${_esc(_fmtSensorValue(latest?.nutrient, '%'))}</b><span>nutrient</span></div>
+    </div>
+    ${hist?.usedQuery?.includes('farm_001') || latest?.deviceId === 'farm_001'
+      ? '<div style="margin-top:8px;color:#b45309;"><strong>Warning:</strong> this is the demo device farm_001, not a real selected farm device.</div>'
+      : ''}
+  `;
 }
 
 // Renders only water + fertilizer delta cards based on AI prediction.
@@ -732,8 +1223,16 @@ function _renderResourceDelta(sp, planting, prediction) {
     return;
   }
 
-  const TREND_ICON = { up: '▲', stable: '●', down: '▼' };
-  const TREND_CLASS = { up: 'up', stable: 'ok', down: 'down' };
+  if (prediction.error) {
+    ig.innerHTML = `
+      <div class="pro-resource-loading" style="grid-column:1/-1;padding:16px 12px;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:11px;line-height:1.45;">
+        <strong>Sensor-based resource prediction unavailable.</strong><br>
+        ${_esc(prediction.insight)}
+        <span style="display:block;margin-top:6px;color:#c2410c;font-size:9px;">${_esc(prediction.source)}</span>
+      </div>`;
+    return;
+  }
+
   const CONF_BADGE = {
     high:   { cls: 'pro-badge-green', label: 'HIGH CONFIDENCE' },
     medium: { cls: 'pro-badge-amber', label: 'MEDIUM CONFIDENCE' },
@@ -741,13 +1240,13 @@ function _renderResourceDelta(sp, planting, prediction) {
   };
   const badge = CONF_BADGE[prediction.confidence] || CONF_BADGE.low;
 
-  const waterDir   = TREND_CLASS[prediction.waterTrend] || 'ok';
-  const fertDir    = TREND_CLASS[prediction.fertTrend]  || 'ok';
-  const waterIcon  = TREND_ICON[prediction.waterTrend]  || '●';
-  const fertIcon   = TREND_ICON[prediction.fertTrend]   || '●';
-
   const waterRM = (prediction.waterLitresPerWeek * 4.33 * RATES.waterRM).toFixed(2);
   const fertRM  = (prediction.fertMLPerWeek * 4.33 * RATES.fertRM).toFixed(2);
+  const energyKWh = Number(prediction.energyKWhPerMonth || 0);
+  const energyRM = (energyKWh * RATES.energyRM).toFixed(2);
+  const trendNote = (label, trend) => trend && trend !== 'stable'
+    ? `<div style="font-size:8px;color:#64748b;margin-top:3px;">Firebase trend suggests ${label} may ${trend === 'up' ? 'increase' : 'ease'}.</div>`
+    : '';
 
   const riskHtml = prediction.topRisk
     ? `<div style="grid-column:1/-1;margin-top:4px;padding:8px 10px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:10px;color:#9a3412;display:flex;align-items:flex-start;gap:7px;">
@@ -757,17 +1256,26 @@ function _renderResourceDelta(sp, planting, prediction) {
     : '';
 
   ig.innerHTML = `
-    <div class="pro-impact-card ${waterDir}" style="min-width:0;">
+    <div class="pro-impact-card up" style="min-width:0;">
       <div class="pro-impact-icon">💧</div>
-      <div class="pro-impact-name">Water / week</div>
-      <div class="pro-impact-val ${waterDir}">${waterIcon} +${prediction.waterLitresPerWeek.toFixed(1)} L</div>
+      <div class="pro-impact-name">Additional water needed</div>
+      <div class="pro-impact-val up">+${prediction.waterLitresPerWeek.toFixed(1)} L/week</div>
       <div style="font-size:9px;color:#64748b;margin-top:4px;">≈ RM ${waterRM}/mo</div>
+      ${trendNote('water demand', prediction.waterTrend)}
     </div>
-    <div class="pro-impact-card ${fertDir}" style="min-width:0;">
+    <div class="pro-impact-card up" style="min-width:0;">
       <div class="pro-impact-icon">🧪</div>
-      <div class="pro-impact-name">Fertilizer / week</div>
-      <div class="pro-impact-val ${fertDir}">${fertIcon} +${prediction.fertMLPerWeek.toFixed(0)} mL</div>
+      <div class="pro-impact-name">Additional fertilizer needed</div>
+      <div class="pro-impact-val up">+${prediction.fertMLPerWeek.toFixed(0)} mL/week</div>
       <div style="font-size:9px;color:#64748b;margin-top:4px;">≈ RM ${fertRM}/mo</div>
+      ${trendNote('fertilizer demand', prediction.fertTrend)}
+    </div>
+    <div class="pro-impact-card up" style="min-width:0;">
+      <div class="pro-impact-icon">⚡</div>
+      <div class="pro-impact-name">Additional light energy</div>
+      <div class="pro-impact-val up">+${energyKWh.toFixed(2)} kWh/mo</div>
+      <div style="font-size:9px;color:#64748b;margin-top:4px;">≈ RM ${energyRM}/mo</div>
+      ${trendNote('energy demand', prediction.energyTrend)}
     </div>
     ${riskHtml}
     <div style="grid-column:1/-1;margin-top:4px;padding:8px 10px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;font-size:10px;color:#475569;line-height:1.5;display:flex;align-items:flex-start;gap:8px;">
@@ -909,6 +1417,12 @@ function _injectStyles() {
     .pro-eco-val{font-size:15px;font-weight:700;color:#047857;}
     .pro-eco-lbl{font-size:9px;color:#64748b;margin-top:2px;text-transform:uppercase;letter-spacing:.06em;}
     .pro-eco-formula{font-size:10px;color:#64748b;line-height:1.45;margin-top:10px;}
+    .pro-sensor-proof{margin-top:10px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:10px;padding:10px 12px;color:#1e3a8a;font-size:10px;line-height:1.45;}
+    .pro-sensor-proof-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#1d4ed8;margin-bottom:6px;}
+    .pro-sensor-proof-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:6px;margin-top:8px;}
+    .pro-sensor-proof-stat{background:rgba(255,255,255,.72);border:1px solid rgba(147,197,253,.7);border-radius:8px;padding:7px;}
+    .pro-sensor-proof-stat b{display:block;font-size:12px;color:#0f172a;}
+    .pro-sensor-proof-stat span{display:block;font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
     .pro-qty-row{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
     .pro-qty-row label{font-size:10px;color:#64748b;min-width:80px;letter-spacing:.04em;}
     .pro-qty-ctrl{display:flex;align-items:center;gap:8px;}
@@ -1149,6 +1663,7 @@ export function render() {
             </div>
             <div class="pro-eco-formula" id="pro-eco-formula"></div>
           </div>
+          <div class="pro-sensor-proof" id="pro-sensor-proof"></div>
         </div>
 
       </div>
@@ -1230,12 +1745,14 @@ async function _hydrateLiveData() {
 
 async function _refreshSensorSnapshot() {
   _sensorSnapshot = await fetchSensorData(_getActiveFarm(_allFarms));
+  _farmLevelSensorSnapshot = await fetchFarmLevelSensorData(_getActiveFarm(_allFarms));
+  _renderSensorProofCard();
   _updateForecast();
   _npRender();
 }
 
 async function _loadMarketPrices() {
-  const crops = [..._farmCrops, ...NP_SPECIES_DB]
+  const crops = [..._farmCrops, ...NP_SPECIES_DB, _npSpecies]
     .map(c => _normaliseCropId(c.id || c.name))
     .filter(Boolean);
   const uniqueCrops = [...new Set(crops)];
@@ -1395,6 +1912,11 @@ function _selectNpSpecies(species) {
   _npAiAnalysis = null;
   _npAiUnsuitable = false;
   _npAdvisorKey = '';
+  _marketStatus = { loading: true, error: null, generatedAt: null };
+  _loadMarketPrices().then(() => {
+    _npRenderSuggestions();
+    _renderNpEconomics(_npSpecies, _npPlanting());
+  }).catch(() => {});
 }
 
 /* ─────────────────────────────────────────────
@@ -1853,6 +2375,64 @@ function _applyNpSuitabilityVisibility(sp) {
   document.getElementById('pro-impact-card')?.classList.toggle('pro-hidden', hideDetails);
 }
 
+function _renderNpEconomics(sp, planting) {
+  const market = _marketForCrop(sp);
+  const sensorFactor = _yieldMultiplier();
+  const serverData = _npServerData(sp);
+  const demand = serverData?.demand;
+  const resourceProfile = serverData?.cropResourceProfile || demand?.cropResourceProfile || null;
+  const profileYieldKgPerPlant = Number(resourceProfile?.yieldKgPerPlant);
+  const yieldKgPerUnit = Number.isFinite(profileYieldKgPerPlant) && profileYieldKgPerPlant > 0
+    ? profileYieldKgPerPlant
+    : sp.yieldKgPerRow / planting.baseUnitsPerRow;
+  const growDays = Number(serverData?.analysis?.estimatedHarvestDays || sp.growDays || 60);
+  const profileHarvests = Number(resourceProfile?.harvestsPerCycle);
+  const harvestsPerCycle = Number.isFinite(profileHarvests) && profileHarvests > 0
+    ? Math.round(profileHarvests)
+    : 1;
+  const estYieldKgRaw = yieldKgPerUnit * planting.totalUnits * harvestsPerCycle * sensorFactor;
+  const estValueRaw = estYieldKgRaw * market.bestPrice;
+  const weeksPerMonth = 4.33;
+  const waterLPerUnit = sp.waterLpR / planting.baseUnitsPerRow;
+  const fertMLPerUnit = sp.fertMLpR / planting.baseUnitsPerRow;
+  const energyKWhPerUnit = (sp.energyKWhpR || 0) / planting.baseUnitsPerRow;
+  const extraCostPerMoRaw = demand
+    ? Number(demand.totalMonthlyCostRM || 0)
+    : (planting.totalUnits * waterLPerUnit * RATES.waterRM * weeksPerMonth) +
+      (planting.totalUnits * fertMLPerUnit * RATES.fertRM * weeksPerMonth) +
+      (planting.totalUnits * energyKWhPerUnit * RATES.energyRM * weeksPerMonth);
+  const fallbackWaterCost = planting.totalUnits * waterLPerUnit * RATES.waterRM * weeksPerMonth;
+  const fallbackFertCost = planting.totalUnits * fertMLPerUnit * RATES.fertRM * weeksPerMonth;
+  const fallbackEnergyCost = planting.totalUnits * energyKWhPerUnit * RATES.energyRM * weeksPerMonth;
+  const waterCostMo = Number(demand?.waterCostPerMonth ?? fallbackWaterCost);
+  const fertCostMo = Number(demand?.fertCostPerMonth ?? fallbackFertCost);
+  const energyCostMo = Number(demand?.lightCostPerMonth ?? fallbackEnergyCost);
+  const costToHarvest = extraCostPerMoRaw * (growDays / 30);
+  const estProfit = estValueRaw - costToHarvest;
+  const harvestDate = new Date(Date.now() + growDays * 24 * 60 * 60 * 1000);
+
+  const yieldEl = document.getElementById('pro-eco-yield');
+  const valueEl = document.getElementById('pro-eco-value');
+  const costEl  = document.getElementById('pro-eco-cost');
+  const profitEl = document.getElementById('pro-eco-profit');
+  const harvestEl = document.getElementById('pro-eco-harvest-date');
+  const formulaEl = document.getElementById('pro-eco-formula');
+  if (yieldEl) yieldEl.textContent = estYieldKgRaw.toFixed(1) + ' kg';
+  if (valueEl) valueEl.textContent = 'RM ' + estValueRaw.toFixed(0);
+  if (costEl)  costEl.textContent  = 'RM ' + extraCostPerMoRaw.toFixed(2);
+  if (profitEl) profitEl.textContent = _fmtRM(estProfit, 0);
+  if (harvestEl) harvestEl.textContent = harvestDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (formulaEl) {
+    const sensorFactorText = _hasFirebaseSensorProof()
+      ? `${Math.round(sensorFactor * 100)}% Firebase sensor factor`
+      : 'no Firebase sensor factor applied';
+    const costText = demand
+      ? `Extra cost/mo = water RM ${waterCostMo.toFixed(2)} + fertilizer RM ${fertCostMo.toFixed(2)} + light energy RM ${energyCostMo.toFixed(2)} = RM ${extraCostPerMoRaw.toFixed(2)}.`
+      : `Extra cost/mo = fallback water RM ${waterCostMo.toFixed(2)} + fertilizer RM ${fertCostMo.toFixed(2)} + light energy RM ${energyCostMo.toFixed(2)} = RM ${extraCostPerMoRaw.toFixed(2)}.`;
+    formulaEl.textContent = `Yield = ${planting.totalUnits} units x ${yieldKgPerUnit.toFixed(2)} kg/plant/harvest x ${harvestsPerCycle} harvests x ${sensorFactorText}. Market value = yield x ${_fmtRM(market.bestPrice, 2)}/kg via ${market.bestLabel}. ${costText} Profit = market value RM ${estValueRaw.toFixed(0)} - harvest-period cost RM ${costToHarvest.toFixed(2)}.`;
+  }
+}
+
 function _resourceLinksHtml(links = []) {
   return `
     <div class="pro-source-row" style="margin-top:8px;">
@@ -1958,7 +2538,6 @@ function _npRender() {
   const canPlantNow = availableUnits >= planting.totalUnits;
   const nextPlantDays = zones.filter(z => z.harvIn > 0).sort((a, b) => a.harvIn - b.harvIn)[0]?.harvIn || sp.growDays;
   const market  = _marketForCrop(sp);
-  const sensorFactor = _yieldMultiplier();
   const qtyDisp = document.getElementById('pro-qty-disp');
   const unitDisp = document.getElementById('pro-unit-disp');
   const totalDisp = document.getElementById('pro-qty-total');
@@ -2033,43 +2612,11 @@ function _npRender() {
   }
   _loadAndRenderResourcePrediction(sp, planting);
 
-  // Economic impact summary — rows × units per row × per-unit crop economics.
-  const harvestsPerCycle = 3; // conservative estimate for most crops
-  const yieldKgPerUnit = sp.yieldKgPerRow / planting.baseUnitsPerRow;
-  const waterLPerUnit = sp.waterLpR / planting.baseUnitsPerRow;
-  const fertMLPerUnit = sp.fertMLpR / planting.baseUnitsPerRow;
-  const energyKWhPerUnit = (sp.energyKWhpR || 0) / planting.baseUnitsPerRow;
-  const estYieldKgRaw = yieldKgPerUnit * planting.totalUnits * harvestsPerCycle * sensorFactor;
-  const estYieldKg = estYieldKgRaw.toFixed(1);
-  const estValueRaw = estYieldKgRaw * market.bestPrice;
-  const estValue   = estValueRaw.toFixed(0);
-  const weeksPerMonth = 4.33;
-  const extraCostPerMoRaw =
-    (planting.totalUnits * waterLPerUnit * RATES.waterRM * weeksPerMonth) +
-    (planting.totalUnits * fertMLPerUnit * RATES.fertRM * weeksPerMonth) +
-    (planting.totalUnits * energyKWhPerUnit * RATES.energyRM * weeksPerMonth);
-  const extraCostPerMo = extraCostPerMoRaw.toFixed(2);
-  const costToHarvest = parseFloat(extraCostPerMo) * (sp.growDays / 30);
-  const estProfit = estValueRaw - costToHarvest;
-  const harvestDate = new Date(Date.now() + sp.growDays * 24 * 60 * 60 * 1000);
-
-  const yieldEl = document.getElementById('pro-eco-yield');
-  const valueEl = document.getElementById('pro-eco-value');
-  const costEl  = document.getElementById('pro-eco-cost');
-  const profitEl = document.getElementById('pro-eco-profit');
-  const harvestEl = document.getElementById('pro-eco-harvest-date');
-  const formulaEl = document.getElementById('pro-eco-formula');
-  if (yieldEl) yieldEl.textContent = estYieldKg + ' kg';
-  if (valueEl) valueEl.textContent = 'RM ' + estValue;
-  if (costEl)  costEl.textContent  = 'RM ' + extraCostPerMo;
-  if (profitEl) profitEl.textContent = _fmtRM(estProfit, 0);
-  if (harvestEl) harvestEl.textContent = harvestDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  if (formulaEl) {
-    formulaEl.textContent = `Formula: ${planting.rows} rows × ${planting.unitsPerRow} units/row = ${planting.totalUnits} units. Yield uses ${yieldKgPerUnit.toFixed(2)} kg/unit × ${harvestsPerCycle} harvests × ${Math.round(sensorFactor * 100)}% sensor factor. Profit = market value - water, nutrient, and energy cost to harvest.`;
-  }
+  _renderNpEconomics(sp, planting);
+  _renderSensorProofCard();
 
   // Fetch real AI advisor response
-  const advisorKey = `${sp.id}|${planting.rows}|${planting.unitsPerRow}|${planting.totalUnits}|${_activeFarmId() || ''}|${_sensorSnapshot?.createdAt || ''}|${_sensorSnapshot?.temp}|${_sensorSnapshot?.humid}|${_sensorSnapshot?.water}|${_sensorSnapshot?.soilRaw}`;
+  const advisorKey = `${sp.id}|${planting.rows}|${planting.unitsPerRow}|${planting.totalUnits}|${_activeFarmId() || ''}|${_sensorSnapshot?.createdAt || ''}|${_farmLevelSensorSnapshot?.createdAt || ''}|${_sensorSnapshot?.temp}|${_sensorSnapshot?.humid}|${_sensorSnapshot?.water}|${_sensorSnapshot?.soilRaw}|${_farmLevelSensorSnapshot?.waterDistanceCm}|${_farmLevelSensorSnapshot?.co2Ppm}`;
   if (advisorKey !== _npAdvisorKey) {
     _npAdvisorKey = advisorKey;
     _fetchNpAdvisor(sp, planting, zones);
@@ -2087,12 +2634,40 @@ async function _fetchNpAdvisor(sp, planting, zones) {
   aiEl.className   = 'pro-ai-loading';
   aiEl.textContent = `Analysing ${planting.rows} rows (${planting.totalUnits} units) of ${sp.name} against your current farm conditions…`;
 
-  const sensors = _sensorSnapshot || await fetchSensorData();
+  const farm = _getActiveFarm(_allFarms);
+  const sensors = _sensorSnapshot || await fetchSensorData(farm);
+  const farmLevelSensors = _farmLevelSensorSnapshot || await fetchFarmLevelSensorData(farm);
+  if (farmLevelSensors && !_farmLevelSensorSnapshot) {
+    _farmLevelSensorSnapshot = farmLevelSensors;
+    _renderSensorProofCard();
+  }
+  if (sensors && !_sensorSnapshot) {
+    _sensorSnapshot = sensors;
+    _renderSensorProofCard();
+  }
+  if (!_hasFirebaseSensorProof() && !sensors && !farmLevelSensors) {
+    _npAiAnalysis   = { species: sp.id, data: null };
+    _npAiUnsuitable = false;
+    if (aiBox) aiBox.className = 'pro-ai-inline warn';
+    aiEl.className = '';
+    aiEl.textContent = `No Firebase sensor reading found for ${_sensorIdentifierSummary(farm)}. Connect a real deviceId/farmId with sensorReadings before running AI crop suitability.`;
+    _renderSensorProofCard();
+    _applyNpSuitabilityVisibility(sp);
+    return;
+  }
 
   // Forward the farm's calibration constants if stored in AppState/localStorage.
   // The backend uses these to convert soilRaw → calibrated moisture %.
-  const farm = _getActiveFarm(_allFarms);
   const calibration = farm?.sensorCalibration || AppState.currentFarm?.sensorCalibration || {};
+  const baseSensorFilters = _sensorFilterPayloadForFarm(farm);
+  const farmLevelDeviceId = farmLevelSensors?.deviceId || _farmLevelDeviceId(farm);
+  const sensorFilters = {
+    ...baseSensorFilters,
+    deviceId: sensors?.deviceId && !_isDemoSensorDevice(sensors.deviceId) ? sensors.deviceId : baseSensorFilters.deviceId,
+    zoneId:   sensors?.zoneId   || baseSensorFilters.zoneId,
+    farmId:   sensors?.farmId   || farmLevelSensors?.farmId || baseSensorFilters.farmId,
+    fieldId:  sensors?.fieldId  || farmLevelSensors?.fieldId || baseSensorFilters.fieldId,
+  };
 
   try {
     const res = await fetch(`${API_BASE}/api/whatif/newplant`, {
@@ -2104,13 +2679,20 @@ async function _fetchNpAdvisor(sp, planting, zones) {
         unitsPerRow:  planting.unitsPerRow,
         totalUnits:   planting.totalUnits,
         currentCrops: zones.map(z => z.crop).filter(Boolean),
+        ...sensorFilters,
         sensors,
+        farmLevelSensors,
+        zoneSensors: sensors,
+        farmLevelDeviceId,
         calibration,
       }),
     });
 
-    if (!res.ok) throw new Error('API error ' + res.status);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const message = data.message || data.error || `API error ${res.status}`;
+      throw new Error(message);
+    }
 
     const text       = data.insight || data.analysis?.reason || '';
     const unsuitable = Boolean(data.unsuitable || data.analysis?.suitable === false);
@@ -2132,14 +2714,20 @@ async function _fetchNpAdvisor(sp, planting, zones) {
       + gapHtml
       + (unsuitable && data.resourceLinks?.length ? _resourceLinksHtml(data.resourceLinks) : '');
 
+    const backendPrediction = _predictionFromBackendDemand(sp, planting, data);
+    if (backendPrediction) {
+      _resourcePrediction = backendPrediction;
+      _resourcePredictionKey = `${sp.id}|${planting.rows}|${planting.unitsPerRow}|${_activeFarmId() || ''}`;
+      _renderResourceDelta(sp, planting, backendPrediction);
+    }
+    _renderNpEconomics(sp, planting);
     _applyNpSuitabilityVisibility(sp);
   } catch (err) {
-    console.warn('[WhatIfPro] _fetchNpAdvisor failed:', err.message);
     _npAiAnalysis   = { species: sp.id, data: null };
     _npAiUnsuitable = false;
     if (aiBox) aiBox.className = 'pro-ai-inline warn';
     aiEl.className  = '';
-    aiEl.textContent = 'AI crop advisor is temporarily unavailable. Check that the backend server is running and your AI provider key (GROQ_API_KEY or GEMINI_API_KEY) is set.';
+    aiEl.textContent = err.message || 'AI crop advisor is temporarily unavailable. Check that the backend server is running and your AI provider key is set.';
     _applyNpSuitabilityVisibility(sp);
   }
 }
