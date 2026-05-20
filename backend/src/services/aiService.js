@@ -1,3 +1,190 @@
+function hasAIKey() {
+  return Boolean(
+    process.env.GROQ_API_KEY ||
+    process.env.GEMINI_API_KEY_2 ||
+    process.env.GEMINI_API_KEY
+  );
+}
+
+function stripJson(raw = '', open = '{') {
+  const close = open === '[' ? ']' : '}';
+  const clean = String(raw || '').replace(/```json|```/g, '').trim();
+  const start = clean.indexOf(open);
+  const end = clean.lastIndexOf(close);
+  if (start >= 0 && end > start) return clean.slice(start, end + 1);
+  return clean;
+}
+
+function sanitizeStringList(value = []) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => String(item || '').trim())
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+async function askText(systemPrompt = '', userPrompt = '', maxTokens = 700) {
+  if (!hasAIKey()) throw new Error('No GROQ_API_KEY, GEMINI_API_KEY_2, or GEMINI_API_KEY configured');
+
+  const errors = [];
+  if (process.env.GROQ_API_KEY) {
+    try {
+      return await callGroqText(systemPrompt, userPrompt, maxTokens);
+    } catch (err) {
+      errors.push(`Groq: ${err.message}`);
+    }
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      return await callGeminiText(geminiKey, systemPrompt, userPrompt, maxTokens);
+    } catch (err) {
+      errors.push(`Gemini: ${err.message}`);
+    }
+  }
+
+  throw new Error(`All AI providers failed: ${errors.join(' | ')}`);
+}
+
+async function callGroqText(systemPrompt, userPrompt, maxTokens) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+      messages: [
+        systemPrompt ? { role: 'system', content: systemPrompt } : null,
+        { role: 'user', content: userPrompt },
+      ].filter(Boolean),
+      max_tokens: maxTokens,
+      temperature: 0.35,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) throw new Error(data.error?.message || `Groq API error ${response.status}`);
+  const text = data.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error('No text from Groq');
+  return text;
+}
+
+async function callGeminiText(apiKey, systemPrompt, userPrompt, maxTokens) {
+  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: systemPrompt ? { parts: [{ text: systemPrompt }] } : undefined,
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.35 },
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) throw new Error(data.error?.message || `Gemini API error ${response.status}`);
+  const text = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim();
+  if (!text) throw new Error('No text from Gemini');
+  return text;
+}
+
+async function runTextMessages(messages = [], maxTokens = 700) {
+  const system = messages.find(message => message.role === 'system')?.content || '';
+  const user = messages
+    .filter(message => message.role !== 'system')
+    .map(message => `${message.role === 'assistant' ? 'Assistant' : 'User'}: ${message.content}`)
+    .join('\n');
+  return askText(system, user, maxTokens);
+}
+
+async function runVisionPrompt({ image, mediaType = 'image/jpeg', prompt, maxTokens = 900 }) {
+  if (!image) throw new Error('Image is required for vision analysis');
+  const dataUrl = image.startsWith('data:')
+    ? image
+    : `data:${mediaType};base64,${image}`;
+
+  if (process.env.GROQ_API_KEY) {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.GROQ_VISION_MODEL || 'llama-3.2-11b-vision-preview',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ],
+        }],
+        max_tokens: maxTokens,
+        temperature: 0.25,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) throw new Error(data.error?.message || `Groq vision API error ${response.status}`);
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (text) return text;
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY_2 || process.env.GEMINI_API_KEY;
+  if (!geminiKey) throw new Error('No vision AI provider configured');
+  const model = process.env.GEMINI_VISION_MODEL || 'gemini-1.5-flash';
+  const base64 = dataUrl.split(',').pop();
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: mediaType, data: base64 } },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.25 },
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) throw new Error(data.error?.message || `Gemini vision API error ${response.status}`);
+  const text = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('').trim();
+  if (!text) throw new Error('No vision text from Gemini');
+  return text;
+}
+
+async function forecastYieldAndRecipes(virtualCrop, cropSpec, recipes = [], days = 30) {
+  const growDays = Number(cropSpec?.requirements?.growthDays || cropSpec?.growDays || 45);
+  const quantity = Number(virtualCrop?.quantity || 1);
+  const avgGrams = Number(cropSpec?.yield?.avgGramsPerPlant || 200);
+  const harvests = Math.max(0, Math.floor(Number(days || 30) / Math.max(1, growDays)));
+  const estimatedKg = Number(((avgGrams * quantity * Math.max(1, harvests)) / 1000).toFixed(2));
+  return {
+    harvests,
+    estimatedKg,
+    estimatedHarvestDays: growDays,
+    summary: `${virtualCrop?.species || cropSpec?.species || 'Crop'} can produce about ${estimatedKg} kg in this window under stable conditions.`,
+    recipeIdeas: recipes.slice(0, 5).map(recipe => recipe.name),
+  };
+}
+
+function plantRecognitionPrompt(targetPlant) {
+  return `Identify visible plants and vertical farm structure. Target plant: ${targetPlant || 'unknown'}.
+Return only JSON with rackType, structure, and plants.`;
+}
+
+function parsePlantRecognition(rawText) {
+  const parsed = JSON.parse(stripJson(rawText, '{'));
+  return {
+    rackType: parsed.rackType || parsed.structure?.rackType || '3-tier',
+    structure: parsed.structure || {},
+    plants: Array.isArray(parsed.plants) ? parsed.plants : [],
+    confidence: Number(parsed.confidence || 0.7),
+  };
+}
+
 async function analyzePlantImage({ image, mediaType, targetPlant }) {
   const rawText = await runVisionPrompt({
     image,
@@ -293,6 +480,71 @@ Current garden: ${JSON.stringify(gardenState)}`;
    sanitizeStructure(), inferRackType(), defaultTiers(),
    defaultSlotsPerTier(), and labelRackType() exactly as they are. */
 
+/* ──────────────────────── Resource Prediction ──────────────────────── */
+
+// Deterministic fallback — parses numbers directly from the prompt string
+// so we always return something usable even when all AI providers are down.
+function _resourceFallback(prompt = '') {
+  const waterMatch = prompt.match(/base water need:\s*([\d.]+)\s*L per unit per week/i);
+  const fertMatch  = prompt.match(/base fertilizer need:\s*([\d.]+)\s*mL per unit per week/i);
+  const unitsMatch = prompt.match(/Total new units:\s*(\d+)/i);
+
+  const waterPerUnit = parseFloat(waterMatch?.[1] || '1');
+  const fertPerUnit  = parseFloat(fertMatch?.[1]  || '10');
+  const units        = parseInt(unitsMatch?.[1]   || '10', 10);
+
+  return {
+    waterLitresPerWeek: parseFloat((waterPerUnit * units).toFixed(1)),
+    waterTrend:         'stable',
+    fertMLPerWeek:      parseFloat((fertPerUnit  * units).toFixed(0)),
+    fertTrend:          'stable',
+    confidence:         'low',
+    insight:            'Estimate based on species defaults — AI unavailable.',
+  };
+}
+
+async function predictResources(prompt = '') {
+  if (!prompt) throw new Error('prompt is required');
+
+  const system = `You are a precision vertical farming resource analyst.
+Return ONLY a valid JSON object with these exact keys — no markdown, no preamble:
+{
+  "waterLitresPerWeek": <number>,
+  "waterTrend": "up" | "stable" | "down",
+  "fertMLPerWeek": <number>,
+  "fertTrend": "up" | "stable" | "down",
+  "confidence": "high" | "medium" | "low",
+  "insight": "<string, max 20 words>"
+}`;
+
+  let raw;
+  try {
+    raw = await askText(system, prompt, 400);
+  } catch {
+    return _resourceFallback(prompt);
+  }
+
+  try {
+    const cleaned = stripJson(raw, '{');
+    const parsed  = JSON.parse(cleaned);
+    // Validate required numeric fields; fall back if AI hallucinated garbage
+    if (!Number.isFinite(Number(parsed.waterLitresPerWeek)) ||
+        !Number.isFinite(Number(parsed.fertMLPerWeek))) {
+      throw new Error('Invalid numeric fields');
+    }
+    return {
+      waterLitresPerWeek: Number(Number(parsed.waterLitresPerWeek).toFixed(1)),
+      waterTrend:         ['up','stable','down'].includes(parsed.waterTrend) ? parsed.waterTrend : 'stable',
+      fertMLPerWeek:      Number(Number(parsed.fertMLPerWeek).toFixed(0)),
+      fertTrend:          ['up','stable','down'].includes(parsed.fertTrend)  ? parsed.fertTrend  : 'stable',
+      confidence:         ['high','medium','low'].includes(parsed.confidence) ? parsed.confidence : 'low',
+      insight:            String(parsed.insight || '').slice(0, 120),
+    };
+  } catch {
+    return _resourceFallback(prompt);
+  }
+}
+
 module.exports = {
   hasAIKey,
   askText,
@@ -300,4 +552,5 @@ module.exports = {
   forecastYieldAndRecipes,
   analyzePlantImage,
   analyzePlantDisease,
+  predictResources,
 };

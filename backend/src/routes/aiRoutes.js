@@ -30,4 +30,18 @@ router.post('/disease-analysis', async (req, res) => {
   }
 });
 
+router.post('/predict-resources', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'prompt string required' });
+    }
+    const result = await ai.predictResources(prompt);
+    // Return as { text: "...json..." } — WhatIfPro.js expects this shape
+    res.json({ text: JSON.stringify(result) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
