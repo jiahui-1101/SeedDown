@@ -1156,6 +1156,8 @@ function resolveRack(field) {
             shape: field.rackConfig.shape || 'rack',
         };
     }
+    const inferred = inferRackFromSavedField(field);
+    if (inferred) return inferred;
     const rawRack = String(field?.rackTypeId || field?.rackType || field?.rackLabel || '').toLowerCase();
     if (rawRack.includes('2')) return RACK_OPTIONS['2-tier'];
     if (rawRack.includes('4')) return RACK_OPTIONS['4-tier'];
@@ -1165,6 +1167,30 @@ function resolveRack(field) {
     if (rawRack.includes('nft') || rawRack.includes('channel')) return RACK_OPTIONS['nft-channel'];
     if (rawRack.includes('hanging') || rawRack.includes('column')) return RACK_OPTIONS.hanging;
     return RACK_OPTIONS['3-tier'];
+}
+
+function inferRackFromSavedField(field) {
+    const rawRack = String(field?.rackTypeId || field?.rackType || field?.rackLabel || '').toLowerCase();
+    const wantsPhotoDetected = rawRack.includes('photo') || rawRack.includes('detected') || rawRack.includes('custom');
+    const plantSlots = Number.parseInt(field?.plantSlots, 10) || sumPlantSlots(field?.plants) || 0;
+    if (!wantsPhotoDetected && plantSlots <= 9) return null;
+    if (!plantSlots || plantSlots <= 9) return null;
+
+    const slotsPerTier = plantSlots >= 18 ? 6 : plantSlots >= 16 ? 4 : 3;
+    const tiers = Math.max(2, Math.ceil(plantSlots / slotsPerTier));
+    return {
+        id: 'photo-detected',
+        label: 'Photo-detected Rack',
+        tiers,
+        slotsPerTier,
+        total: Math.max(plantSlots, tiers * slotsPerTier),
+        shape: rawRack.includes('tower') ? 'tower' : rawRack.includes('wall') ? 'wall' : 'rack',
+    };
+}
+
+function sumPlantSlots(plants) {
+    if (!Array.isArray(plants)) return 0;
+    return plants.reduce((sum, plant) => sum + (Number.parseInt(plant.slots || plant.count || 1, 10) || 1), 0);
 }
 
 function resolveSlotPlants(field, rack) {

@@ -73,20 +73,20 @@ export async function render(params = {}) {
 
 <div style="display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:16px;margin-bottom:16px;">
     <section style="background:#fff;border:1px solid #e5e7eb;border-radius:24px;padding:22px;box-shadow:0 16px 44px rgba(15,23,42,.08);">
-        <div style="font-size:0.72rem;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">Current Reading · Temp</div>
-        <div style="font-size:2.45rem;font-weight:950;color:${sensors[0].status === 'Normal' ? '#047857' : '#dc2626'};line-height:1;">${sensors[0].value}<span style="font-size:1rem;font-weight:800;color:#64748b;margin-left:6px;">${sensors[0].meta.unit}</span></div>
-        <div style="margin-top:14px;display:inline-flex;align-items:center;gap:8px;background:${sensors[0].status === 'Normal' ? '#ecfdf5' : '#fef2f2'};color:${sensors[0].status === 'Normal' ? '#166534' : '#dc2626'};border:1px solid ${sensors[0].status === 'Normal' ? '#bbf7d0' : '#fecaca'};padding:7px 11px;border-radius:999px;font-size:0.75rem;font-weight:900;">
-            <span style="width:7px;height:7px;border-radius:999px;background:currentColor;display:inline-block;"></span>${sensors[0].status}
+        <div id="spotlightLabel" style="font-size:0.72rem;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;">Current Reading</div>
+        <div id="spotlightValue" style="font-size:2.45rem;font-weight:950;color:#047857;line-height:1;">--<span id="spotlightUnit" style="font-size:1rem;font-weight:800;color:#64748b;margin-left:6px;"></span></div>
+        <div id="spotlightBadge" style="margin-top:14px;display:inline-flex;align-items:center;gap:8px;background:#f1f5f9;color:#64748b;border:1px solid #e2e8f0;padding:7px 11px;border-radius:999px;font-size:0.75rem;font-weight:900;">
+            <span style="width:7px;height:7px;border-radius:999px;background:currentColor;display:inline-block;"></span>Loading
         </div>
     </section>
     <section style="background:#fff;border:1px solid #e5e7eb;border-radius:24px;padding:22px;box-shadow:0 16px 44px rgba(15,23,42,.08);">
-        <div style="font-size:0.72rem;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Trend History</div>
+        <div id="trendLabel" style="font-size:0.72rem;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Trend History</div>
         <div id="zoneTrendChart" style="width:100%;aspect-ratio:5/2;min-height:120px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:0.8rem;">Loading...</div>
     </section>
 </div>
 
 <section style="background:#fff;border:1px solid #e5e7eb;border-radius:24px;padding:22px;box-shadow:0 16px 44px rgba(15,23,42,.08);">
-    <div style="font-size:0.72rem;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Historical Records · Temp</div>
+    <div id="historyLabel" style="font-size:0.72rem;font-weight:950;color:#64748b;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Historical Records</div>
     <div id="zoneHistoryLog" style="display:flex;flex-direction:column;gap:8px;">
         <div style="color:#94a3b8;font-size:0.85rem;">Loading...</div>
     </div>
@@ -95,7 +95,7 @@ export async function render(params = {}) {
         </div>
     `;
 
-    bindEvents({ backTarget, zoneId, params });
+    bindEvents({ backTarget, zoneId, params, sensors });
 }
 
 function sensorCard({ key, meta, value, status }) {
@@ -122,48 +122,52 @@ function sensorCard({ key, meta, value, status }) {
     `;
 }
 
-function bindEvents({ backTarget, zoneId, params }) {
-    document.getElementById('zoneBackBtn').onclick = () => {
-    if (params?.from === 'overall-farm') {
-        showScreen('sensor-detail', params.returnParams || { key: 'temp', from: 'dash-c', zoneId: 'overall' });
-    } else {
-        showScreen(backTarget);
-    }
-};
+function bindEvents({ backTarget, zoneId, params, sensors }) {
+    document.getElementById('zoneBackBtn').onclick = () => showScreen(backTarget);
 
     document.querySelectorAll('.zone-sensor-card').forEach(card => {
         card.addEventListener('click', () => {
-            const key   = card.getAttribute('data-key');
-            const label = card.getAttribute('data-label');
-            showScreen('sensor-detail', {
-    key,
-    name: label,
-    from: 'zone-detail',
-    zoneId,
-    returnParams: { zoneId, from: 'zone-detail', returnParams: params },
-});
+            const key = card.getAttribute('data-key');
+            document.querySelectorAll('.zone-sensor-card').forEach(c =>
+                c.style.outline = c === card ? '2px solid #047857' : 'none'
+            );
+            updateSpotlight(key, sensors, zoneId, params);
         });
     });
 
-    loadZoneHistory(zoneId);
+    // default: spotlight the first sensor that has real data
+    const defaultSensor = sensors.find(s => s.status !== 'No Data') || sensors[0];
+    document.querySelectorAll('.zone-sensor-card').forEach(c => {
+        c.style.outline = c.getAttribute('data-key') === defaultSensor.key ? '2px solid #047857' : 'none';
+    });
+    updateSpotlight(defaultSensor.key, sensors, zoneId, params);
 }
 
-async function fetchZoneReading(zoneId, params) {
-    try {
-        const query = new URLSearchParams();
-        const farm = getCurrentFarm();
-        const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
-        const device = devices.find(d => normalizeZoneId(d.zoneId || d.zone) === zoneId);
-        if (device?.deviceId)      query.set('deviceId', device.deviceId);
-        else if (params.deviceId)  query.set('deviceId', params.deviceId);
-        else                       query.set('deviceId', 'farm_001');
+const DEMO_ZONE_DEVICES = {
+    zone_A: 'commercial-zone-node-1',
+    zone_B: 'commercial-zone-node-2',
+    zone_C: 'commercial-zone-node-3',
+};
 
-        const res = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
-        const data = await res.json();
-        return data?.reading || null;
-    } catch {
-        return null;
+async function fetchZoneReading(zoneId, params = {}) {
+    const farm = getCurrentFarm();
+    const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
+    const assigned = devices.find(d => normalizeZoneId(d.zoneId || d.zone) === zoneId);
+    const deviceId = assigned?.deviceId || params.deviceId || DEMO_ZONE_DEVICES[zoneId];
+
+    const urls = [
+        deviceId && `${API_BASE}/api/sensors/latest?deviceId=${encodeURIComponent(deviceId)}`,
+        `${API_BASE}/api/sensors/latest?zoneId=${encodeURIComponent(zoneId)}`,
+    ].filter(Boolean);
+
+    for (const url of urls) {
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data?.reading) return data.reading;
+        } catch { /* try next */ }
     }
+    return null;
 }
 
 function getCurrentFarm() {
@@ -195,21 +199,67 @@ function escapeHTML(value) {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
+function updateSpotlight(key, sensors, zoneId, params) {
+    const s = sensors.find(x => x.key === key) || sensors[0];
+    if (!s) return;
 
-async function loadZoneHistory(zoneId) {
+    const label = s.meta.label;
+
+    // Update text labels
+    const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    setTxt('spotlightLabel', `Current Reading · ${label}`);
+    setTxt('trendLabel',     `Trend History · ${label}`);
+    setTxt('historyLabel',   `Historical Records · ${label}`);
+    setTxt('spotlightUnit',  s.value !== '--' ? s.meta.unit : '');
+
+    // Update value + color
+    const valEl = document.getElementById('spotlightValue');
+    if (valEl) {
+        // Set just the text node (first child), keep the unit span
+        const unitSpan = document.getElementById('spotlightUnit');
+        valEl.childNodes[0].textContent = s.value;
+        valEl.style.color = s.status === 'Normal' ? '#047857' : s.status === 'No Data' ? '#94a3b8' : '#dc2626';
+        if (unitSpan) unitSpan.textContent = s.value !== '--' ? s.meta.unit : '';
+    }
+
+    // Update badge
+    const badge = document.getElementById('spotlightBadge');
+    if (badge) {
+        const ok = s.status === 'Normal';
+        const noData = s.status === 'No Data';
+        badge.style.background = ok ? '#ecfdf5' : noData ? '#f1f5f9' : '#fef2f2';
+        badge.style.color      = ok ? '#166534' : noData ? '#64748b' : '#dc2626';
+        badge.style.border     = `1px solid ${ok ? '#bbf7d0' : noData ? '#e2e8f0' : '#fecaca'}`;
+        badge.innerHTML = `<span style="width:7px;height:7px;border-radius:999px;background:currentColor;display:inline-block;"></span>${s.status}`;
+    }
+
+    // Load chart + history for this sensor's field
+    loadZoneHistory(zoneId, params, s.meta);
+}
+
+async function loadZoneHistory(zoneId, params = {}, meta = SENSOR_META['temp']) {
     try {
-        const res = await fetch(`${API_BASE}/api/sensors/history?deviceId=farm_001&limit=8`);
+        const farm = getCurrentFarm();
+        const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
+        const assigned = devices.find(d => normalizeZoneId(d.zoneId || d.zone) === zoneId);
+        const deviceId = assigned?.deviceId || params.deviceId || DEMO_ZONE_DEVICES[zoneId];
+
+        const url = deviceId
+            ? `${API_BASE}/api/sensors/history?deviceId=${encodeURIComponent(deviceId)}&limit=8`
+            : `${API_BASE}/api/sensors/history?zoneId=${encodeURIComponent(zoneId)}&limit=8`;
+
+        const res = await fetch(url);
         const result = await res.json();
         const readings = result.readings || [];
         if (!readings.length) return;
 
-        const values = readings.map(r => Number(r.temperature ?? 0)).reverse();
-        const max = Math.max(...values, 1);
-        const min = Math.min(...values, 0);
-        const range = max - min || 1;
+        const values = readings.map(r => Number(r[meta.field] ?? 0)).reverse();
+        const maxV = Math.max(...values, 1);
+        const minV = Math.min(...values, 0);
+        const range = maxV - minV || 1;
         const points = values.map((v, i) => ({
             x: ((i / (values.length - 1 || 1)) * 100).toFixed(1),
-            y: (35 - ((v - min) / range) * 25).toFixed(1),
+            y: (35 - ((v - minV) / range) * 25).toFixed(1),
         }));
         const linePath = `M ${points.map(p => `${p.x},${p.y}`).join(' L ')}`;
         const areaPath = `${linePath} L 100,40 L 0,40 Z`;
@@ -230,13 +280,13 @@ async function loadZoneHistory(zoneId) {
 
         const log = document.getElementById('zoneHistoryLog');
         if (log) log.innerHTML = readings.map(r => {
-            const val = Number(r.temperature ?? 0);
-            const status = val >= 18 && val <= 35 ? 'Normal' : 'Check';
+            const val = Number(r[meta.field] ?? 0);
+            const status = meta.normal(val) ? 'Normal' : 'Check';
             const time = r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
             return `
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:13px 0;border-bottom:1px solid #eef2f7;align-items:center;">
                     <span style="color:#64748b;font-weight:700;">${time}</span>
-                    <span style="font-weight:950;color:#17231b;">${val.toFixed(1)} <span style="font-size:0.72rem;color:#64748b;">°C</span></span>
+                    <span style="font-weight:950;color:#17231b;">${formatValue(val)} <span style="font-size:0.72rem;color:#64748b;">${escapeHTML(meta.unit)}</span></span>
                     <span style="text-align:right;"><span style="background:${status === 'Normal' ? '#ecfdf5' : '#fef2f2'};color:${status === 'Normal' ? '#166534' : '#dc2626'};border:1px solid ${status === 'Normal' ? '#bbf7d0' : '#fecaca'};padding:6px 10px;border-radius:999px;font-size:0.68rem;font-weight:900;">${status}</span></span>
                 </div>`;
         }).join('');

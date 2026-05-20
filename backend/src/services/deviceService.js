@@ -23,6 +23,43 @@ const SERIAL_RULES = [
   { prefix: 'SD-COM-MST', deviceType: 'commercial', packageLevel: 'farm_master', accountTypes: ['commercial', 'commercial_master'] },
 ];
 
+const DEMO_DEVICE_BY_SERIAL = {
+  'SD-BGN-STR-00123': { deviceId: 'beginner_starter', deviceToken: 'sd_demo_beginner_starter', fieldId: 'field_beginner_starter' },
+  'SD-BGN-STD-00456': { deviceId: 'beginner_standard', deviceToken: 'sd_demo_beginner_standard', fieldId: 'field_beginner_standard' },
+  'SD-BGN-PRO-00789': { deviceId: 'beginner_pro', deviceToken: 'sd_demo_beginner_pro', fieldId: 'field_beginner_pro' },
+  'SD-COM-FRM-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1', farmId: 'farm_commercial_demo_001', zoneId: 'farm_master' },
+  'SD-COM-MST-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1', farmId: 'farm_commercial_demo_001', zoneId: 'farm_master' },
+  'SD-COM-ZON-01001': { deviceId: 'commercial-zone-node-1', deviceToken: 'sd_demo_commercial_zone_node_1', farmId: 'farm_commercial_demo_001', zoneId: 'zone_A' },
+  'SD-COM-ZON-01002': { deviceId: 'commercial-zone-node-2', deviceToken: 'sd_demo_commercial_zone_node_2', farmId: 'farm_commercial_demo_001', zoneId: 'zone_B' },
+  'SD-COM-ZON-01003': { deviceId: 'commercial-zone-node-3', deviceToken: 'sd_demo_commercial_zone_node_3', farmId: 'farm_commercial_demo_001', zoneId: 'zone_C' },
+};
+
+
+const DEMO_DEVICE_BY_TOKEN = Object.entries(DEMO_DEVICE_BY_SERIAL).reduce((acc, [serial, device]) => {
+  acc[device.deviceToken] = { serial, ...device };
+  return acc;
+}, {});
+
+function demoDeviceFromToken(token) {
+  const demo = DEMO_DEVICE_BY_TOKEN[String(token || '').trim()];
+  if (!demo) return null;
+  const parsed = parseSerial(demo.serial);
+  return {
+    deviceId: demo.deviceId,
+    serial: demo.serial,
+    deviceType: parsed.deviceType,
+    packageLevel: parsed.packageLevel,
+    deviceToken: demo.deviceToken,
+    userId: null,
+    farmId: demo.farmId || (parsed.deviceType === 'commercial' ? 'farm_commercial_demo_001' : null),
+    fieldId: demo.fieldId || null,
+    zoneId: demo.zoneId || null,
+    nodeType: parsed.packageLevel,
+    status: 'assigned',
+    isOnline: true,
+    lastSeen: new Date(),
+  };
+}
 function normalizeSerial(serial = '') {
   return String(serial).trim().toUpperCase();
 }
@@ -45,6 +82,7 @@ function validateAccountType(parsed, accountType = '') {
 }
 
 function generateDeviceId(parsed) {
+  if (DEMO_DEVICE_BY_SERIAL[parsed.serial]?.deviceId) return DEMO_DEVICE_BY_SERIAL[parsed.serial].deviceId;
   const suffix = parsed.serial.split('-').slice(-1)[0] || crypto.randomBytes(3).toString('hex');
   return `dev_${parsed.deviceType}_${parsed.packageLevel}_${suffix}`.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
 }
@@ -63,6 +101,31 @@ function publicDevice(device, includeToken = true) {
 async function registerDevice(input = {}) {
   const parsed = parseSerial(input.serial);
   validateAccountType(parsed, input.accountType);
+  const demoDevice = DEMO_DEVICE_BY_SERIAL[parsed.serial] || null;
+
+  if (demoDevice) {
+    const existingDemo = await DeviceModel.findOne({ deviceId: demoDevice.deviceId }).lean();
+    if (existingDemo) {
+      const updated = await DeviceModel.findOneAndUpdate(
+        { deviceId: demoDevice.deviceId },
+        { $set: {
+          serial: parsed.serial,
+          deviceType: parsed.deviceType,
+          packageLevel: parsed.packageLevel,
+          deviceToken: demoDevice.deviceToken,
+          userId: input.userId || existingDemo.userId || null,
+          farmId: input.farmId || existingDemo.farmId || null,
+          fieldId: input.fieldId || existingDemo.fieldId || null,
+          zoneId: input.zoneId || existingDemo.zoneId || null,
+          wifiSsid: input.wifi_ssid || input.wifiSsid || existingDemo.wifiSsid || '',
+          status: 'assigned',
+          updatedAt: new Date(),
+        }},
+        { new: true, upsert: true }
+      ).lean();
+      return { device: publicDevice(updated), existing: true };
+    }
+  }
 
   const existingBySerial = await DeviceModel.findOne({ serial: parsed.serial }).lean();
   if (existingBySerial) {
@@ -88,7 +151,7 @@ async function registerDevice(input = {}) {
     serial: parsed.serial,
     deviceType: parsed.deviceType,
     packageLevel: parsed.packageLevel,
-    deviceToken: generateToken(),
+    deviceToken: demoDevice?.deviceToken || generateToken(),
     userId: input.userId || null,
     farmId: input.farmId || null,
     fieldId: input.fieldId || null,
@@ -109,7 +172,9 @@ async function getDevice(deviceId) {
 
 async function getDeviceByToken(token) {
   if (!token) return null;
-  return DeviceModel.findOne({ deviceToken: String(token).trim() }).lean();
+  const normalized = String(token).trim();
+  const stored = await DeviceModel.findOne({ deviceToken: normalized }).lean();
+  return stored || demoDeviceFromToken(normalized);
 }
 
 async function getDeviceByTokenOrThrow(token) {

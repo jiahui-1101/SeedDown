@@ -13,9 +13,9 @@ const char *WIFI_SSID = "Wokwi-GUEST";
 const char *WIFI_PASSWORD = "";
 
 const char *RENDER_BACKEND_URL = "https://nextlevelfarm.onrender.com";
-const char *DEVICE_ID = "dev_demo_001";
+const char *DEVICE_ID = "beginner_standard";
 // Paste the token returned by POST /api/devices/register. Leave empty to keep legacy demo mode.
-const char *DEVICE_TOKEN = "";
+const char *DEVICE_TOKEN = "sd_demo_beginner_standard";
 const char *OFFLINE_QUEUE_PATH = "/offline_readings.ndjson";
 const char *OFFLINE_QUEUE_TMP_PATH = "/offline_readings.tmp";
 const int MAX_OFFLINE_RECORDS = 120;

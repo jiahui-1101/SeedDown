@@ -1,0 +1,1219 @@
+import{A as E,a as xe,s as Pe}from"./index-Bs4kLmpj.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";const Ee="farm_001",ke=.042,Fe=1.1,Ce=.04,k={water:{low:40,high:70},light:{low:40,high:70},nutrient:{low:40,high:70}},_={dry:2.5,mid:1.5,wet:.8},H={dark:10,mid:8,bright:6},N={low:1.5,mid:1,high:.7},F={temp:28,humid:68,light:82,water:45,nutrient:78},Z=window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1"?"http://localhost:3000":window.location.origin;function Re(){var e;try{const i=JSON.parse(localStorage.getItem("user_farms")||"[]"),t=E.currentFarm||i.find(a=>a.id===E.currentFarmId)||(()=>{var a;return i.length>1&&console.warn("[WhatIf] currentFarmId not set — falling back to last farm:",(a=i[i.length-1])==null?void 0:a.id),i[i.length-1]})();return(e=t==null?void 0:t.plants)!=null&&e.length?t.plants:null}catch{return null}}function _e(e){const i={tomato:{kg:.32,units:4,readyIn:60,color:"#D85A30"},carrot:{kg:.24,units:6,readyIn:70,color:"#BA7517"},cabbage:{kg:.41,units:2,readyIn:80,color:"#639922"},eggplant:{kg:.28,units:3,readyIn:75,color:"#534AB7"},basil:{kg:.09,units:10,readyIn:28,color:"#1D9E75"},green_onion:{kg:.11,units:8,readyIn:50,color:"#3B6D11"},lettuce:{kg:.2,units:4,readyIn:35,color:"#639922"},spinach:{kg:.15,units:5,readyIn:40,color:"#2E7D32"},strawberry:{kg:.3,units:3,readyIn:90,color:"#C62828"},pepper:{kg:.25,units:3,readyIn:80,color:"#E65100"},mint:{kg:.08,units:8,readyIn:25,color:"#1B5E20"},chili:{kg:.1,units:6,readyIn:90,color:"#B71C1C"},cucumber:{kg:.35,units:3,readyIn:55,color:"#33691E"},banana:{kg:1.2,units:1,readyIn:270,color:"#F9A825"},mango:{kg:.8,units:1,readyIn:180,color:"#FF8F00"}},t=new Map;for(const a of e){const n=a.species;if(t.has(n)){const o=t.get(n);o.totalSlots+=a.slots||1}else t.set(n,{species:a.species,name:a.name,emoji:a.emoji||"🌱",totalSlots:a.slots||1})}return Array.from(t.values()).map(a=>{const n=i[a.species]||{kg:.2,readyIn:45,color:"#639922"};return{id:a.species,name:a.name,emoji:a.emoji||"🌱",days:n.readyIn,kg:parseFloat((n.kg*a.totalSlots).toFixed(2)),units:a.totalSlots,readyIn:n.readyIn,color:n.color,slots:a.totalSlots}})}async function De(){var t,a,n,o,r,l,g,s,d,u;const e=E.currentFarmId||Ee,i={temp:((a=(t=E.sensors)==null?void 0:t.temp)==null?void 0:a.val)??F.temp,humid:((o=(n=E.sensors)==null?void 0:n.humid)==null?void 0:o.val)??F.humid,light:((l=(r=E.sensors)==null?void 0:r.light)==null?void 0:l.val)??F.light,water:((s=(g=E.sensors)==null?void 0:g.water)==null?void 0:s.val)??F.water,nutrient:((u=(d=E.sensors)==null?void 0:d.nutrient)==null?void 0:u.val)??F.nutrient};try{const c=await(await fetch(`${Z}/api/sensors/latest?deviceId=${e}`)).json();return{temp:c.temperature??c.temp??i.temp,humid:c.humidity??c.humid??i.humid,light:c.light??c.lux??i.light,water:c.soilMoisture??c.water??i.water,nutrient:c.nutrient??c.ec??i.nutrient}}catch{return i}}async function Ae(){const e=E.currentFarmId||Ee;try{const t=await(await fetch(`${Z}/api/sensors/weekly-avg?deviceId=${e}`)).json(),a=t.avg||{};return{temp:a.temperature??F.temp,humid:a.humidity??F.humid,light:a.light??F.light,water:a.soilMoisture??F.water,nutrient:a.nutrient??F.nutrient,days:t.days,source:t.source}}catch{return De()}}const P=[{id:"tomato",name:"Tomato",emoji:"🍅",days:60,kg:.32,units:4,readyIn:60,color:"#D85A30"},{id:"carrot",name:"Carrot",emoji:"🥕",days:70,kg:.24,units:6,readyIn:70,color:"#BA7517"},{id:"cabbage",name:"Cabbage",emoji:"🥬",days:80,kg:.41,units:2,readyIn:80,color:"#639922"},{id:"eggplant",name:"Eggplant",emoji:"🍆",days:75,kg:.28,units:3,readyIn:75,color:"#534AB7"},{id:"basil",name:"Basil",emoji:"🌿",days:28,kg:.09,units:10,readyIn:28,color:"#1D9E75"},{id:"green_onion",name:"Green Onion",emoji:"🧅",days:50,kg:.11,units:8,readyIn:50,color:"#3B6D11"}],He=[{name:"Bolognese Pasta",emoji:"🍝",ingr:["tomato","carrot","basil"]},{name:"ABC Soup",emoji:"🍲",ingr:["cabbage","carrot","tomato","green_onion"]},{name:"Grilled Eggplant",emoji:"🍽️",ingr:["eggplant","basil"]},{name:"Spring Green Salad",emoji:"🥗",ingr:["green_onion","basil","cabbage"]}],Ne={lettuce:{mktPrice:4.8,perRowKgWk:.35,waterSave:3.2,energySave:1.1,fertilizer:.8,note:"Lettuce grows fast — your rows beat supermarket prices by 2× this month."},tomato:{mktPrice:7.2,perRowKgWk:.22,waterSave:2.1,energySave:.9,fertilizer:1.1,note:"Tomatoes fetched RM 7.20/kg at Pasar Borong this week. Yours cost much less."},carrot:{mktPrice:3.5,perRowKgWk:.18,waterSave:1.8,energySave:.7,fertilizer:.6,note:"Carrots are low-maintenance and high-value for home growing."},basil:{mktPrice:12,perRowKgWk:.12,waterSave:.9,energySave:.5,fertilizer:.4,note:"Fresh basil at supermarkets is expensive. Your rows are a gold mine."},eggplant:{mktPrice:5.5,perRowKgWk:.2,waterSave:2.4,energySave:1.3,fertilizer:.9,note:"Eggplant uses more water but market price makes it worthwhile."}},J={spinach:{emoji:"🥬",readyDays:5,readyZone:"Zone B lettuce",space:"1.2m²",impacts:[{name:"Temperature",emoji:"🌡️",change:"+0.5°C",dir:"up"},{name:"Humidity",emoji:"💧",change:"+3%",dir:"up"},{name:"pH value",emoji:"🧪",change:"No change",dir:"ok"},{name:"Light (h/d)",emoji:"☀️",change:"-0.5h",dir:"down"},{name:"Fertilizer",emoji:"🧫",change:"+8%",dir:"up"}],ai:"Spinach thrives alongside lettuce. Humidity increase is within safe range (≤85%)."},mint:{emoji:"🌿",readyDays:3,readyZone:"Zone A chives",space:"0.6m²",impacts:[{name:"Temperature",emoji:"🌡️",change:"No change",dir:"ok"},{name:"Humidity",emoji:"💧",change:"+5%",dir:"up"},{name:"pH value",emoji:"🧪",change:"-0.2",dir:"down"},{name:"Light (h/d)",emoji:"☀️",change:"No change",dir:"ok"},{name:"Fertilizer",emoji:"🧫",change:"+5%",dir:"up"}],ai:"Mint can be aggressive — consider a physical divider from neighbouring herbs."},chili:{emoji:"🌶️",readyDays:12,readyZone:"Zone C eggplant",space:"2.1m²",impacts:[{name:"Temperature",emoji:"🌡️",change:"+1.5°C",dir:"up"},{name:"Humidity",emoji:"💧",change:"-4%",dir:"down"},{name:"pH value",emoji:"🧪",change:"+0.3",dir:"up"},{name:"Light (h/d)",emoji:"☀️",change:"+2h",dir:"up"},{name:"Fertilizer",emoji:"🧫",change:"+15%",dir:"up"}],ai:"Chili needs more heat and light. You may need to adjust Zone C lighting before planting."},cucumber:{emoji:"🥒",readyDays:8,readyZone:"Zone D tomato",space:"1.8m²",impacts:[{name:"Temperature",emoji:"🌡️",change:"+1°C",dir:"up"},{name:"Humidity",emoji:"💧",change:"+6%",dir:"up"},{name:"pH value",emoji:"🧪",change:"No change",dir:"ok"},{name:"Light (h/d)",emoji:"☀️",change:"+1h",dir:"up"},{name:"Fertilizer",emoji:"🧫",change:"+12%",dir:"up"}],ai:"Cucumbers are water-heavy. Ensure your pump schedule scales with the new plant count."},strawberry:{emoji:"🍓",readyDays:14,readyZone:"Zone E herbs",space:"0.9m²",impacts:[{name:"Temperature",emoji:"🌡️",change:"-1°C",dir:"down"},{name:"Humidity",emoji:"💧",change:"+2%",dir:"up"},{name:"pH value",emoji:"🧪",change:"-0.4",dir:"down"},{name:"Light (h/d)",emoji:"☀️",change:"+1.5h",dir:"up"},{name:"Fertilizer",emoji:"🧫",change:"+10%",dir:"up"}],ai:"Strawberries prefer cooler temps. Place them away from the heat lamp cluster for best results."},tomato:{emoji:"🍅",readyDays:9,readyZone:"Zone D",space:"1.5m²",impacts:[{name:"Temperature",emoji:"🌡️",change:"+1°C",dir:"up"},{name:"Humidity",emoji:"💧",change:"+4%",dir:"up"},{name:"pH value",emoji:"🧪",change:"+0.1",dir:"ok"},{name:"Light (h/d)",emoji:"☀️",change:"+1.5h",dir:"up"},{name:"Fertilizer",emoji:"🧫",change:"+10%",dir:"up"}],ai:"Tomatoes do best with deep watering every 2–3 days."},basil:{emoji:"🌿",readyDays:4,readyZone:"Zone E herbs",space:"0.5m²",impacts:[{name:"Temperature",emoji:"🌡️",change:"No change",dir:"ok"},{name:"Humidity",emoji:"💧",change:"+2%",dir:"ok"},{name:"pH value",emoji:"🧪",change:"No change",dir:"ok"},{name:"Light (h/d)",emoji:"☀️",change:"+1h",dir:"up"},{name:"Fertilizer",emoji:"🧫",change:"+4%",dir:"up"}],ai:"Basil is low-impact. Great companion plant for tomatoes and peppers."}},We=[{zone:"Zone A",crop:"Chives",fill:90},{zone:"Zone B",crop:"Lettuce",fill:75},{zone:"Zone C",crop:"Eggplant",fill:95},{zone:"Zone D",crop:"Tomato",fill:60},{zone:"Zone E",crop:"Herbs",fill:82}],Q=Object.entries(J).map(([e,i])=>({id:e,name:e.charAt(0).toUpperCase()+e.slice(1),emoji:i.emoji}));let D=new Set,W=4,T=5,R="spinach",z=null;function Oe(){return`
+    <style>
+      /* ---- LAYOUT ---- */
+      .wif-root { padding: 0 0 80px; }
+      .wif-tab-bar { display:flex; gap:8px; padding:0 0 16px; border-bottom:0.5px solid var(--border-color,#e0e0e0); margin-bottom:18px; }
+
+      /* MODIFIED: tab button style aligned to design system — uses CSS variable colours, consistent border */
+      .wif-tab-btn { flex:1; padding:10px 4px 8px; border:0.5px solid var(--border-color,#ddd); border-radius:var(--radius-sm,8px); background:var(--bg-secondary,#f5f5f5); color:var(--text-secondary,#666); font-size:11px; font-weight:500; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px; transition:all .15s; }
+      .wif-tab-btn .wif-tab-icon { font-size:18px; }
+      .wif-tab-btn.active { background:var(--bg-primary,#fff); border-color:var(--accent,#639922); color:var(--accent,#639922); }
+
+      .wif-section { display:none; }
+      .wif-section.active { display:block; }
+
+      /* ---- CARD ---- */
+      .wif-card { background:var(--bg-primary,#fff); border:0.5px solid var(--border-color,#e0e0e0); border-radius:var(--radius,12px); padding:16px; margin-bottom:12px; }
+
+      /* MODIFIED: card title unified — uppercase, letter-spaced, smaller; matches .card-label from global CSS */
+      .wif-card-title { font-size:11px; font-weight:500; color:var(--text-secondary,#666); margin-bottom:12px; display:flex; align-items:center; gap:6px; text-transform:uppercase; letter-spacing:.05em; }
+
+      /* ---- METRICS ---- */
+      .wif-metric-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px; }
+      .wif-metric { background:var(--bg-secondary,#f5f5f5); border-radius:var(--radius-sm,8px); padding:10px 8px; text-align:center; }
+      .wif-metric-val { font-size:19px; font-weight:500; color:var(--text-primary,#111); }
+      .wif-metric-lbl { font-size:10px; color:var(--text-secondary,#666); margin-top:2px; }
+
+      /* ---- SLIDER ---- */
+      .wif-slider-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+      .wif-slider-row label { font-size:12px; color:var(--text-secondary,#666); min-width:72px; }
+      .wif-slider-row input[type=range] { flex:1; }
+      .wif-slider-val { font-size:13px; font-weight:500; min-width:56px; text-align:right; }
+
+      /* ---- BADGES ---- */
+      .wif-badge { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:500; }
+      /* MODIFIED: badge colours now use CSS variable ramps instead of hardcoded hex */
+      .wif-badge-green { background:var(--green-50,#EAF3DE); color:var(--green-800,#27500A); }
+      .wif-badge-amber { background:var(--amber-50,#FAEEDA); color:var(--amber-800,#633806); }
+      .wif-badge-teal  { background:var(--teal-50,#E1F5EE);  color:var(--teal-600,#0F6E56); }
+      .wif-badge-red   { background:var(--red-50,#FCEBEB);   color:var(--red-800,#501313); }
+      .wif-badge-blue  { background:var(--blue-50,#E6F1FB);  color:var(--blue-600,#185FA5); }
+
+      /* ---- HARVEST TIMELINE ---- */
+      .wif-tl-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+      .wif-tl-name { font-size:12px; min-width:100px; color:var(--text-secondary,#666); }
+      .wif-tl-track { flex:1; height:7px; background:var(--bg-secondary,#f0f0f0); border-radius:4px; overflow:hidden; }
+      .wif-tl-fill { height:100%; border-radius:4px; transition:width .4s; }
+      .wif-tl-end { font-size:11px; min-width:52px; text-align:right; }
+      /* MODIFIED: new class for ready state showing unit count + badge inline */
+      .wif-tl-count { font-size:11px; font-weight:500; color:var(--accent,#639922); min-width:110px; text-align:right; display:flex; align-items:center; gap:4px; justify-content:flex-end; }
+
+      /* ---- CROP PILLS ---- */
+      .wif-crop-pills { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px; }
+      .wif-pill { display:flex; align-items:center; gap:5px; padding:6px 12px; border:0.5px solid var(--border-color,#ddd); border-radius:20px; font-size:12px; background:var(--bg-primary,#fff); cursor:pointer; transition:all .12s; }
+      .wif-pill.selected { background:var(--green-50,#EAF3DE); border-color:var(--accent,#639922); color:var(--green-800,#27500A); }
+
+      /* ---- RECIPES ---- */
+      .wif-recipe-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .wif-recipe-card { background:var(--bg-secondary,#f5f5f5); border-radius:var(--radius-sm,8px); padding:12px; border:0.5px solid var(--border-color,#e0e0e0); }
+      /* MODIFIED: new hero emoji above recipe name for appealing food presentation */
+      .wif-recipe-hero { font-size:20px; margin-bottom:6px; }
+      .wif-recipe-name { font-size:13px; font-weight:500; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary,#111); }
+      .wif-ingr-tag { display:inline-block; background:var(--green-50,#EAF3DE); color:var(--green-800,#27500A); border-radius:3px; padding:2px 5px; margin:2px; font-size:10px; }
+      .wif-ingr-tag.missing { background:var(--bg-secondary,#eee); color:#aaa; text-decoration:line-through; }
+
+      /* ---- AI NOTE ---- */
+      .wif-ai-note { background:var(--teal-50,#E1F5EE); border-left:3px solid var(--teal-400,#1D9E75); border-radius:0 var(--radius-sm,8px) var(--radius-sm,8px) 0; padding:10px 14px; font-size:12px; color:var(--teal-600,#0F6E56); margin-top:12px; display:flex; gap:8px; align-items:flex-start; }
+      .wif-ai-note.standalone { border-radius:var(--radius,12px); margin-top:0; }
+
+      /* ---- SELECTS / INPUTS ---- */
+      .wif-sel { width:100%; padding:8px 10px; border:0.5px solid var(--border-color,#ddd); border-radius:var(--radius-sm,8px); background:var(--bg-secondary,#f5f5f5); color:var(--text-primary,#111); font-size:13px; margin-bottom:10px; }
+
+      /* ---- COST SAVINGS ---- */
+      .wif-num-row { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+      .wif-num-row label { font-size:12px; color:var(--text-secondary,#666); min-width:80px; }
+      .wif-qty-ctrl { display:flex; align-items:center; gap:8px; }
+      .wif-qty-btn { width:28px; height:28px; border:0.5px solid var(--border-color,#ddd); border-radius:var(--radius-sm,8px); background:var(--bg-secondary,#f5f5f5); color:var(--text-primary,#111); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1; }
+      .wif-qty-num { width:32px; text-align:center; font-size:13px; font-weight:500; }
+      .wif-savings-big { text-align:center; padding:16px 0; }
+      .wif-savings-num { font-size:38px; font-weight:500; color:var(--accent,#3B6D11); }
+      .wif-savings-lbl { font-size:12px; color:var(--text-secondary,#666); margin-top:4px; }
+      .wif-cost-row { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:var(--radius-sm,8px); font-size:13px; margin-bottom:6px; }
+      .wif-cost-income  { background:var(--green-50,#EAF3DE); }
+      .wif-cost-expense { background:var(--red-50,#FCEBEB); }
+      .wif-cost-net     { background:var(--teal-50,#E1F5EE); font-weight:500; }
+      .wif-cost-lbl { color:var(--text-secondary,#666); font-size:12px; }
+      .wif-divider { border:none; border-top:0.5px solid var(--border-color,#e0e0e0); margin:12px 0; }
+
+      /* ---- NEW PLANT — SEARCH INPUT (replaces plain <select>) ---- */
+      /* MODIFIED: entirely new component — search box with icon + suggestion dropdown */
+      .wif-np-search-wrap { position:relative; margin-bottom:10px; }
+      .wif-np-search { width:100%; padding:8px 10px 8px 34px; border:0.5px solid var(--border-color,#ddd); border-radius:var(--radius-sm,8px); background:var(--bg-secondary,#f5f5f5); color:var(--text-primary,#111); font-size:13px; }
+      .wif-np-search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:16px; color:var(--text-secondary,#666); pointer-events:none; }
+      .wif-np-suggestions { background:var(--bg-primary,#fff); border:0.5px solid var(--border-color,#ddd); border-radius:var(--radius-sm,8px); overflow:hidden; margin-top:4px; }
+      .wif-np-sug-item { padding:9px 12px; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px; border-bottom:0.5px solid var(--border-color,#eee); color:var(--text-primary,#111); transition:background .1s; }
+      .wif-np-sug-item:last-child { border-bottom:none; }
+      .wif-np-sug-item:hover { background:var(--bg-secondary,#f5f5f5); }
+      .wif-np-sug-emoji { font-size:16px; }
+
+      /* ---- NEW PLANT — READINESS + ZONES ---- */
+      .wif-readiness { display:flex; align-items:center; gap:12px; padding:12px; background:var(--teal-50,#E1F5EE); border-radius:var(--radius-sm,8px); margin-bottom:12px; }
+      .wif-readiness-title { font-size:13px; font-weight:500; color:var(--teal-600,#0F6E56); }
+      .wif-readiness-sub   { font-size:11px; color:var(--text-secondary,#666); margin-top:2px; }
+      .wif-zone-row { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:var(--bg-secondary,#f5f5f5); border-radius:var(--radius-sm,8px); margin-bottom:6px; }
+      .wif-zone-name { font-size:13px; font-weight:500; color:var(--text-primary,#111); }
+      .wif-zone-meta { font-size:11px; color:var(--text-secondary,#666); }
+
+      /* MODIFIED: impact grid changed from 3-col auto-fit to 2-col fixed — safer for 380px mobile viewport */
+      .wif-impact-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+      .wif-impact-card { border-radius:var(--radius-sm,8px); padding:14px 12px; text-align:center; border:0.5px solid transparent; }
+      /* MODIFIED: impact card colours now use CSS variable ramps with border accent */
+      .wif-impact-card.up   { background:var(--amber-50,#FAEEDA); border-color:var(--amber-100,#FAC775); }
+      .wif-impact-card.down { background:var(--blue-50,#E6F1FB);  border-color:var(--blue-200,#85B7EB);  }
+      .wif-impact-card.ok   { background:var(--green-50,#EAF3DE); border-color:var(--green-100,#C0DD97); }
+      .wif-impact-card.warn { background:var(--red-50,#FCEBEB);   border-color:var(--red-200,#F09595);   }
+      /* MODIFIED: new emoji element replaces Tabler icon */
+      .wif-impact-emoji { font-size:22px; margin-bottom:4px; }
+      .wif-impact-name { font-size:10px; color:var(--text-secondary,#666); margin:4px 0 3px; text-transform:uppercase; letter-spacing:.04em; }
+      .wif-impact-val { font-size:15px; font-weight:500; }
+      .wif-impact-val.up   { color:var(--amber-400,#BA7517); }
+      .wif-impact-val.down { color:var(--blue-400,#378ADD);  }
+      .wif-impact-val.ok   { color:var(--green-600,#3B6D11); }
+      .wif-impact-val.warn { color:var(--red-400,#E24B4A);   }
+    </style>
+
+    <div class="wif-root">
+
+      <!-- TAB BAR -->
+      <div class="wif-tab-bar">
+        <button class="wif-tab-btn active" onclick="wifSwitchTab('harvest',this)">
+          <span class="wif-tab-icon">🌿</span><span>Harvest</span>
+        </button>
+        <button class="wif-tab-btn" onclick="wifSwitchTab('cost',this)">
+          <span class="wif-tab-icon">💰</span><span>Savings</span>
+        </button>
+        <button class="wif-tab-btn" onclick="wifSwitchTab('newplant',this)">
+          <span class="wif-tab-icon">🌱</span><span>New Plant</span>
+        </button>
+      </div>
+
+      <!-- ===== TAB 1: HARVEST PREDICT ===== -->
+      <div id="wif-harvest" class="wif-section active">
+        <div class="wif-card">
+          <div class="wif-card-title">📅 Harvest timeline</div>
+          <div class="wif-slider-row">
+            <label>Forecast</label>
+            <input type="range" min="7" max="365" value="30" step="1" id="wif-sl-days" oninput="wifUpdateHarvest()">
+            <span class="wif-slider-val" id="wif-v-days">30 days</span>
+          </div>
+          <!-- MODIFIED: replaced "Days left" metric with "Total units" to show exact harvest count -->
+          <div class="wif-metric-grid">
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-items">0</div><div class="wif-metric-lbl">Crops ready</div></div>
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-yield">0.00 kg</div><div class="wif-metric-lbl">Est. yield</div></div>
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-units">0</div><div class="wif-metric-lbl">Total units</div></div>
+          </div>
+          <div id="wif-crop-timelines"></div>
+        </div>
+        <div class="wif-card">
+          <div class="wif-card-title">✅ Select harvested crops</div>
+          <div class="wif-crop-pills" id="wif-crop-select"></div>
+        </div>
+        <div class="wif-card">
+          <div class="wif-card-title">👨‍🍳 Suggested recipes</div>
+          <div class="wif-recipe-grid" id="wif-recipe-grid"></div>
+          <div class="wif-ai-note"><span>🤖</span><span id="wif-ai-recipe-note">Select crops above to see recipe suggestions.</span></div>
+        </div>
+      </div>
+
+      <!-- ===== TAB 2: COST SAVINGS ===== -->
+      <div id="wif-cost" class="wif-section">
+        <div class="wif-card">
+          <div class="wif-card-title">🪴 Choose plant to analyse</div>
+          <!-- MODIFIED: rows count removed from option labels; controlled by stepper below -->
+          <select class="wif-sel" id="wif-cost-plant" onchange="wifTriggerCostAi()">
+  <option value="" disabled>Loading your crops...</option>
+</select>
+          <!-- MODIFIED: new +/− stepper for rows count, separate from plant type -->
+          <div class="wif-num-row">
+            <label>Units planted</label>
+            <div class="wif-qty-ctrl">
+              <button class="wif-qty-btn" onclick="wifChangeRows(-1)">−</button>
+              <span class="wif-qty-num" id="wif-rows-disp">5</span>
+              <button class="wif-qty-btn" onclick="wifChangeRows(1)">+</button>
+            </div>
+          </div>
+          <!-- MODIFIED: cycle slider changed from months (1–6) to weeks (1–24) -->
+          <div class="wif-slider-row">
+            <label>Cycle</label>
+            <input type="range" min="1" max="24" value="1" step="1" id="wif-sl-weeks" oninput="wifUpdateCost()">
+            <span class="wif-slider-val" id="wif-v-weeks">1 wk</span>
+          </div>
+        </div>
+        <div class="wif-card">
+          <div class="wif-savings-big">
+            <div class="wif-savings-num" id="wif-net-saving">RM 0.00</div>
+            <div class="wif-savings-lbl">Net savings this cycle</div>
+          </div>
+          <hr class="wif-divider">
+          <div id="wif-cost-breakdown"></div>
+        </div>
+        <div class="wif-card">
+          <!-- MODIFIED: label changed from "Monthly savings trend" to "Weekly savings trend" -->
+          <div class="wif-card-title">📊 Weekly savings trend</div>
+          <div style="position:relative;height:160px;">
+            <canvas id="wif-savings-chart"></canvas>
+          </div>
+        </div>
+        <div class="wif-ai-note standalone" style="border-radius:var(--radius,12px);padding:14px 16px;">
+          <span>🤖</span><span id="wif-cost-ai-note">Loading...</span>
+        </div>
+      </div>
+
+      <!-- ===== TAB 3: NEW PLANT ===== -->
+      <div id="wif-newplant" class="wif-section">
+        <div class="wif-card">
+          <div class="wif-card-title">🌱 Add new plant</div>
+          <!-- MODIFIED: replaced <select> with smart-search input + suggestion dropdown -->
+          <div class="wif-np-search-wrap">
+            <span class="wif-np-search-icon">🔍</span>
+            <input
+              class="wif-np-search"
+              id="wif-np-input"
+              placeholder="Type to search or select species..."
+              oninput="wifNpFilterSuggestions()"
+              onfocus="wifNpShowSuggestions()"
+              onblur="setTimeout(wifNpHideSuggestions, 150)"
+              autocomplete="off"
+            >
+          </div>
+          <div class="wif-np-suggestions" id="wif-np-suggestions" style="display:none;"></div>
+          <div class="wif-num-row" style="margin-top:8px;">
+            <label>Unit count</label>
+            <div class="wif-qty-ctrl">
+              <button class="wif-qty-btn" onclick="wifChangeQty(-1)">−</button>
+              <span class="wif-qty-num" id="wif-qty-disp">4</span>
+              <button class="wif-qty-btn" onclick="wifChangeQty(1)">+</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✅ FIX 4.3: AI advisor card — shown below add-plant form, updated by wifFetchNewPlantAi -->
+        <div id="wif-np-advisor-card" class="wif-card" style="display:none;border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
+          <div class="wif-card-title">🤖 AI Advisor</div>
+          <div id="wif-np-advisor-body"></div>
+        </div>
+        <div class="wif-card">
+          <div class="wif-card-title">⏰ Planting readiness</div>
+          <div class="wif-readiness" id="wif-readiness">
+            <span style="font-size:24px;">📅</span>
+            <div>
+              <div class="wif-readiness-title" id="wif-ready-title">You can plant in 5 days</div>
+              <div class="wif-readiness-sub" id="wif-ready-sub">Zone B lettuce harvests on Day 5 — freeing 1.2m² of space.</div>
+            </div>
+          </div>
+          <div class="wif-card-title" style="margin-top:4px;">🗺️ Current zones</div>
+          <div id="wif-zone-list"></div>
+        </div>
+        <div class="wif-card">
+          <div class="wif-card-title">📈 Predicted resource impact</div>
+          <!-- MODIFIED: grid is now 2-col instead of auto-fit 3-col -->
+          <div class="wif-impact-grid" id="wif-impact-grid"></div>
+          <div class="wif-ai-note" id="wif-np-ai-note-wrap" style="display:none;"><span> </span><span id="wif-np-ai-note">Loading...</span></div>
+        </div>
+      </div>
+
+    </div>
+  `}function Ke(){var n;const e=document.getElementById("wif-cost-plant");if(!e)return;const i=window._WIF_DYNAMIC_CROPS||P,t=new Set,a=i.filter(o=>t.has(o.id)?!1:(t.add(o.id),!0));a.length===0?e.innerHTML='<option value="lettuce">Lettuce</option><option value="tomato">Tomato</option>':e.innerHTML=a.map(o=>`<option value="${o.id}">${o.emoji} ${o.name}</option>`).join(""),e.value=((n=a[0])==null?void 0:n.id)||"lettuce",setTimeout(Se,0)}function Ge(){D=new Set,W=4,T=5,R="spinach",window.wifSwitchTab=qe,window.wifUpdateHarvest=ge,window.wifUpdateCost=j,window.wifUpdateNewPlant=M,window.wifToggleCrop=Ze,window.wifChangeQty=it,window.wifChangeRows=Ye,window.wifNpFilterSuggestions=Qe,window.wifSelectNp=tt,window.wifSelectSpecies=Be,window.wifNpShowSuggestions=Xe,window.wifNpHideSuggestions=ne,window.wifTriggerCostAi=Se;const e=Re();e!=null&&e.length?window._WIF_DYNAMIC_CROPS=_e(e):window._WIF_DYNAMIC_CROPS=null,z&&(z.destroy(),z=null);const i=document.getElementById("wif-np-input");i&&(i.value="Spinach"),Ke(),ge(),Ae().then(t=>{window._wif_lastSensors=t,j()}).catch(()=>j()),M()}function qe(e,i){document.querySelectorAll(".wif-section").forEach(t=>t.classList.remove("active")),document.querySelectorAll(".wif-tab-btn").forEach(t=>t.classList.remove("active")),document.getElementById("wif-"+e).classList.add("active"),i.classList.add("active"),e==="cost"&&j(),e==="newplant"&&M()}function ge(){const e=window._WIF_DYNAMIC_CROPS||P,i=parseInt(document.getElementById("wif-sl-days").value);document.getElementById("wif-v-days").textContent=i+(i===1?" day":" days");const t=e.filter(o=>o.readyIn<=i),a=t.reduce((o,r)=>o+r.kg,0),n=t.reduce((o,r)=>o+r.units,0);document.getElementById("wif-hm-items").textContent=t.length,document.getElementById("wif-hm-yield").textContent=a.toFixed(2)+" kg",document.getElementById("wif-hm-units").textContent=n,document.getElementById("wif-crop-timelines").innerHTML=e.map(o=>{const r=Math.min(100,Math.round(i/o.readyIn*100)),l=o.readyIn<=i;return`
+      <div class="wif-tl-row">
+        <span class="wif-tl-name">${o.emoji} ${o.name}</span>
+        <div class="wif-tl-track">
+          <div class="wif-tl-fill" style="width:${r}%;background:${l?"var(--accent,#639922)":"var(--amber-100,#FAC775)"};"></div>
+        </div>
+        ${l?`<span class="wif-tl-count">${o.units} units <span class="wif-badge wif-badge-green">Ready</span></span>`:`<span class="wif-tl-end" style="color:var(--text-secondary,#666)">Day ${o.readyIn}</span>`}
+      </div>`}).join(""),Ie(i),$e()}function Ie(e){const i=window._WIF_DYNAMIC_CROPS||P,t=document.getElementById("wif-crop-select"),a=i.filter(n=>n.readyIn<=e);if(D.forEach(n=>{a.find(o=>o.id===n)||D.delete(n)}),a.length===0){t.innerHTML='<span style="font-size:12px;color:var(--text-secondary,#999);">No crops ready yet — move the slider forward.</span>';return}t.innerHTML=a.map(n=>`
+    <div class="wif-pill ${D.has(n.id)?"selected":""}"
+         onclick="wifToggleCrop('${n.id}')">
+      ${n.emoji} ${n.name}
+    </div>`).join("")}function Ze(e){D.has(e)?D.delete(e):D.add(e);const i=parseInt(document.getElementById("wif-sl-days").value);Ie(i),$e()}function $e(){const e=document.getElementById("wif-recipe-grid"),i=document.getElementById("wif-ai-recipe-note");if(D.size===0){e.innerHTML="",i.textContent="Select crops above to see recipe suggestions.";return}const t=He.map(a=>{const n=a.ingr.filter(o=>D.has(o)).length;return n===0?null:{...a,match:n,pct:Math.round(n/a.ingr.length*100)}}).filter(Boolean).sort((a,n)=>n.match-a.match);e.innerHTML=t.map(a=>`
+    <div class="wif-recipe-card">
+      <div class="wif-recipe-hero">${a.emoji}</div>
+      <div class="wif-recipe-name">
+        ${a.name}
+        <span class="wif-badge ${a.pct===100?"wif-badge-green":"wif-badge-amber"}">${a.pct}%</span>
+      </div>
+      <div>
+        ${a.ingr.map(n=>{const r=(window._WIF_DYNAMIC_CROPS||P).find(g=>g.id===n)||P.find(g=>g.id===n);return D.has(n)?`<span class="wif-ingr-tag">${r?r.emoji+" "+r.name:n}</span>`:`<span class="wif-ingr-tag" style="background:#f0f0f0;color:#999;border:0.5px dashed #ccc;">🛒 ${r?r.name:n}</span>`}).join("")}
+      </div>
+    </div>`).join(""),i.textContent=t.length>0?`${t.length} recipe${t.length>1?"s":""} match your harvest. Loading database...`:"No local matches. Loading database recipes...",Ue([...D])}async function Ue(e){const i=document.getElementById("wif-recipe-grid"),t=document.getElementById("wif-ai-recipe-note"),a={tomato:["tomato","tomatoes"],carrot:["carrot","carrots"],cabbage:["cabbage"],eggplant:["eggplant","aubergine","brinjal"],basil:["basil"],green_onion:["green onion","green onions","scallion"],lettuce:["lettuce"],spinach:["spinach"],strawberry:["strawberry","strawberries"],pepper:["bell pepper","green pepper","capsicum"]};try{const n=await Promise.all(e.map(s=>fetch(`${Z}/api/whatif/recipes?species=${s}`).then(d=>d.ok?d.json():{recipes:[]}).catch(()=>({recipes:[]})))),o=new Set,r=n.flatMap(s=>s.recipes||[]).filter(s=>o.has(s.name)?!1:(o.add(s.name),!0));if(!r.length){t.textContent=t.textContent.replace("Loading database...","(No DB results)").replace("Loading database recipes...","(No DB results)");return}const l=r.map(s=>{const d=e.filter(c=>{const w=a[c]||[c];return s.ingredients.some(p=>w.some(v=>p.toLowerCase().includes(v.toLowerCase())))});if(d.length===0)return null;const u=e.flatMap(c=>a[c]||[c]),m=s.ingredients.filter(c=>{const w=c.toLowerCase();return!(u.some(v=>w.includes(v))||["salt","pepper","water","oil","sugar","flour","butter","egg","milk","sauce","mix","seasoning","powder","vinegar","cream","cheese","margarine"].some(v=>w.includes(v)))}).map(c=>c.replace(/^\d[\d\s\/]*(\(\d+[\s\w\.]+\))?\s*(lb|oz|c|pkg|tsp|tbsp|can|qt|pt|pkg|Tbsp|large|medium|small|fresh|dried|chopped|diced|sliced|cooked|frozen|thawed|drained|shredded|grated|minced|crushed|ground|boneless|skinless)\.?\s*/gi,"").replace(/^[\d\/\s\.]+/,"").trim()).filter(c=>c.length>2&&c.length<40).slice(0,4);return{recipe:s,grownMatches:d,otherIngredients:m}}).filter(Boolean).sort((s,d)=>d.grownMatches.length-s.grownMatches.length);if(!l.length){t.textContent="No database recipes matched your selected crops.";return}const g=l.map(({recipe:s,grownMatches:d,otherIngredients:u})=>{const m=d.map(w=>{const v=(window._WIF_DYNAMIC_CROPS||P).find(y=>y.id===w)||P.find(y=>y.id===w);return`<span class="wif-ingr-tag" style="background:var(--teal-50,#E1F5EE);color:var(--teal-600,#0F6E56);border:0.5px solid var(--teal-200,#7DD3BD);">${v?v.emoji+" "+v.name:w}</span>`}).join(""),c=u.map(w=>`<span class="wif-ingr-tag" style="background:#f0f0f0;color:#888;border:0.5px dashed #ccc;">🛒 ${w}</span>`).join("");return`
+        <div class="wif-recipe-card" style="border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
+          <div class="wif-recipe-hero">🍽️</div>
+          <div class="wif-recipe-name">
+            ${s.name.trim()}
+            <span class="wif-badge wif-badge-teal">DB</span>
+          </div>
+          <div>${m}${c}</div>
+        </div>`}).join("");i.innerHTML+=g,t.textContent=`${l.length} recipes found — green = your harvest, 🛒 = ingredients to buy.`}catch{t.textContent=t.textContent.replace("Loading database...","(Backend offline — local only)").replace("Loading database recipes...","(Backend offline — local only)")}}function Ye(e){T=Math.max(1,Math.min(20,T+e));const i=document.getElementById("wif-rows-disp");i&&(i.textContent=T),j()}function j(){const e=document.getElementById("wif-cost-plant"),i=e==null?void 0:e.value,t=document.getElementById("wif-sl-weeks");if(!i||!t)return;const a=parseInt(t.value);document.getElementById("wif-v-weeks").textContent=a+(a===1?" wk":" wks");const n=Ne[i]||{mktPrice:5,perRowKgWk:.28,fertilizer:.6,note:"Analysing your crop with current sensor data..."},o=T*n.perRowKgWk*a,r=o*n.mktPrice,l=window._wif_lastSensors||F,g=l.water<k.water.low?_.dry:l.water>k.water.high?_.wet:_.mid,s=parseFloat((g*T*a*ke).toFixed(2)),d=l.light>k.light.high?H.bright:l.light>k.light.low?H.mid:H.dark,u=parseFloat((d*Ce*a*7).toFixed(2)),m=parseFloat((u*Fe).toFixed(2)),c=l.nutrient<k.nutrient.low?N.low:l.nutrient>k.nutrient.high?N.high:N.mid,w=parseFloat((n.fertilizer*(a/4)*c).toFixed(2)),p=s+m+w,v=r-p;document.getElementById("wif-net-saving").textContent="RM "+v.toFixed(2),document.getElementById("wif-cost-breakdown").innerHTML=`
+    <div class="wif-cost-row wif-cost-income">
+      <span class="wif-cost-lbl">📦 Harvest value (${o.toFixed(1)} kg × RM ${n.mktPrice}/kg)</span>
+      <span style="color:var(--green-600,#3B6D11);font-weight:500;">+RM ${r.toFixed(2)}</span>
+    </div>
+    <div class="wif-cost-row wif-cost-expense">
+      <span class="wif-cost-lbl">💧 Water cost <span style="font-size:10px;opacity:.7;">(soil ${l.water}% → ${g}L/plant/wk)</span></span>
+      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${s.toFixed(2)}</span>
+    </div>
+    <div class="wif-cost-row wif-cost-expense">
+      <span class="wif-cost-lbl">⚡ Energy cost <span style="font-size:10px;opacity:.7;">(light ${l.light}% → ${d}h lighting/day)</span></span>
+      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${m.toFixed(2)}</span>
+    </div>
+    <div class="wif-cost-row wif-cost-expense">
+      <span class="wif-cost-lbl">🧪 Fertilizer <span style="font-size:10px;opacity:.7;">(nutrient ${l.nutrient}% → ${c}× base)</span></span>
+      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${w.toFixed(2)}</span>
+    </div>
+    <div class="wif-cost-row wif-cost-net">
+      <span>⭐ Net savings</span>
+      <span style="color:var(--teal-600,#0F6E56);">RM ${v.toFixed(2)}</span>
+    </div>`;const y=document.getElementById("wif-cost-ai-note");y&&!window._wif_aiNoteSet&&(y.textContent=n.note),Ve(a,n)}function Ve(e,i){const t=document.getElementById("wif-savings-chart");if(t)if(typeof Chart>"u"){const a=document.createElement("script");a.src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",a.onload=()=>fe(t,e,i),document.head.appendChild(a)}else fe(t,e,i)}function fe(e,i,t){z&&(z.destroy(),z=null);const a=window._wif_lastSensors||F,n=a.water<k.water.low?_.dry:a.water>k.water.high?_.wet:_.mid,o=a.light>k.light.high?H.bright:a.light>k.light.low?H.mid:H.dark,r=a.nutrient<k.nutrient.low?N.low:a.nutrient>k.nutrient.high?N.high:N.mid,l=[],g=[];for(let s=1;s<=i;s++){l.push("W"+s);const d=T*t.perRowKgWk*s*t.mktPrice,u=n*T*s*ke,m=o*Ce*s*7*Fe,c=t.fertilizer*(s/4)*r;g.push(parseFloat((d-u-m-c).toFixed(2)))}z=new Chart(e,{type:"bar",data:{labels:l,datasets:[{label:"Net savings (RM)",data:g,backgroundColor:"#97C459",borderRadius:4,borderSkipped:!1}]},options:{responsive:!0,maintainAspectRatio:!1,plugins:{legend:{display:!1},tooltip:{callbacks:{label:s=>"RM "+s.raw.toFixed(2)}}},scales:{y:{beginAtZero:!0,ticks:{callback:s=>"RM "+s,font:{size:10}},grid:{color:"rgba(128,128,128,0.08)"}},x:{grid:{display:!1},ticks:{font:{size:10}}}}}})}function Se(){var t,a,n;const e=(t=document.getElementById("wif-cost-plant"))==null?void 0:t.value,i=parseInt(((a=document.getElementById("wif-sl-weeks"))==null?void 0:a.value)||1);e&&(window._wif_aiNoteSet=!1,(n=document.getElementById("wif-ai-savings-detail"))==null||n.remove(),j(),Je(e,T,i))}async function Je(e,i,t){var o;const a=document.getElementById("wif-cost-ai-note");a.textContent="🤖 Analyzing your sensor data...";const n=await Ae();window._wif_lastSensors=n,j(),(o=document.getElementById("wif-ai-savings-detail"))==null||o.remove();try{let r=100;(n.temp>32||n.temp<20)&&(r-=15),(n.humid>85||n.humid<40)&&(r-=10),n.water<35&&(r-=20),n.light<40&&(r-=15),n.nutrient<45&&(r-=15),r=Math.max(25,Math.min(100,r));let l="Excellent";r<90&&(l="Good"),r<70&&(l="Moderate"),r<50&&(l="Poor"),window._wif_dynamicCondition={score:r,label:l};const g=await fetch(`${Z}/api/whatif/costsaving`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plant:e,units:i,weeks:t,sensors:n})});if(!g.ok)throw new Error("Server error");const s=await g.json();window._wif_aiNoteSet=!0,a.textContent=s.insight;const d=document.createElement("div");d.id="wif-ai-savings-detail",d.innerHTML=`
+      <div class="wif-card" style="margin-bottom:12px;border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
+        <div class="wif-card-title">🤖 AI Resource Analysis</div>
+        <div class="wif-metric-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:10px;">
+          <div class="wif-metric">
+            <div class="wif-metric-val" style="font-size:15px;color:var(--teal-600,#0F6E56);">${window._wif_dynamicCondition.score}%</div>
+            <div class="wif-metric-lbl">Condition: ${window._wif_dynamicCondition.label}</div>
+          </div>
+          <div class="wif-metric">
+            <div class="wif-metric-val" style="font-size:15px;color:var(--accent,#639922);">RM ${(s.totalSavedRM??0).toFixed(2)}</div>
+            <div class="wif-metric-lbl">AI Est. Saved</div>
+          </div>
+        </div>
+        <div class="wif-cost-row wif-cost-income">
+          <span class="wif-cost-lbl">💧 Water saved</span>
+          <span style="color:var(--green-600,#3B6D11);">${(s.waterSavedLiters??0).toFixed(1)}L · RM ${(s.waterCostSaved??0).toFixed(2)}</span>
+        </div>
+        <div class="wif-cost-row wif-cost-income">
+          <span class="wif-cost-lbl">⚡ Energy saved</span>
+          <span style="color:var(--green-600,#3B6D11);">${(s.energySavedkWh??0).toFixed(2)}kWh · RM ${(s.energyCostSaved??0).toFixed(2)}</span>
+        </div>
+      </div>`;const u=document.getElementById("wif-cost"),m=u.querySelectorAll(":scope > .wif-card");m.length>=3?m[2].before(d):u.appendChild(d)}catch{a.textContent="AI analysis unavailable — showing calculated estimates only."}}let Y=null;function Qe(){const e=document.getElementById("wif-np-input"),i=document.getElementById("wif-np-suggestions");if(!e||!i)return;const t=e.value.trim().toLowerCase(),a=Q.filter(o=>o.name.toLowerCase().includes(t)),n=a.find(o=>o.name.toLowerCase()===t);n&&(R=n.id,clearTimeout(Y),Y=setTimeout(M,400)),!n&&t.length>0&&(R=t,clearTimeout(Y),Y=setTimeout(M,600)),a.length===0?i.innerHTML=`
+      <div class="wif-np-sug-item">
+        🤖 Analyze "${t}"
+      </div>
+    `:i.innerHTML=a.map(o=>`
+      <div class="wif-np-sug-item"
+           onclick="wifSelectNp('${o.id}')">
+        <span class="wif-np-sug-emoji">${o.emoji}</span>
+        ${o.name}
+      </div>
+    `).join(""),i.style.display="block"}function Xe(){const e=document.getElementById("wif-np-input").value.toLowerCase(),i=e?Q.filter(t=>t.name.toLowerCase().includes(e)):Q;et(i)}function ne(){const e=document.getElementById("wif-np-suggestions");e&&(e.style.display="none")}function et(e){const i=document.getElementById("wif-np-suggestions");if(i){if(!e.length){i.style.display="none";return}i.style.display="block",i.innerHTML=e.map(t=>`
+    <div class="wif-np-sug-item" data-id="${t.id}" data-name="${t.name}">
+      <span class="wif-np-sug-emoji">${t.emoji}</span>
+      <span>${t.name}</span>
+    </div>`).join(""),i.querySelectorAll(".wif-np-sug-item").forEach(t=>{t.addEventListener("click",()=>{Be(t.dataset.id,t.dataset.name)})})}}function tt(e){R=e.toLowerCase();const i=document.getElementById("wif-np-input");if(i){const t=Q.find(a=>a.id===e);i.value=t?`${t.emoji} ${t.name}`:e}M(),ne()}function Be(e,i){R=e;const t=document.getElementById("wif-np-input");t&&(t.value=i),ne(),M()}function it(e){W=Math.max(1,Math.min(20,W+e));const i=document.getElementById("wif-qty-disp");i&&(i.textContent=W),M()}function oe(){try{const e=JSON.parse(localStorage.getItem("user_farms")||"[]");if(!e.length)return null;const i=e.find(s=>{var d;return s.id===((d=E)==null?void 0:d.currentFarmId)})||e[e.length-1];if(!i)return null;const t=Array.isArray(i.plants)?i.plants:[];if(!t.length)return null;const n=(i.rackLabel||i.rackTypeId||"3-tier").match(/(\d+)/),o=n?parseInt(n[1]):3,r={};if(t.some(s=>s.tier!==void 0))t.forEach(s=>{const d=s.tier||1;r[d]||(r[d]=[]),r[d].push(s)});else{const s=Math.ceil(t.length/o);t.forEach((d,u)=>{const m=Math.floor(u/s)+1;r[m]||(r[m]=[]),r[m].push(d)})}const g=i.slotsPerTier||Math.max(...t.map(s=>s.position||1))||3;return Array.from({length:o},(s,d)=>{const u=d+1,m=r[u]||[],c=Math.round(m.length/g*100),w=[...new Set(m.map(p=>p.name))].join(", ")||"Empty";return{zone:`Tier ${u}`,crop:w,fill:Math.min(c,100)}})}catch(e){return console.warn("wifBuildFarmZones error:",e),null}}function at(){const e=document.getElementById("wif-zone-list");if(!e)return;const i=oe()||We;e.innerHTML=i.map(t=>`
+    <div class="wif-zone-row">
+      <div>
+        <div class="wif-zone-name">${t.zone} — ${t.crop}</div>
+        <div class="wif-zone-meta">${t.fill}% capacity</div>
+      </div>
+      <span class="wif-badge ${t.fill>=90?"wif-badge-red":t.fill>=75?"wif-badge-amber":"wif-badge-green"}">
+        ${t.fill>=90?"Full":t.fill>=75?"Near full":"Available"}
+      </span>
+    </div>`).join("")}function M(){var g;const e=document.getElementById("wif-impact-grid"),i=document.getElementById("wif-np-ai-note");if(!e||!i)return;const t=J[R],a=document.getElementById("wif-ready-title"),n=document.getElementById("wif-ready-sub"),o=oe();o&&o.some(s=>s.fill<90);const r=o==null?void 0:o.find(s=>s.fill<90);if((o?o.every(s=>s.fill>=90):!1)?(a&&(a.textContent="No space available"),n&&(n.textContent="All tiers are full. Harvest existing crops first to free up space.")):r?(a&&(a.textContent=`Space available in ${r.zone}`),n&&(n.textContent=`${r.zone} is ${r.fill}% full — has room for new plants.`)):t?(a&&(a.textContent=`You can plant in ${t.readyDays} days`),n&&(n.textContent=`${t.readyZone} harvests on Day ${t.readyDays} — freeing ${t.space} of space.`)):(a&&(a.textContent="Ready for planting"),n&&(n.textContent="Current farm conditions are suitable.")),at(),(g=t==null?void 0:t.impacts)!=null&&g.length){const s=Math.min(W/4,3);e.innerHTML=t.impacts.filter(d=>d.name!=="Temperature").map(d=>{let u=d.change;if(d.dir!=="ok"){const m=parseFloat(d.change);if(!isNaN(m)){const c=m*s,w=c>0?"+":"",p=d.change.includes("%")?"%":d.change.includes("°")?"°C":d.change.includes("h")?"h":"";u=w+c.toFixed(1).replace(/\.0$/,"")+p}}return`
+        <div class="wif-impact-card ${d.dir}">
+          <div class="wif-impact-emoji">${d.emoji}</div>
+          <div class="wif-impact-name">${d.name}</div>
+          <div class="wif-impact-val ${d.dir}">${u}</div>
+        </div>`}).join("")}else e.innerHTML=`
+      <div class="wif-impact-card ok" style="grid-column:1/-1;text-align:center;padding:18px;">
+        <div class="wif-impact-emoji">🌱</div>
+        <div class="wif-impact-name">Impact</div>
+        <div class="wif-impact-val ok">Calculating...</div>
+      </div>`;i.style.display="none",nt(R,W)}async function nt(e,i){var l,g,s,d,u,m,c;const t=document.getElementById("wif-np-ai-note"),a=document.getElementById("wif-np-advisor-card"),n=document.getElementById("wif-np-advisor-body");a&&(a.style.display="block",n.innerHTML=`
+      <div class="wif-ai-note" style="margin:0;">
+        <span>🤖</span><span>Analysing suitability for <strong>${e}</strong>...</span>
+      </div>`);const o=await De(),r=window._WIF_DYNAMIC_CROPS?window._WIF_DYNAMIC_CROPS.map(w=>w.id):["lettuce","tomato","basil"];try{const w=await fetch(`${Z}/api/whatif/newplant`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({species:e,quantity:i,currentCrops:r,sensors:o})});if(!w.ok)throw new Error("Server error");const p=await w.json(),v=p.analysis||{};if(p.unsuitable=v.suitable===!1||p.unsuitable===!0,p.insight=v.reason?`${v.reason} ${v.careAdvice||""}`.trim():p.insight||"Analysis complete.",p.warnings=v.warnings||p.warnings||[],p.supported=!p.unsuitable,p.score=v.compatibilityScore??p.score??0,n)if(p.unsuitable)n.innerHTML=`
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;">
+            <span style="font-size:28px;">⚠️</span>
+            <div>
+              <div style="font-size:13px;font-weight:500;color:var(--red-400,#E24B4A);margin-bottom:4px;">Not suitable for indoor vertical farming</div>
+              <div style="font-size:12px;color:var(--text-secondary,#666);">${p.insight}</div>
+            </div>
+          </div>`;else{const A=(l=p.warnings)!=null&&l.length?`<div style="margin-top:8px;padding:8px 10px;background:var(--amber-50,#FAEEDA);border-radius:var(--radius-sm,8px);font-size:12px;color:var(--amber-800,#633806);">
+               ⚠️ ${p.warnings.join(" · ")}
+             </div>`:`<div style="margin-top:8px;padding:8px 10px;background:var(--green-50,#EAF3DE);border-radius:var(--radius-sm,8px);font-size:12px;color:var(--green-800,#27500A);">
+               ✅ All projected values within safe range
+             </div>`;n.innerHTML=`
+          <div style="font-size:12px;color:var(--teal-600,#0F6E56);line-height:1.5;">${p.insight}</div>
+          ${A}
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="wif-badge wif-badge-green">Suitable Indoor Crop</span>
+            <span class="wif-badge wif-badge-blue">AI Score: ${p.score}%</span>
+          </div>`}if(t){const A=a&&a.style.display!=="none";t.style.display=A?"none":"flex",t.textContent=p.insight}const y=document.getElementById("wif-ready-title"),C=document.getElementById("wif-ready-sub"),O=oe(),te=O?O.every(A=>A.fill>=90):!1;p.supported?te&&(y&&(y.textContent="No space available"),C&&(C.textContent="All tiers are full. Harvest existing crops first to free up space.")):(y&&(y.textContent="Not recommended right now"),C&&(C.textContent=((g=p.warnings)==null?void 0:g[0])||"Check the AI advisor for details."));const K=document.getElementById("wif-impact-grid");if(K&&!p.unsuitable&&p.impacts){const A={Temperature:(s=p.impacts)==null?void 0:s.tempChange,Humidity:(d=p.impacts)==null?void 0:d.humidChange,"Light (h/d)":(u=p.impacts)==null?void 0:u.lightChange,Fertilizer:(m=p.impacts)==null?void 0:m.nutrientChange},G=(((c=J[e])==null?void 0:c.impacts)||[]).map(x=>{const I=A[x.name];if(I==null)return x;const $=I>0?"+":"",S=x.name.includes("Light")?"h":x.name.includes("Temp")?"°C":"%",B=I===0?"No change":`${$}${I}${S}`,U=I===0?"ok":I>0?"up":"down";return{...x,change:B,dir:U}}).filter(x=>x.name!=="Temperature");G.length>0&&(K.innerHTML=G.map(x=>`
+          <div class="wif-impact-card ${x.dir||"ok"}">
+            <div class="wif-impact-emoji">${x.emoji||"🌱"}</div>
+            <div class="wif-impact-name">${x.name||"Unknown"}</div>
+            <div class="wif-impact-val ${x.dir||"ok"}">${x.change||"No change"}</div>
+          </div>`).join(""))}}catch{n&&(n.innerHTML=`
+        <div class="wif-ai-note" style="margin:0;">
+          <span>🤖</span><span>AI advisor unavailable — check your connection.</span>
+        </div>`);const p=J[e];t&&(t.textContent=p?`${p.ai} (${i} plants)`:"AI prediction unavailable.")}}const Te=window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1"?"http://localhost:3000":window.location.origin,ee=45,re=20,se=10,ot=250;let V=!1,X=[];function rt(){return`
+  <div id="consumptionRoot"
+       style="padding:16px;min-height:100%;background:#F8FAFC;color:#0F172A;font-family:'Inter',system-ui,sans-serif;">
+
+    <!-- LOADING -->
+    <div id="con-loading" style="text-align:center;padding:60px 0;">
+      <div style="font-size:2.5rem;animation:spin 1s linear infinite;display:inline-block;">
+        ⚙️
+      </div>
+
+      <div style="margin-top:12px;color:#64748B;font-size:0.9rem;font-weight:500;">
+        Fetching farm data…
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div id="con-content" style="display:none;">
+
+      <!-- HERO -->
+      <div style="
+        background:linear-gradient(135deg,#DCFCE7,#F0FDF4);
+        border:1px solid #BBF7D0;
+        border-radius:24px;
+        padding:24px;
+        margin-bottom:16px;
+        text-align:center;
+        position:relative;
+        overflow:hidden;
+        box-shadow:0 4px 16px rgba(22,163,74,0.08);
+      ">
+
+        <div style="
+          position:absolute;
+          top:-20px;
+          right:-20px;
+          font-size:5rem;
+          opacity:0.12;
+        ">
+          🌱
+        </div>
+
+        <div id="con-grade"
+             style="
+              font-size:3.4rem;
+              font-weight:900;
+              color:#16A34A;
+              line-height:1;
+             ">
+          —
+        </div>
+
+        <div style="
+          margin-top:6px;
+          color:#15803D;
+          font-size:0.85rem;
+          font-weight:700;
+        ">
+          Eco Efficiency Rating
+        </div>
+
+        <div id="con-grade-note"
+             style="
+              margin-top:8px;
+              color:#166534;
+              font-size:0.75rem;
+             ">
+          Calculating…
+        </div>
+
+      </div>
+
+      <!-- KPI -->
+      <div style="
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:12px;
+        margin-bottom:16px;
+      ">
+
+        <div class="kpi-card">
+          <div>💧</div>
+
+          <div id="con-water-today" class="kpi-value" style="color:#2563EB;">
+            —
+          </div>
+
+          <div class="kpi-label">
+            Water Used Today
+          </div>
+
+          <div id="con-water-vs" class="kpi-sub"></div>
+        </div>
+
+        <div class="kpi-card">
+          <div>⚡</div>
+
+          <div id="con-energy-today" class="kpi-value" style="color:#D97706;">
+            —
+          </div>
+
+          <div class="kpi-label">
+            Energy Used Today
+          </div>
+
+          <div id="con-energy-vs" class="kpi-sub"></div>
+        </div>
+
+        <div class="kpi-card">
+          <div>🌿</div>
+
+          <div id="con-co2" class="kpi-value" style="color:#16A34A;">
+            —
+          </div>
+
+          <div class="kpi-label">
+            CO₂ Offset Today
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div>💰</div>
+
+          <div id="con-cost-saved" class="kpi-value" style="color:#16A34A;">
+            —
+          </div>
+
+          <div class="kpi-label">
+            Saved vs Traditional
+          </div>
+
+          <div id="con-cost-sub"
+               style="margin-top:2px;color:#64748B;font-size:0.65rem;">
+          </div>
+        </div>
+
+      </div>
+
+      <!-- WATER CHART -->
+      <div class="section-card">
+
+        <div style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          margin-bottom:10px;
+        ">
+
+          <div style="font-weight:700;">
+            💧 Water Level — Real vs Ideal
+          </div>
+
+          <div id="water-ideal-badge"
+               style="
+                display:none;
+                font-size:0.65rem;
+                background:#DCFCE7;
+                color:#15803D;
+                padding:4px 8px;
+                border-radius:10px;
+               ">
+          </div>
+        </div>
+
+        <div style="position:relative;width:100%;height:220px;">
+          <canvas id="con-water-chart"></canvas>
+        </div>
+
+        <div id="con-water-summary"
+             style="
+              display:none;
+              margin-top:10px;
+              padding:10px;
+              background:#F8FAFC;
+              border-radius:10px;
+              font-size:0.74rem;
+             ">
+        </div>
+
+      </div>
+
+      <!-- ENERGY CHART -->
+      <div class="section-card">
+
+        <div style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          margin-bottom:10px;
+        ">
+
+          <div style="font-weight:700;">
+            ⚡ Energy Usage — Your Farm vs Traditional
+          </div>
+
+          <div id="energy-trad-badge"
+               style="
+                display:none;
+                font-size:0.65rem;
+                background:#FEF2F2;
+                color:#B91C1C;
+                padding:4px 8px;
+                border-radius:10px;
+               ">
+          </div>
+
+        </div>
+
+        <div style="position:relative;width:100%;height:220px;">
+          <canvas id="con-energy-chart"></canvas>
+        </div>
+
+        <div id="con-energy-summary"
+             style="
+              display:none;
+              margin-top:10px;
+              padding:10px;
+              background:#F8FAFC;
+              border-radius:10px;
+              font-size:0.74rem;
+             ">
+        </div>
+
+      </div>
+
+      <!-- PLANTS -->
+      <div class="section-card">
+
+        <div style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          margin-bottom:6px;
+        ">
+
+          <div style="font-weight:800;">
+            🌾 Vertical vs Traditional Farming
+          </div>
+
+          <span style="font-size:0.65rem;color:#64748B;">
+            FAO / USDA
+          </span>
+
+        </div>
+
+        <div id="con-plant-cards"></div>
+
+        <div id="con-view-all-wrap"
+             style="display:none;text-align:center;margin-top:12px;">
+
+          <button id="con-view-all-btn"
+                  style="
+                    padding:8px 18px;
+                    border-radius:20px;
+                    border:1px solid #2563EB;
+                    background:#FFF;
+                    color:#2563EB;
+                    font-weight:700;
+                    cursor:pointer;
+                  ">
+            View All
+          </button>
+
+        </div>
+
+        <div id="con-trad-bars"
+             style="
+              display:flex;
+              flex-direction:column;
+              gap:14px;
+              margin-top:16px;
+             ">
+        </div>
+
+        <div id="con-monthly-savings"
+             style="
+              display:none;
+              margin-top:14px;
+              background:linear-gradient(135deg,#F0FDF4,#EFF6FF);
+              padding:16px;
+              border-radius:14px;
+              border:1px solid #BBF7D0;
+             ">
+        </div>
+
+      </div>
+
+      <!-- AI -->
+      <div class="section-card">
+
+        <div style="
+          display:flex;
+          align-items:center;
+          gap:8px;
+          margin-bottom:10px;
+        ">
+
+          <span>🤖</span>
+
+          <span style="font-weight:700;">
+            Groq AI Sustainability Insight
+          </span>
+
+          <div id="con-ai-spinner"
+               style="
+                width:14px;
+                height:14px;
+                border:2px solid #BFDBFE;
+                border-top-color:#2563EB;
+                border-radius:50%;
+                animation:spin 0.8s linear infinite;
+               ">
+          </div>
+
+        </div>
+
+        <div id="con-ai-text"
+             style="
+              color:#475569;
+              font-size:0.82rem;
+              line-height:1.6;
+              font-style:italic;
+             ">
+          Requesting real agricultural analysis from Groq AI…
+        </div>
+
+        <div id="con-ai-source"
+             style="
+              display:none;
+              margin-top:8px;
+              font-size:0.65rem;
+              color:#94A3B8;
+              font-weight:600;
+             ">
+          Powered by Groq Llama 3.1
+        </div>
+
+      </div>
+
+      <!-- BREAKDOWN -->
+      <div class="section-card">
+
+        <div style="font-weight:700;margin-bottom:12px;">
+          📊 Equipment Usage
+        </div>
+
+        <div id="con-breakdown"></div>
+
+      </div>
+
+      <!-- ECO TIPS -->
+      <div class="section-card">
+
+        <div style="font-weight:700;margin-bottom:12px;">
+          💡 Eco Tips
+        </div>
+
+        <div id="con-ai-tips"></div>
+
+      </div>
+
+      <div id="con-last-updated"
+           style="
+            text-align:center;
+            color:#94A3B8;
+            font-size:0.68rem;
+            padding-bottom:16px;
+           ">
+      </div>
+
+    </div>
+
+    <!-- ERROR -->
+    <div id="con-error"
+         style="display:none;text-align:center;padding:40px 16px;">
+
+      <div style="font-size:2.5rem;">⚠️</div>
+
+      <div style="color:#DC2626;font-weight:700;margin-top:12px;">
+        Could not connect to backend.
+      </div>
+
+      <button id="con-retry-btn"
+              style="
+                margin-top:20px;
+                padding:10px 24px;
+                background:#EFF6FF;
+                color:#2563EB;
+                border:1px solid #BFDBFE;
+                border-radius:12px;
+                font-weight:600;
+                cursor:pointer;
+              ">
+        🔄 Retry
+      </button>
+
+    </div>
+
+  </div>
+
+  <style>
+
+    @keyframes spin {
+      to { transform:rotate(360deg); }
+    }
+
+    .section-card{
+      background:#FFF;
+      border-radius:16px;
+      padding:16px;
+      margin-bottom:12px;
+      border:1px solid #E2E8F0;
+    }
+
+    .kpi-card{
+      background:#FFF;
+      border-radius:16px;
+      padding:16px;
+      border:1px solid #E2E8F0;
+    }
+
+    .kpi-value{
+      margin:4px 0;
+      font-size:1.5rem;
+      font-weight:800;
+    }
+
+    .kpi-label{
+      color:#64748B;
+      font-size:0.75rem;
+    }
+
+    .kpi-sub{
+      margin-top:4px;
+      color:#16A34A;
+      font-weight:700;
+      font-size:0.7rem;
+    }
+
+    .cprog{
+      background:#F1F5F9;
+      border-radius:100px;
+      height:9px;
+      overflow:hidden;
+    }
+
+    .cprog-fill{
+      height:100%;
+      border-radius:100px;
+      transition:width 0.7s ease;
+    }
+
+  </style>
+  `}async function st(){var e;V=!1,X=[],(e=document.getElementById("con-retry-btn"))==null||e.addEventListener("click",me),await me()}async function me(){var e;Le("loading");try{const i=E.currentFarmId||"farm_001",t=await fetch(`${Te}/api/sensors/history?deviceId=${i}&limit=24`),a=t.ok?await t.json():{},n=((e=a.readings)==null?void 0:e.length)>0?a.readings:ye();await we(n,!t.ok)}catch{await we(ye(),!0)}}async function we(e,i){var n;Le("content");const t=mt(e);f("con-water-today").textContent=`${t.waterLiters.toFixed(2)} L`,f("con-energy-today").textContent=`${t.energyKwh.toFixed(3)} kWh`,f("con-co2").textContent=`${t.co2Saved.toFixed(2)} kg`,gt(t),ft(e,t);const a=((n=e[0])==null?void 0:n.createdAt)||new Date;f("con-last-updated").textContent=`${i?"⚡ Demo mode · ":""}Last updated: ${new Date(a).toLocaleString("en-MY")}`,await lt(),Me(e,t,{min:65,max:80},3),dt(t,e,i)}async function dt(e,i,t){const a=wt(),n=l=>{f("con-ai-spinner").style.display="none",f("con-ai-text").textContent=l;const g=a.map(s=>ve(s.toLowerCase().trim()));X=g,ae(g,!1),ue(g,e),f("con-water-vs").textContent=g[0]?`↓ ${g[0].waterSavePct}% vs traditional`:"vs traditional",f("con-energy-vs").textContent=g[0]?`↓ ${g[0].energySavePct}% vs traditional`:"vs traditional",f("con-cost-saved").textContent="RM 0.00/day",f("con-cost-sub").textContent="RM 0.00/mo"};if(t){console.log("[ConsumptionPage] Demo mode detected, skipping AI."),n("Demo mode active — showing benchmark data.");return}const o=a.slice(0,3),r=a.slice(3);try{const l=new AbortController,g=setTimeout(()=>l.abort(),8e3),s=await fetch(`${Te}/api/consumption/analysis`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plants:o,metrics:e,sensorHistory:i}),signal:l.signal});if(clearTimeout(g),!s.ok)throw new Error(`HTTP ${s.status}`);const d=await s.json(),u=r.map(v=>ve(v.toLowerCase().trim())),m=[...d.plantData||[],...u],c=d.ruleBasedSummary||{},w=d.idealWaterZone||{min:65,max:80,mid:72},p=d.traditionalEnergyPerDay||3;f("con-water-vs").textContent=c.waterSavePct?`↓ ${c.waterSavePct}% vs traditional`:"vs traditional",f("con-energy-vs").textContent=m[0]?`↓ ${m[0].energySavePct||0}% vs traditional`:"vs traditional",f("con-cost-saved").textContent=c.dailySavingsRm?`RM ${c.dailySavingsRm.toFixed(2)}/day`:"RM 0.00/day",f("con-cost-sub").textContent=c.monthlySavingsRm?`RM ${c.monthlySavingsRm}/mo`:"RM 0.00/mo",Me(i,e,w,p),X=m,ae(m,!1),ue(m,e),pt(c),d.aiGrowDaysComputed&&d.sensorStats&&ut(d.sensorStats),f("con-ai-spinner").style.display="none",f("con-ai-text").textContent=d.aiNarrative||"—",f("con-ai-text").style.fontStyle="normal",f("con-ai-source").style.display="block"}catch(l){console.warn("[ConsumptionPage] AI fetch failed:",l.message);const g=l.name==="AbortError";n(g?"AI analysis timed out — showing benchmark data.":"AI analysis unavailable — showing benchmark data.")}}async function lt(){window.Chart||await new Promise((e,i)=>{const t=document.createElement("script");t.src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js",t.onload=e,t.onerror=i,document.head.appendChild(t)})}function Me(e,i,t,a){var le,ce,pe;const n=e.map((h,b)=>`${b}:00`),o=e.map(h=>Number(h.waterLevel??70)),r=t.min,l=t.max,g=o.filter(h=>h>=r&&h<=l).length,s=Math.round(g/o.length*100),d=e.map(h=>{const b=h.lightRaw??2e3,ze=h.temperature??25,je=(b<1500?ee:0)+(ze>28?re:0)+se*.1;return Number((je/1e3).toFixed(3))}),u=Number((a/24).toFixed(3)),m=d.reduce((h,b)=>h+b,0),c=u*n.length,w=Math.max(0,Math.round((1-m/(c||1))*100)),p=f("con-water-chart");if(p){try{(le=p._chart)==null||le.destroy()}catch{}f("water-ideal-badge").style.display="block",f("water-ideal-badge").textContent=`Ideal ${r}%–${l}%`,p._chart=new window.Chart(p,{type:"line",data:{labels:n,datasets:[{label:"Ideal Max (%)",data:Array(n.length).fill(l),borderColor:"rgba(22,163,74,0.45)",borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:"+1",backgroundColor:"rgba(22,163,74,0.10)"},{label:"Ideal Min (%)",data:Array(n.length).fill(r),borderColor:"rgba(22,163,74,0.45)",borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:!1},{label:"Your Farm (%)",data:o,borderColor:"#2563EB",borderWidth:2.5,tension:.35,pointRadius:3,pointBackgroundColor:o.map(b=>b<r?"#DC2626":b>l?"#F59E0B":"#2563EB"),pointBorderColor:"#FFF",pointBorderWidth:1.5}]},options:{responsive:!0,maintainAspectRatio:!1,plugins:{legend:{display:!0},tooltip:{callbacks:{label(b){return`${b.dataset.label}: ${b.parsed.y}%`}}}},scales:{x:{title:{display:!0,text:"Hour"},grid:{color:"#F1F5F9"},ticks:{color:"#94A3B8",font:{size:9}}},y:{min:0,max:100,title:{display:!0,text:"Water Level (%)"},grid:{color:"#F1F5F9"},ticks:{callback:b=>`${b}%`,color:"#94A3B8",font:{size:9}}}}}});const h=f("con-water-summary");h.style.display="block",h.innerHTML=`
+      <span style="font-weight:700;color:#16A34A;">
+        ${s}% of readings stayed in ideal range
+      </span>
+      · Recommended zone:
+      ${r}%–${l}%
+    `}const v=f("con-energy-chart");if(v){try{(ce=v._chart)==null||ce.destroy()}catch{}f("energy-trad-badge").style.display="block",f("energy-trad-badge").textContent=`↓ ${w}% vs traditional`,v._chart=new window.Chart(v,{data:{labels:n,datasets:[{type:"line",label:"Traditional Farm (kWh/hr)",data:Array(n.length).fill(u),borderColor:"#DC2626",borderDash:[6,4],borderWidth:2,pointRadius:0,tension:0},{type:"bar",label:"Your Farm (kWh/hr)",data:d,borderRadius:6}]},options:{responsive:!0,maintainAspectRatio:!1,plugins:{legend:{display:!0},tooltip:{callbacks:{label(b){return`${b.dataset.label}: ${b.parsed.y} kWh`}}}},scales:{x:{title:{display:!0,text:"Hour"},grid:{color:"#F8FAFC"},ticks:{color:"#94A3B8",font:{size:9}}},y:{beginAtZero:!0,title:{display:!0,text:"Energy (kWh per hour)"},grid:{color:"#F1F5F9"},ticks:{callback:b=>`${b} kWh`,color:"#94A3B8",font:{size:9}}}}}});const h=f("con-energy-summary");h.style.display="block",h.innerHTML=`
+      <span style="font-weight:700;color:#D97706;">
+        ${m.toFixed(2)} kWh used today
+      </span>
+      · Traditional farm estimate:
+      ${c.toFixed(2)} kWh/day
+    `}let y=0;const C=[],O=Math.round(s/100*20);y+=O,C.push({label:"💧 Water Stability",score:O,max:20,detail:`${s}% readings in ideal zone`});const te=m/(c||1),K=Math.round(Math.max(0,1-te)*20);y+=K,C.push({label:"⚡ Energy Efficiency",score:K,max:20,detail:`${w}% less than traditional`});const A=i.waterLiters,ie=(a>0,55),de=Math.max(0,1-A/ie),G=Math.round(de*20);y+=G,C.push({label:"🌿 Water Conservation",score:G,max:20,detail:`${A.toFixed(1)}L used vs ~${ie}L traditional`});const x=Math.round(Math.min(i.lightHours/12,1)*20);y+=x,C.push({label:"☀️ Light Consistency",score:x,max:20,detail:`${i.lightHours}h grow light detected`});const I=Math.round(Math.max(0,1-i.fanHours/24)*20);y+=I,C.push({label:"🌡️ Temp Control",score:I,max:20,detail:`${i.fanHours}h cooling needed`});let $,S,B;y>=88?($="A+",S="#16A34A",B="Excellent — your farm is operating at peak sustainability"):y>=75?($="A",S="#16A34A",B="Very efficient — minor improvements possible"):y>=62?($="B+",S="#2563EB",B="Good performance — a few areas to optimise"):y>=50?($="B",S="#2563EB",B="Average — review water and energy usage"):y>=38?($="C",S="#D97706",B="Below average — action recommended"):($="D",S="#DC2626",B="Poor — significant inefficiencies detected"),f("con-grade").textContent=$,f("con-grade").style.color=S,f("con-grade-note").textContent=`${B} · Score: ${y}/100`;const U=(pe=f("con-grade"))==null?void 0:pe.closest('div[style*="linear-gradient"]');let L=document.getElementById("con-grade-breakdown");!L&&U&&(L=document.createElement("div"),L.id="con-grade-breakdown",L.style.cssText="margin-top:16px;display:flex;flex-direction:column;gap:8px;text-align:left;",U.appendChild(L)),L&&(L.innerHTML=C.map(h=>`
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:3px;">
+          <span style="font-weight:600;color:#166534;">${h.label}</span>
+          <span style="color:#15803D;font-weight:700;">${h.score}/${h.max}</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.5);border-radius:100px;height:6px;overflow:hidden;">
+          <div style="
+            width:${h.score/h.max*100}%;
+            height:100%;
+            background:#16A34A;
+            border-radius:100px;
+            transition:width 0.8s ease;
+          "></div>
+        </div>
+        <div style="font-size:0.6rem;color:#166534;margin-top:2px;">${h.detail}</div>
+      </div>
+    `).join(""))}function ae(e,i){if(!e||e.length===0){f("con-plant-cards").innerHTML='<div style="text-align:center;padding:16px;color:#94A3B8;font-size:0.8rem;">No plants detected in your farm racks. Add plants to see benchmark comparisons.</div>',f("con-view-all-wrap").style.display="none";return}const t=i?e:e.slice(0,3),a=e.length>3;f("con-plant-cards").innerHTML=t.map(ct).join("");const n=f("con-view-all-wrap"),o=f("con-view-all-btn");a?(n.style.display="block",o.textContent=i?"↑ Show Less":`View All ${e.length} Plants →`,o.onclick=()=>{V=!V,ae(X,V)}):n.style.display="none"}function ct(e){const t=e.yourFarm&&e.aiGrowDays?`
+      <div style="
+        background:#F0FDF4;
+        border:1px solid #BBF7D0;
+        border-radius:10px;
+        padding:10px;
+        margin-top:8px;
+      ">
+        <div style="font-size:0.7rem;font-weight:800;color:#15803D;margin-bottom:6px;">
+          🤖 AI Grow Day Prediction (from your sensors)
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center;">
+          <div>
+            <div style="font-size:1.0rem;font-weight:900;color:#2563EB;">
+              ${e.aiGrowDays}d
+            </div>
+            <div style="font-size:0.65rem;color:#64748B;">Your Farm</div>
+          </div>
+          <div>
+            <div style="font-size:1.0rem;font-weight:900;color:#16A34A;">
+              ${e.vertical.growDays}d
+            </div>
+            <div style="font-size:0.65rem;color:#64748B;">VF Benchmark</div>
+          </div>
+          <div>
+            <div style="font-size:1.0rem;font-weight:900;color:#DC2626;">
+              ${e.traditional.growDays}d
+            </div>
+            <div style="font-size:0.65rem;color:#64748B;">Traditional</div>
+          </div>
+        </div>
+       ${e.agronomicNote?`
+<div style="
+  margin-top:8px;
+  padding:8px;
+  background:#F0FDF4;
+  border-left:3px solid #16A34A;
+  border-radius:0 6px 6px 0;
+  font-size:0.68rem;
+  color:#166534;
+  line-height:1.5;
+">
+  💡 ${e.agronomicNote}
+</div>`:""}
+      </div>
+    `:`
+      <div style="
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:6px;
+        margin-top:8px;
+        font-size:0.72rem;
+        color:#64748B;
+        text-align:center;
+      ">
+        <div>
+          <div style="font-weight:700;color:#2563EB;">
+            ${e.vertical.growDays}d
+          </div>
+          <div>VF benchmark</div>
+        </div>
+        <div>
+          <div style="font-weight:700;color:#DC2626;">
+            ${e.traditional.growDays}d
+          </div>
+          <div>Traditional</div>
+        </div>
+      </div>
+    `;return`
+    <div style="
+      background:#F8FAFC;
+      border-radius:14px;
+      padding:14px;
+      border:1px solid #E2E8F0;
+      margin-bottom:10px;
+    ">
+ 
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="font-size:1.5rem;">${e.emoji||"🌱"}</span>
+        <div style="flex:1;">
+          <div style="font-weight:800;">${e.name}</div>
+          ${e.source?`<div style="font-size:0.62rem;color:#94A3B8;">${e.source}</div>`:""}
+        </div>
+        <div style="font-size:1.1rem;font-weight:900;color:#16A34A;">↓${e.waterSavePct||0}% water</div>
+      </div>
+ 
+      <!-- Water / Energy comparison -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+ 
+        <div style="background:#EFF6FF;padding:10px;border-radius:10px;">
+          <div style="font-size:0.7rem;font-weight:800;color:#1D4ED8;margin-bottom:6px;">
+            🏭 Vertical Farm
+          </div>
+          <div>💧 ${e.vertical.waterPerDayL} L/day</div>
+          <div>⚡ ${e.vertical.energyKwhPerDay} kWh/day</div>
+        </div>
+ 
+        <div style="background:#FEF2F2;padding:10px;border-radius:10px;">
+          <div style="font-size:0.7rem;font-weight:800;color:#B91C1C;margin-bottom:6px;">
+            🌾 Traditional
+          </div>
+          <div>💧 ${e.traditional.waterPerDayL} L/day</div>
+          <div>⚡ ${e.traditional.energyKwhPerDay} kWh/day</div>
+        </div>
+ 
+      </div>
+ 
+      <!-- Grow days (AI predicted or benchmark) -->
+      ${t}
+ 
+    </div>
+  `}function ue(e,i){var n,o;const t=e[0];if(!t){f("con-trad-bars").innerHTML='<div style="text-align:center;padding:16px;color:#94A3B8;font-size:0.8rem;">Add plants to unlock comparative charts.</div>';return}const a=[{label:"💧 Water",yours:i.waterLiters,trad:((n=t.traditional)==null?void 0:n.waterPerDayL)||1,unit:"L",color:"#2563EB"},{label:"⚡ Energy",yours:i.energyKwh,trad:((o=t.traditional)==null?void 0:o.energyKwhPerDay)||1,unit:"kWh",color:"#D97706"}];f("con-trad-bars").innerHTML=a.map(r=>{const l=r.trad>0?Math.min(100,r.yours/r.trad*100):0;return`
+        <div>
+
+          <div style="
+            display:flex;
+            justify-content:space-between;
+            margin-bottom:6px;
+          ">
+
+            <span>${r.label}</span>
+
+            <span>
+              ${r.yours.toFixed(2)} ${r.unit}
+            </span>
+
+          </div>
+
+          <div class="cprog">
+
+            <div class="cprog-fill"
+                 style="
+                  width:${l}%;
+                  background:${r.color};
+                 ">
+            </div>
+
+          </div>
+
+        </div>
+      `}).join("")}function pt(e){const i=f("con-monthly-savings");!e||!i||(i.style.display="block",i.innerHTML=`
+    <div style="
+      display:grid;
+      grid-template-columns:1fr 1fr 1fr;
+      gap:8px;
+      text-align:center;
+    ">
+
+      <div>
+
+        <div style="
+          font-size:1.2rem;
+          font-weight:900;
+          color:#2563EB;
+        ">
+          ${e.monthlySavingsL||0}L
+        </div>
+
+        <div style="font-size:0.65rem;">
+          water/mo
+        </div>
+
+      </div>
+
+      <div>
+
+        <div style="
+          font-size:1.2rem;
+          font-weight:900;
+          color:#16A34A;
+        ">
+          RM${e.monthlySavingsRm||0}
+        </div>
+
+        <div style="font-size:0.65rem;">
+          saved/mo
+        </div>
+
+      </div>
+
+      <div>
+
+        <div style="
+          font-size:1.2rem;
+          font-weight:900;
+          color:#0D9488;
+        ">
+          RM${e.yearlySavingsRm||0}
+        </div>
+
+        <div style="font-size:0.65rem;">
+          saved/yr
+        </div>
+
+      </div>
+
+    </div>
+  `)}function gt(e){const i=[{icon:"💡",label:"Grow Lights",value:`${e.lightHours}h today`,kwh:+(e.lightHours*ee/1e3).toFixed(3),pct:Math.round(e.lightHours/24*100),color:"#D97706"},{icon:"🌀",label:"Cooling Fan",value:`${e.fanHours}h today`,kwh:+(e.fanHours*re/1e3).toFixed(3),pct:Math.round(e.fanHours/24*100),color:"#2563EB"},{icon:"💧",label:"Water Pump",value:`${e.waterActivations} activations`,kwh:+(e.waterActivations*se/1e3).toFixed(3),pct:Math.round(e.waterActivations/24*100),color:"#0D9488"}],t=i.reduce((a,n)=>a+n.kwh,0);f("con-breakdown").innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      ${i.map(a=>{const n=t>0?Math.round(a.kwh/t*100):0;return`
+          <div style="background:#F8FAFC;border-radius:12px;padding:12px;border:1px solid #E2E8F0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:1.2rem;">${a.icon}</span>
+                <span style="font-weight:700;font-size:0.85rem;">${a.label}</span>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-weight:800;font-size:0.85rem;color:${a.color};">${a.kwh} kWh</div>
+                <div style="font-size:0.62rem;color:#94A3B8;">${n}% of total</div>
+              </div>
+            </div>
+            <div style="background:#E2E8F0;border-radius:100px;height:7px;overflow:hidden;">
+              <div style="
+                width:${n}%;
+                height:100%;
+                background:${a.color};
+                border-radius:100px;
+                transition:width 0.7s ease;
+              "></div>
+            </div>
+            <div style="font-size:0.65rem;color:#64748B;margin-top:5px;">${a.value} · ${a.pct}% of day active</div>
+          </div>
+        `}).join("")}
+      <div style="
+        background:linear-gradient(135deg,#FFF7ED,#FFFBEB);
+        border:1px solid #FDE68A;
+        border-radius:12px;
+        padding:12px;
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+      ">
+        <span style="font-weight:700;font-size:0.85rem;color:#92400E;">⚡ Total Equipment</span>
+        <span style="font-weight:900;font-size:1rem;color:#D97706;">${t.toFixed(3)} kWh</span>
+      </div>
+    </div>
+  `}function ft(e,i){var n;const t=[];i.lightHours>16?t.push({icon:"💡",severity:"warning",title:"Grow lights running too long",detail:`${i.lightHours}h detected today. Most crops only need 14–16h. Reducing by ${i.lightHours-14}h could save ${((i.lightHours-14)*ee/1e3).toFixed(2)} kWh/day.`}):i.lightHours<8?t.push({icon:"💡",severity:"danger",title:"Light hours too low",detail:`Only ${i.lightHours}h detected. Most crops need at least 12–16h for healthy growth. Check your light schedule.`}):t.push({icon:"💡",severity:"good",title:"Light schedule is healthy",detail:`${i.lightHours}h is within the recommended 12–16h range for most leafy crops.`}),i.fanHours>8?t.push({icon:"🌡️",severity:"warning",title:"High cooling demand",detail:`Fan ran ${i.fanHours}h today (temp exceeded 28°C). Consider shading or improving ventilation to reduce energy cost.`}):i.fanHours===0&&t.push({icon:"🌡️",severity:"good",title:"Temperature well controlled",detail:"No cooling needed today — temperature stayed below 28°C throughout."}),i.waterActivations>15?t.push({icon:"💧",severity:"warning",title:"Frequent pump activations",detail:`${i.waterActivations} activations today suggests soil drying out quickly. Check for leaks or increase reservoir capacity.`}):i.waterActivations===0?t.push({icon:"💧",severity:"danger",title:"No pump activity detected",detail:"Zero watering events today. Verify pump is working and soil moisture sensor is connected."}):t.push({icon:"💧",severity:"good",title:"Water usage is efficient",detail:`${i.waterActivations} pump activations used ${((n=i.waterLiters)==null?void 0:n.toFixed(2))??"—"}L today — well within vertical farm targets.`}),i.energyKwh>2&&t.push({icon:"⚡",severity:"warning",title:"Above average energy use",detail:`${i.energyKwh.toFixed(2)} kWh today is higher than the vertical farm benchmark of ~0.27 kWh. Review light and fan schedules.`});const a={good:{bg:"#F0FDF4",border:"#BBF7D0",text:"#15803D",dot:"#16A34A"},warning:{bg:"#FFFBEB",border:"#FDE68A",text:"#92400E",dot:"#D97706"},danger:{bg:"#FEF2F2",border:"#FECACA",text:"#991B1B",dot:"#DC2626"}};f("con-ai-tips").innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${t.map(o=>{const r=a[o.severity];return`
+          <div style="
+            background:${r.bg};
+            border:1px solid ${r.border};
+            border-radius:12px;
+            padding:12px;
+            display:flex;
+            gap:10px;
+            align-items:flex-start;
+          ">
+            <div style="
+              width:8px;height:8px;
+              border-radius:50%;
+              background:${r.dot};
+              margin-top:4px;
+              flex-shrink:0;
+            "></div>
+            <div>
+              <div style="font-weight:700;font-size:0.78rem;color:${r.text};margin-bottom:3px;">
+                ${o.icon} ${o.title}
+              </div>
+              <div style="font-size:0.7rem;color:${r.text};line-height:1.5;opacity:0.85;">
+                ${o.detail}
+              </div>
+            </div>
+          </div>
+        `}).join("")}
+    </div>
+  `}function mt(e){let i=0,t=0,a=0;e.forEach(l=>{(l.soilRaw??1900)<1800&&i++,(l.lightRaw??2e3)<1500&&t++,(l.temperature??25)>28&&a++});const n=i*ot/1e3,o=(t*ee+a*re+i*se)/1e3,r=Math.max((60-n)*.035,.5);return{waterLiters:Math.max(n,.05),energyKwh:Math.max(o,.01),co2Saved:r,waterActivations:i,lightHours:t,fanHours:a,totalReadings:e.length}}function wt(){const e=new Set;return(E.tiles||[]).forEach(t=>{t.name&&t.status!=="empty"&&e.add(t.name.toLowerCase().trim())}),[...e]}function ve(e){const i={lettuce:{name:"Lettuce",emoji:"🥬",waterPerDayL:2,energyKwhPerDay:.27,growDays:30,tWater:45,tEnergy:1.6,tGrowDays:60},spinach:{name:"Spinach",emoji:"🥬",waterPerDayL:2.2,energyKwhPerDay:.22,growDays:25,tWater:50,tEnergy:1.8,tGrowDays:50},basil:{name:"Basil",emoji:"🌿",waterPerDayL:1.5,energyKwhPerDay:.2,growDays:28,tWater:30,tEnergy:1.2,tGrowDays:50},tomato:{name:"Tomato",emoji:"🍅",waterPerDayL:3.5,energyKwhPerDay:.36,growDays:55,tWater:60,tEnergy:2.5,tGrowDays:80},kale:{name:"Kale",emoji:"🥬",waterPerDayL:1.8,energyKwhPerDay:.24,growDays:35,tWater:40,tEnergy:1.5,tGrowDays:60},carrot:{name:"Carrot",emoji:"🥕",waterPerDayL:2,energyKwhPerDay:.27,growDays:30,tWater:45,tEnergy:1.6,tGrowDays:60},potato:{name:"Potato",emoji:"🥔",waterPerDayL:2,energyKwhPerDay:.27,growDays:30,tWater:45,tEnergy:1.6,tGrowDays:60},cabbage:{name:"Cabbage",emoji:"🥬",waterPerDayL:2,energyKwhPerDay:.27,growDays:30,tWater:45,tEnergy:1.6,tGrowDays:60},mint:{name:"Mint",emoji:"🌿",waterPerDayL:1.2,energyKwhPerDay:.18,growDays:22,tWater:25,tEnergy:1,tGrowDays:40},chili:{name:"Chili",emoji:"🌶️",waterPerDayL:3,energyKwhPerDay:.32,growDays:65,tWater:50,tEnergy:2.2,tGrowDays:90}},t=e.toLowerCase().trim(),a=i[t]||{name:e,emoji:"🌱",waterPerDayL:2.5,energyKwhPerDay:.27,growDays:35,tWater:55,tEnergy:2,tGrowDays:65},n=Math.round((a.tWater-a.waterPerDayL)/a.tWater*100);return{name:a.name,emoji:a.emoji,source:"FAO/USDA benchmark (no sensor data)",vertical:{waterPerDayL:a.waterPerDayL,energyKwhPerDay:a.energyKwhPerDay,growDays:a.growDays},traditional:{waterPerDayL:a.tWater,energyKwhPerDay:a.tEnergy,growDays:a.tGrowDays},yourFarm:null,aiGrowDays:null,waterSavePct:n,energySavePct:Math.round((a.tEnergy-a.energyKwhPerDay)/a.tEnergy*100)}}function ye(){const e=Date.now();return Array.from({length:24},(i,t)=>({temperature:22+Math.sin(t/4)*4,soilRaw:1550+Math.random()*650,lightRaw:700+Math.random()*1300,waterLevel:63+Math.random()*25,createdAt:new Date(e-(23-t)*36e5).toISOString()}))}function f(e){return document.getElementById(e)}function ut(e){var t;let i=document.getElementById("con-sensor-banner");if(!i){const a=document.getElementById("con-content");i=document.createElement("div"),i.id="con-sensor-banner",i.style.cssText=`
+      background:linear-gradient(135deg,#EFF6FF,#F0FDF4);
+      border:1px solid #BFDBFE;
+      border-radius:14px;
+      padding:12px 16px;
+      margin-bottom:12px;
+      font-size:0.72rem;
+    `;const n=(t=a.querySelector('[id="con-grade"]'))==null?void 0:t.closest('[style*="linear-gradient"]');n?n.insertAdjacentElement("afterend",i):a.prepend(i)}i.innerHTML=`
+    <div style="font-weight:800;color:#1D4ED8;margin-bottom:6px;">
+      📡 Live Sensor Summary (24h)
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+      <div>
+        <div style="font-weight:700;color:#0F172A;">${e.avgTemp}°C</div>
+        <div style="color:#64748B;">Avg temp</div>
+      </div>
+      <div>
+        <div style="font-weight:700;color:#0F172A;">${e.DLI} mol/m²/d</div>
+        <div style="color:#64748B;">Est. DLI</div>
+      </div>
+      <div>
+        <div style="font-weight:700;color:#0F172A;">${e.waterStabilityPct}%</div>
+        <div style="color:#64748B;">Water stable</div>
+      </div>
+    </div>
+  `}function Le(e){["loading","content","error"].forEach(i=>{const t=f(`con-${i}`);t&&(t.style.display=i===e?"block":"none")})}let q=45;function vt(){return`
+        <div style="padding:20px; background:#F9FBF9; min-height:100vh; font-family:sans-serif;">
+            <div style="background:#FFFFFF; border-radius:24px; padding:16px; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; border:1px solid #EDF2F0; box-shadow:0 4px 12px rgba(0,0,0,0.02);">
+                <span style="font-size:0.9rem; font-weight:700; color:#064E3B;">Predict Window:</span>
+                <select id="predictTimeSelect" style="border:none; background:#F0FDF4; color:#065F46; padding:8px 12px; border-radius:12px; font-weight:700; outline:none; cursor:pointer; font-size:0.85rem;">
+                    <option value="30">30 Mins</option>
+                    <option value="45" ${q===45?"selected":""}>45 Mins</option>
+                    <option value="60">60 Mins</option>
+                </select>
+            </div>
+            <div id="dynamicAlertsList">
+                <div style="text-align:center; padding:60px; color:#94A3B8;">🛰️ AI engine analyzing trends...</div>
+            </div>
+        </div>
+    `}async function yt(){const e=document.getElementById("predictTimeSelect");e&&(e.onchange=i=>{q=parseInt(i.target.value),xe("success",`AI calibrating for ${q}m...`),he()}),he()}async function he(){const e=document.getElementById("dynamicAlertsList");if(e)try{const i="farm_001",[t,a,n]=await Promise.all([fetch(`http://localhost:3000/api/sensors/latest?deviceId=${i}`),fetch(`http://localhost:3000/api/sensors/history?deviceId=${i}&limit=10`),fetch(`http://localhost:3000/api/sensors/preferences?deviceId=${i}`)]),o=await t.json(),r=await a.json(),l=await n.json(),g=o.reading||{temperature:24},s=r.readings?r.readings.map(w=>w.temperature).join(", "):"22, 23, 24",m=(await(await fetch("http://localhost:3000/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message:`As an AI Farm Expert, analyze temp ${g.temperature}C and trend [${s}]. Limit: ${l.tempMax||30}C. 
+                          If a risk exists in ${q}m, respond ONLY in this format: 
+                          "TITLE: [Problem] | DESC: [Analysis]".
+                          If stable, reply: "STABLE".`,history:[]})})).json()).reply||"";let c=[];if(m.includes("STABLE")||!m)c.push({title:"Heat Stress",desc:`The AI predicts a potential issue with heat stress for the next ${q} minutes, based on the rising temperature trend.`,btnText:"Pre-cool System"});else{const w=m.split("|"),p=w[0].replace("TITLE:","").trim(),v=w[1].replace("DESC:","").trim();c.push({title:p,desc:v,btnText:"Pre-cool System"})}be(e,c)}catch{be(e,[{title:"Heat Stress (Demo)",desc:"AI predicts a temperature spike in 45m. Immediate cooling suggested.",btnText:"Pre-cool System"}])}}function be(e,i){e.innerHTML=i.map(t=>`
+        <div style="background:white; border-radius:28px; padding:24px; margin-bottom:16px; border:1px solid #EDF2F0; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+            <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+                <div style="display:flex; gap:12px;">
+                    <div style="width:52px; height:52px; background:#F0FDF4; border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:1.6rem;">🌡️</div>
+                    <div style="margin-top:4px;">
+                        <b style="color:#064E3B; font-size:1.1rem; display:block;">${t.title}</b>
+                        <span style="color:#94A3B8; font-size:0.75rem;">SeedDown AI Analysis</span>
+                    </div>
+                </div>
+                <div style="background:#E0F2FE; color:#0369A1; padding:8px 12px; border-radius:12px; font-size:0.65rem; font-weight:800; height: fit-content;">
+                    AI INFERENCE
+                </div>
+            </div>
+
+            <p style="color:#64748B; font-size:0.9rem; line-height:1.5; margin-bottom:24px;">
+                🌻 ${t.desc}
+            </p>
+
+            <div style="display:flex;">
+                <button class="action-btn" style="flex:1; background:#EF4444; color:white; border:none; padding:18px; border-radius:20px; font-weight:700; cursor:pointer; font-size:1rem;">
+                    ${t.btnText}
+                </button>
+            </div>
+        </div>
+    `).join(""),e.querySelectorAll(".action-btn").forEach(t=>{t.onclick=()=>{t.style.backgroundColor="#064E3B",xe("success","AI intervention started. Pre-cooling system active.")}})}function Et(e={}){const{feature:i,from:t="home"}=e,a=document.getElementById("screenContainer");let n="";i==="whatif"?n=Oe():i==="consumption"?n=rt():i==="alerts"&&(n=vt()),a.innerHTML=`
+        <div class="screen active" id="featureScreen">
+            <div class="feat-topbar" style="display:flex; align-items:center; padding:12px 16px; background:var(--surface); gap:12px;">
+                <button id="featureBackBtn" class="back-btn" aria-label="Back">←</button>
+                <div style="font-weight:700;">${i==="whatif"?"🔮 What-If":i==="consumption"?"⚡ Eco Savings":"🚨 AI Alerts"}</div>
+            </div>
+            <div style="flex:1; overflow-y:auto;">${n}</div>
+        </div>
+    `,document.getElementById("featureBackBtn").addEventListener("click",()=>Pe(t)),i==="whatif"?Ge():i==="consumption"?st():i==="alerts"&&yt()}export{Et as render};

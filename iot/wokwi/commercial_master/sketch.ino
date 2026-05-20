@@ -35,8 +35,8 @@
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
 const char* BACKEND_BASE_URL = "https://nextlevelfarm.onrender.com";
-const char* DEVICE_ID = "dev_com_mst_demo";
-const char* DEVICE_TOKEN = "PASTE_DEVICE_TOKEN_HERE";
+const char* DEVICE_ID = "commercial-farm-master-1";
+const char* DEVICE_TOKEN = "sd_demo_commercial_farm_master_1";
 const int DEFAULT_INTERVAL_SECONDS = 2;
 const char* NODE_TYPE = "farm_master";
 
@@ -186,6 +186,14 @@ void executeCommand(const String& command) {
     mainFan ? "ON" : "off", emergency ? "ON" : "off", co2 ? "ON" : "off", gas ? "ON" : "off", waterLow ? "ON" : "off");
 }
 
+void clearOutputs() {
+  digitalWrite(MAIN_FAN_LED_PIN, LOW);
+  digitalWrite(EMERGENCY_LED_PIN, LOW);
+  digitalWrite(CO2_LED_PIN, LOW);
+  digitalWrite(GAS_LED_PIN, LOW);
+  digitalWrite(WATER_LOW_LED_PIN, LOW);
+}
+
 void pollAndExecuteCommand() {
   String path = String("/api/sensors/command?deviceId=") + DEVICE_ID + "&format=text";
   String response = httpGet(path);
@@ -257,11 +265,7 @@ void loop() {
   bool powerWarn = powerKwh > POWER_WARN_KWH;
   bool mainFanOn = co2Low || gasDanger;
 
-  digitalWrite(MAIN_FAN_LED_PIN, mainFanOn ? HIGH : LOW);
-  digitalWrite(EMERGENCY_LED_PIN, gasDanger ? HIGH : LOW);
-  digitalWrite(CO2_LED_PIN, co2Low ? HIGH : LOW);
-  digitalWrite(GAS_LED_PIN, gasDanger ? HIGH : LOW);
-  digitalWrite(WATER_LOW_LED_PIN, waterLow ? HIGH : LOW);
+  clearOutputs(); // Physical LEDs are driven only after the backend command is received.
 
   Serial.println();
   Serial.println("========== SeedDown Commercial Farm Master ==========");
@@ -272,7 +276,7 @@ void loop() {
   Serial.printf("CO2 POT2 raw: %d | CO2 %d ppm | Min %d | %s\n", co2Raw, co2, CO2_MIN_PPM, statusLabel(co2Low).c_str());
   Serial.printf("Power POT3 raw: %d | Power %.2f kWh | Warn > %.1f | %s\n", powerRaw, powerKwh, POWER_WARN_KWH, statusLabel(powerWarn).c_str());
 
-  Serial.println("----- Output Status -----");
+  Serial.println("----- Local Threshold Preview (backend command drives LEDs) -----");
   Serial.printf("MAIN_FAN: %s\n", mainFanOn ? "ON" : "off");
   Serial.printf("EMERGENCY: %s\n", gasDanger ? "ON" : "off");
   Serial.printf("CO2_LOW: %s\n", co2Low ? "ON" : "off");

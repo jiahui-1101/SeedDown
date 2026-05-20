@@ -30,8 +30,8 @@
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
 const char* BACKEND_BASE_URL = "https://nextlevelfarm.onrender.com";
-const char* DEVICE_ID = "dev_bgn_str_demo";
-const char* DEVICE_TOKEN = "PASTE_DEVICE_TOKEN_HERE";
+const char* DEVICE_ID = "beginner_starter";
+const char* DEVICE_TOKEN = "sd_demo_beginner_starter";
 const int DEFAULT_INTERVAL_SECONDS = 2;
 
 // Real sensors
@@ -158,6 +158,12 @@ void executeCommand(const String& command) {
   Serial.printf("[Command] WATER=%s LIGHT=%s BUZZER=%s\n", water ? "ON" : "off", light ? "ON" : "off", buzzer ? "ON" : "off");
 }
 
+void clearOutputs() {
+  digitalWrite(WATER_LED_PIN, LOW);
+  digitalWrite(LIGHT_LED_PIN, LOW);
+  digitalWrite(BUZZER_LED_PIN, LOW);
+}
+
 void pollAndExecuteCommand() {
   String path = String("/api/sensors/command?deviceId=") + DEVICE_ID + "&format=text";
   String response = httpGet(path);
@@ -221,9 +227,7 @@ void loop() {
   bool soilDry = soilRaw < SOIL_TRIGGER;
   bool lightLow = lightRaw < LIGHT_TRIGGER;
 
-  digitalWrite(WATER_LED_PIN, soilDry ? HIGH : LOW);
-  digitalWrite(LIGHT_LED_PIN, lightLow ? HIGH : LOW);
-  digitalWrite(BUZZER_LED_PIN, tempWarning ? HIGH : LOW);
+  clearOutputs(); // Physical LEDs are driven only after the backend command is received.
 
   Serial.println();
   Serial.println("========== SeedDown Beginner Starter ==========");
@@ -238,7 +242,7 @@ void loop() {
   Serial.printf("Light LDR real sensor raw: %d | Trigger < %d | %s\n",
                 lightRaw, LIGHT_TRIGGER, statusLabel(lightLow).c_str());
 
-  Serial.println("----- Output Status -----");
+  Serial.println("----- Local Threshold Preview (backend command drives LEDs) -----");
   Serial.printf("WATER_ON / Pump Blue LED: %s\n", soilDry ? "ON" : "off");
   Serial.printf("LIGHT_ON / Grow Yellow LED: %s\n", lightLow ? "ON" : "off");
   Serial.printf("BUZZER / Alarm Red LED: %s\n", tempWarning ? "ON" : "off");

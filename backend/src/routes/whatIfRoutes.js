@@ -5,6 +5,8 @@ const fs = require('fs');
 
 const c = require('../controllers/whatIfController');
 
+router.get('/market-prices', c.getMarketPrices);
+
 router.get('/recipes', (req, res) => {
 
   const { species } = req.query;

@@ -247,7 +247,7 @@ async function createFarm(req, res) {
         photoPreview, description, fieldId, deviceId, serial, packageLevel,
         goalPriority, thresholds, thresholdSource, thresholdNotes, zoneId,
         accountMode, farmId, farmSize, zones, commercialDevices, farmMaster,
-        commercialStructure,
+        commercialStructure, rackTypeId, rackLabel, rackConfig, plantSlots,
     } = req.body;
 
     if (!name) {
@@ -270,8 +270,12 @@ async function createFarm(req, res) {
         commercialDevices: Array.isArray(commercialDevices) ? commercialDevices : [],
         farmMaster: farmMaster || null,
         commercialStructure: commercialStructure || null,
-        rackType: rackType || '3-tier',
+        rackType: rackType || rackTypeId || '3-tier',
+        rackTypeId: rackTypeId || rackType || '3-tier',
+        rackLabel: rackLabel || rackConfig?.label || rackType || rackTypeId || '3-tier',
+        rackConfig: rackConfig || null,
         plants: plants || [],
+        plantSlots: plantSlots || (Array.isArray(plants) ? plants.reduce((sum, plant) => sum + (Number.parseInt(plant.slots || plant.count || 1, 10) || 1), 0) : 0),
         targetPlant: targetPlant || '',
         analysisGoal: analysisGoal || 'yield',
         deviceId: deviceId || null,

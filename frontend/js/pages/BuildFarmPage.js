@@ -102,9 +102,9 @@ const GOAL_OPTIONS = [
     { id: 'beginner_safe', label: 'Beginner Safe' },
 ];
 const PACKAGE_QR_OPTIONS = [
-    { id: 'beginner_starter', label: 'Beginner Starter', serial: 'SD-BGN-STR-00101', accountType: 'beginner_starter', packageLevel: 'starter', deviceType: 'beginner', desc: 'basic home sensor kit' },
+    { id: 'beginner_starter', label: 'Beginner Starter', serial: 'SD-BGN-STR-00123', accountType: 'beginner_starter', packageLevel: 'starter', deviceType: 'beginner', desc: 'basic home sensor kit' },
     { id: 'beginner_standard', label: 'Beginner Standard', serial: 'SD-BGN-STD-00456', accountType: 'beginner_standard', packageLevel: 'standard', deviceType: 'beginner', desc: 'balanced home vertical farm kit' },
-    { id: 'beginner_pro', label: 'Beginner Pro', serial: 'SD-BGN-PRO-00901', accountType: 'beginner_pro', packageLevel: 'pro', deviceType: 'beginner', desc: 'advanced home kit with more automation' },
+    { id: 'beginner_pro', label: 'Beginner Pro', serial: 'SD-BGN-PRO-00789', accountType: 'beginner_pro', packageLevel: 'pro', deviceType: 'beginner', desc: 'advanced home kit with more automation' },
     { id: 'commercial_farm_master_1', label: 'Commercial Farm Master Node 1', serial: 'SD-COM-FRM-03001', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'farm-level controller, one per commercial farm' },
     { id: 'commercial_farm_master_2', label: 'Commercial Farm Master Node 2', serial: 'SD-COM-FRM-03002', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'spare farm-level controller for demo or second farm' },
     { id: 'commercial_farm_master_3', label: 'Commercial Farm Master Node 3', serial: 'SD-COM-FRM-03003', accountType: 'commercial_farm_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'spare farm-level controller for demo or second farm' },
@@ -120,6 +120,14 @@ const PACKAGE_QR_OPTIONS = [
     { id: 'commercial_zone_pro', label: 'Legacy Commercial Zone Node Pro', serial: 'SD-COM-ZNP-02001', accountType: 'commercial_zone_pro', packageLevel: 'zone_pro', deviceType: 'commercial', desc: 'legacy expanded zone-level node, still supported' },
     { id: 'commercial_master', label: 'Legacy Commercial Farm Master', serial: 'SD-COM-MST-03001', accountType: 'commercial_master', packageLevel: 'farm_master', deviceType: 'commercial', desc: 'legacy master node for multi-zone farms' },
 ];
+
+const DEMO_DEVICE_BY_SERIAL = {
+    'SD-COM-FRM-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1' },
+    'SD-COM-MST-03001': { deviceId: 'commercial-farm-master-1', deviceToken: 'sd_demo_commercial_farm_master_1' },
+    'SD-COM-ZON-01001': { deviceId: 'commercial-zone-node-1', deviceToken: 'sd_demo_commercial_zone_node_1' },
+    'SD-COM-ZON-01002': { deviceId: 'commercial-zone-node-2', deviceToken: 'sd_demo_commercial_zone_node_2' },
+    'SD-COM-ZON-01003': { deviceId: 'commercial-zone-node-3', deviceToken: 'sd_demo_commercial_zone_node_3' },
+};
 
 const PACKAGE_CAPABILITIES = {
     starter: {
@@ -1296,15 +1304,28 @@ function commercialEnergyLimitBySize() {
 }
 
 function assignCommercialDeviceRecord(device, targetId) {
+    const normalizedDevice = normalizeCommercialDemoDevice(device);
     commercialDeviceAssignments = [
-        ...commercialDeviceAssignments.filter(item => item.targetId !== targetId && item.deviceId !== device.deviceId),
+        ...commercialDeviceAssignments.filter(item => item.targetId !== targetId && item.deviceId !== normalizedDevice.deviceId),
         {
-            ...device,
+            ...normalizedDevice,
             targetId,
             zoneId: targetId === 'farm_master' ? null : targetId,
             role: targetId === 'farm_master' ? 'farm_master' : 'zone_node',
         },
     ];
+}
+
+function normalizeCommercialDemoDevice(device = {}) {
+    const serial = String(device.serial || '').toUpperCase();
+    const demo = DEMO_DEVICE_BY_SERIAL[serial];
+    if (!demo) return device;
+    return {
+        ...device,
+        deviceId: demo.deviceId,
+        deviceToken: demo.deviceToken,
+        status: device.status || 'demo-assigned',
+    };
 }
 
 function buildLocalCommercialDevice(option = {}, targetId, farmId) {
@@ -2794,12 +2815,15 @@ async function createField() {
         location: fieldInfo.location.trim(),
         description: fieldInfo.description.trim(),
         rackType: fieldInfo.rackType,
+        rackTypeId: fieldInfo.rackType,
+        rackLabel: currentRack().label,
         rackConfig: fieldInfo.customRack ? { ...fieldInfo.customRack } : null,
         targetPlant: detectedPlants.map(plant => plant.name).join(', '),
         analysisGoal: goalPriority.join(','),
         viewMode,
         photoPreview: photoData?.dataUrl || null,
         plants: detectedPlants,
+        plantSlots: totalSlotsUsed(),
         deviceId: registeredDevice?.deviceId || 'farm_001',
         serial: registeredDevice?.serial || deviceSetup.serial,
         packageLevel: registeredDevice?.packageLevel || 'standard',
