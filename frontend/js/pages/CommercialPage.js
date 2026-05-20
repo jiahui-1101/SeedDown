@@ -26,12 +26,19 @@ const DEFAULT_COMMERCIAL_ZONES = [
     { id: 'zone_A', label: 'Zone A', crop: 'Leafy Greens' },
     { id: 'zone_B', label: 'Zone B', crop: 'Fruit Crops' },
     { id: 'zone_C', label: 'Zone C', crop: 'Herbs' },
+    { id: 'zone_D', label: 'Zone D', crop: 'Mixed Crops' },
+    { id: 'zone_E', label: 'Zone E', crop: 'Mixed Crops' },
+    { id: 'zone_F', label: 'Zone F', crop: 'Mixed Crops' },
 ];
 
 const DEMO_COMMERCIAL_ZONE_DEVICES = {
     zone_A: 'commercial-zone-node-1',
     zone_B: 'commercial-zone-node-2',
     zone_C: 'commercial-zone-node-3',
+    zone_D: 'commercial-zone-node-4',
+    zone_E: 'commercial-zone-node-5',
+    zone_F: 'commercial-zone-node-6',
+    // D/E/F rely on zoneId query fallback — no dedicated demo device
 };
 
 const DEMO_COMMERCIAL_FARM_MASTER = 'commercial-farm-master-1';
@@ -72,22 +79,34 @@ export function render() {
                 </div>
 
                  <div class="ops-scroll">
-                    <section class="ops-section" id="overallDataSection" style="cursor:pointer; border: 2px solid transparent; transition: border-color 0.2s;">
-                        <div class="ops-section-title" id="liveSensorTitle" style="color:#15803d; font-size:12px;">Live Sensors · Overall Farm</div>
-                        <div class="ops-sensor-grid">
-                            ${sensorCard('Temp', 'pro-temp', '--', 'temp')}
-                            ${sensorCard('Humid', 'pro-humid', '--', 'humid')}
-                            ${sensorCard('Light', 'pro-light', '--', 'light')}
-                            ${sensorCard('pH', 'pro-ph', '--', 'ph')}
-                            ${sensorCard('Water', 'pro-water', '--', 'water')}
-                            ${sensorCard('Gas', 'pro-gas', '--', 'nutrient')}
-                            ${sensorCard('EC', 'pro-ec', '--', 'ec')}
-                            ${sensorCard('CO2', 'pro-co2', '--', 'co2')}
-                        </div>
-                        <div style="text-align:center; font-size:10px; color:#047857; margin-top:12px; font-weight:bold;">
-                            👉 Click here to view Overall Historical Data
-                        </div>
-                    </section>
+
+    <!-- FARM MASTER OVERVIEW -->
+    <section class="ops-section" id="farmMasterSection" style="border-left:4px solid #0369a1;">
+        <div class="ops-section-title" style="color:#0369a1;">🏭 Farm Master · Overall</div>
+       <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+    <button class="fm-tile fm-drill" data-key="water" type="button">
+        <span>Water Level</span>
+        <strong id="fm-water">--</strong>
+    </button>
+    <button class="fm-tile fm-drill" data-key="gas" type="button">
+        <span>Gas</span>
+        <strong id="fm-gas">--</strong>
+    </button>
+    <button class="fm-tile fm-drill" data-key="co2" type="button">
+        <span>CO₂</span>
+        <strong id="fm-co2">--</strong>
+    </button>
+    <button class="fm-tile fm-drill" data-key="energy" type="button">
+        <span>Energy</span>
+        <strong id="fm-energy">--</strong>
+    </button>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
+    <div style="font-size:11px;color:#0369a1;font-weight:750;line-height:1.45;" id="fm-status-text">Syncing farm master...</div>
+    <button id="farmMasterDetailBtn" type="button" style="font-size:10px;font-weight:950;color:#0369a1;background:#e0f2fe;border:1px solid #bae6fd;border-radius:999px;padding:5px 10px;cursor:pointer;">View All →</button>
+</div>
+    </section>
+   
 
                     <section class="ops-section advisor-section">
                         <div class="ops-section-title">AI Farm Advisor</div>
@@ -97,7 +116,7 @@ export function render() {
                     
 
                     <section class="ops-section">
-                        <div class="ops-section-title">Farm Master / Zones</div>
+<div class="ops-section-title">Zone Health · Tap to drill in</div>
                         <div class="zone-overview-grid">
                             ${zoneOverviewCards(farm, rack)}
                         </div>
@@ -157,6 +176,22 @@ function bindEvents() {
         if (event.key === 'Enter') sendCommercialChat();
     });
 
+    // Farm master tiles → detail page
+document.querySelectorAll('.fm-drill').forEach(tile => {
+    tile.addEventListener('click', () => {
+        clearInterval(AppState.proInterval);
+        showScreen('farm-master-detail', {
+            key: tile.getAttribute('data-key'),
+            from: 'dash-c',
+        });
+    });
+});
+
+document.getElementById('farmMasterDetailBtn')?.addEventListener('click', () => {
+    clearInterval(AppState.proInterval);
+    showScreen('farm-master-detail', { from: 'dash-c' });
+});
+
     document.querySelectorAll('.com-feat').forEach(el => {
         el.addEventListener('click', () => {
             const feature = el.getAttribute('data-feature');
@@ -172,26 +207,9 @@ function bindEvents() {
         });
     });
 
-    document.querySelectorAll('.pro-sensor-card').forEach(card => {
-        card.addEventListener('click', () => {
-            clearInterval(AppState.proInterval);
-            showScreen('sensor-detail', {
-                key: card.getAttribute('data-key'),
-                name: card.getAttribute('data-label'),
-                from: 'dash-c',
-                zoneId: selectedZoneId,
-            });
-        });
-    });
+   
 
-    document.querySelectorAll('.commercial-zone-card').forEach(card => {
-        card.addEventListener('click', () => {
-            selectedZoneId = card.getAttribute('data-zone');
-            AppState.currentZoneId = selectedZoneId;
-            updateZoneSelectionUI();
-            syncSelectedZoneData();
-        });
-    });
+   
 }
 
 function toggleOpsPanel() {
@@ -266,46 +284,44 @@ function initProDashboard() {
     clearInterval(AppState.proInterval);
     AppState.aiConsulted = false;
 
-    const syncData = async () => {
-        try {
-            await updateZoneOverview();
-            const data = await fetchLatestCommercialReading(selectedZoneId);
-            if (!data || !data.reading) return;
-            const r = data.reading;
+const syncData = async () => {
+    try {
+        // ── Farm Master ──────────────────────────────────────
+        const fmRes = await fetchWithTimeout(
+            `${API_BASE}/api/sensors/latest?deviceId=${DEMO_COMMERCIAL_FARM_MASTER}`, {}, 4500
+        ).catch(() => null);
+        if (fmRes) {
+            const fmData = await fmRes.json().catch(() => null);
+            const r = fmData?.reading;
+            if (r) {
+                setText('fm-water',  r.waterDistanceCm != null ? `${Number(r.waterDistanceCm).toFixed(1)} cm` : '--');
+                setText('fm-gas',    r.gasRaw != null ? String(Math.round(Number(r.gasRaw))) : '--');
+                setText('fm-co2',    r.co2Ppm != null ? `${r.co2Ppm} ppm` : '--');
+                setText('fm-energy', r.energyKwh != null ? `${Number(r.energyKwh).toFixed(2)} kWh` : '--');
+                setText('fm-status-text', `Last sync: ${new Date().toLocaleTimeString()} · Device: ${DEMO_COMMERCIAL_FARM_MASTER}`);
+            }
+        }
 
-            const temp = Number(r.temperature || 0);
-            const humid = Number(r.humidity || 0);
-            const light = Number(r.lightRaw || 0);
-            const ph = Number(r.ph || 0);
-            const water = Number(r.waterDistanceCm || 0);
-            const gas = Number(r.gasRaw || 0);
-            const ec = Number(r.ec || 0);
-            const co2 = Number(r.co2Ppm || 0);
-            const plantTotal = plantCount(getCurrentFarm());
-          
+        // ── Zone overview ─────────────────────────────────────
+        await updateZoneOverview();
 
-           
-            setText('pro-temp', `${temp.toFixed(1)}°C`);
-            setText('pro-humid', `${humid}%`);
-            setText('pro-light', light);
-            setText('pro-ph', ph || '--');
-            setText('pro-water', `${water}cm`);
-            setText('pro-gas', gas);
-            setText('pro-ec', ec ? ec.toFixed(2) + ' mS' : '--');
-            setText('pro-co2', co2 ? co2 + ' ppm' : '--');
-
-            if (!AppState.aiConsulted) {
-                fetchAIGlobalAdvice(r);
+                // ── AI advice (once) ──────────────────────────────────
+        if (!AppState.aiConsulted) {
+            const firstZone = buildCommercialZones(getCurrentFarm(), resolveRack(getCurrentFarm()))[0];
+            const data = await fetchLatestCommercialReading(firstZone?.id || 'zone_A');
+            if (data?.reading) {
+                fetchAIGlobalAdvice(data.reading);
                 AppState.aiConsulted = true;
             }
-        } catch (e) {
-            console.error('Dashboard Sync Failed:', e);
-            setText('ai-overview-text', 'Live backend offline. Showing saved farm layout.');
         }
-    };
+    } catch (e) {
+        console.error('Dashboard Sync Failed:', e);
+        setText('ai-overview-text', 'Live backend offline. Showing saved farm layout.');
+    }
+};
 
     syncData();
-    AppState.proInterval = setInterval(syncData, 5000);
+    AppState.proInterval = setInterval(syncData, 8000);
 }
 
 function buildSensorQuery() {
@@ -678,14 +694,13 @@ function zoneOverviewCards(farm, rack) {
 function zoneCardHtml(zone) {
     const reading = zoneSnapshots[zone.id];
     const health = zoneHealth(reading, getCurrentFarm()?.thresholds || {});
-    const selected = zone.id === selectedZoneId ? 'selected' : '';
     const deviceLabel = zone.deviceId ? zone.deviceId.replace(/^dev_/, '') : 'unassigned';
     const latest = reading
-        ? `${formatSensorMini(reading.temperature, '°C')} · ${formatSensorMini(reading.humidity, '%')} · gas ${reading.gasRaw ?? '--'}`
+        ? `${formatSensorMini(reading.temperature, '°C')} · ${formatSensorMini(reading.humidity, '%')} · pH ${reading.ph != null ? Number(reading.ph).toFixed(1) : '--'}`
         : 'waiting for first reading';
 
     return `
-        <button class="commercial-zone-card ${selected} ${health.level}" data-zone="${zone.id}" type="button">
+        <button class="commercial-zone-card ${health.level}" data-zone="${zone.id}" type="button">
             <div class="zone-card-head">
                 <span>${escapeHTML(zone.label)}</span>
                 <b>${health.label}</b>
@@ -694,6 +709,7 @@ function zoneCardHtml(zone) {
             <div class="zone-card-meta">${zone.planted}/${zone.capacity} slots · ${escapeHTML(deviceLabel)}</div>
             <div class="zone-meter"><i style="width:${zone.occupied}%"></i></div>
             <small>${escapeHTML(latest)}</small>
+            <div style="margin-top:8px;font-size:10px;font-weight:900;color:#047857;">→ Tap to drill into zone</div>
         </button>
     `;
 }
@@ -708,10 +724,11 @@ function renderZoneOverview() {
 function bindZoneCards() {
     document.querySelectorAll('.commercial-zone-card').forEach(card => {
         card.addEventListener('click', () => {
-            selectedZoneId = card.getAttribute('data-zone');
-            AppState.currentZoneId = selectedZoneId;
-            updateZoneSelectionUI();
-            syncSelectedZoneData();
+            clearInterval(AppState.proInterval);
+            showScreen('zone-detail', {
+                zoneId: card.getAttribute('data-zone'),
+                from: 'dash-c',
+            });
         });
     });
 }
@@ -751,7 +768,11 @@ function buildCommercialZones(farm, rack) {
 }
 
 function commercialZonesForFarm(farm) {
-    const zones = Array.isArray(farm?.zones) ? farm.zones : Array.isArray(farm?.commercialStructure?.zones) ? farm.commercialStructure.zones : [];
+    const zones = Array.isArray(farm?.commercialStructure?.zones)
+        ? farm.commercialStructure.zones
+        : Array.isArray(farm?.zones)
+        ? farm.zones
+        : [];
     if (!zones.length) return DEFAULT_COMMERCIAL_ZONES;
     return zones.map((zone, index) => {
         const id = normalizeZoneId(zone.zone_id || zone.id || `zone_${String.fromCharCode(65 + index)}`);
@@ -783,9 +804,11 @@ function findDeviceForZone(farm, zoneId) {
 function normalizeZoneId(value) {
     const raw = String(value || '').trim().toLowerCase();
     if (!raw) return '';
-    if (raw === 'a' || raw === 'zone a' || raw === 'zone_a') return 'zone_A';
-    if (raw === 'b' || raw === 'zone b' || raw === 'zone_b') return 'zone_B';
-    if (raw === 'c' || raw === 'zone c' || raw === 'zone_c') return 'zone_C';
+    // Single letter or "zone X" format — covers A through Z
+    const singleLetter = raw.match(/^([a-z])$/);
+    const zoneWord = raw.match(/^zone[_ ]([a-z])$/);
+    const letter = singleLetter?.[1] || zoneWord?.[1];
+    if (letter) return `zone_${letter.toUpperCase()}`;
     return raw.startsWith('zone_') ? `zone_${raw.slice(5).toUpperCase()}` : raw;
 }
 
@@ -1073,6 +1096,36 @@ function ensureCommercialCommandStyles() {
             margin-bottom: 10px;
         }
         .advisor-section { border-left: 4px solid #22c55e; }
+.fm-tile {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 14px;
+    padding: 10px 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: background .15s, border-color .15s, transform .15s;
+}
+.fm-tile:hover {
+    background: #e0f2fe;
+    border-color: #7dd3fc;
+    transform: translateY(-1px);
+}
+    
+.fm-tile span {
+    display: block;
+    font-size: 9px;
+    font-weight: 950;
+    color: #0369a1;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 6px;
+}
+.fm-tile strong {
+    display: block;
+    font-size: 16px;
+    font-weight: 950;
+    color: #0c4a6e;
+}
         .advisor-text { color: #334155; font-size: 13px; line-height: 1.45; }
         .zone-overview-grid {
             display: grid;
