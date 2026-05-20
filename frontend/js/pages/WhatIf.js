@@ -299,6 +299,11 @@ function plantedToWifCrops(plantedCrops) {
     cucumber:    { kg: 0.35, units: 3, readyIn: 55, color: '#33691E' },
     banana:      { kg: 1.20, units: 1, readyIn: 270, color: '#F9A825' },
     mango:       { kg: 0.80, units: 1, readyIn: 180, color: '#FF8F00' },
+    kangkung:    { kg: 0.12, units: 6, readyIn: 21,  color: '#2E7D32' },
+    pandan:      { kg: 0.05, units: 4, readyIn: 90,  color: '#1B5E20' },
+    ulam_raja:   { kg: 0.10, units: 5, readyIn: 45,  color: '#388E3C' },
+    curry_leaf:  { kg: 0.06, units: 4, readyIn: 60,  color: '#558B2F' },
+    cili_padi:   { kg: 0.08, units: 6, readyIn: 90,  color: '#C62828' },
   };
 
   // ✅ FIX: deduplicate by species — merge slots/units from duplicate entries
@@ -461,6 +466,11 @@ const WIF_COST_REFERENCE = {
   spinach:  { price: 6.0,  yieldKgCycle: 0.45, growthDays: 40, waterMLDay: 120, fertMLWeek: 3, lightHours: 5 },
   mint:     { price: 10.0, yieldKgCycle: 0.35, growthDays: 28, waterMLDay: 120, fertMLWeek: 2, lightHours: 5 },
   chili:    { price: 9.0,  yieldKgCycle: 0.60, growthDays: 90, waterMLDay: 220, fertMLWeek: 5, lightHours: 8 },
+  kangkung:   { price: 3.0,  yieldKgCycle: 0.40, growthDays: 21, waterMLDay: 180, fertMLWeek: 3, lightHours: 5 },
+  pandan:     { price: 5.0,  yieldKgCycle: 0.10, growthDays: 90, waterMLDay: 100, fertMLWeek: 2, lightHours: 5 },
+  ulam_raja:  { price: 6.0,  yieldKgCycle: 0.30, growthDays: 45, waterMLDay: 130, fertMLWeek: 2, lightHours: 6 },
+  curry_leaf: { price: 8.0,  yieldKgCycle: 0.15, growthDays: 60, waterMLDay: 120, fertMLWeek: 2, lightHours: 7 },
+  cili_padi:  { price: 15.0, yieldKgCycle: 0.25, growthDays: 90, waterMLDay: 200, fertMLWeek: 4, lightHours: 8 },
 };
 
 function wifMeasuredCostLine(value, rate) {
@@ -668,6 +678,56 @@ const WIF_NP_DATA = {
     ],
     ai: 'Basil is low-impact. Great companion plant for tomatoes and peppers.',
   },
+  kangkung: {
+    emoji: '🥬', readyDays: 3, readyZone: 'Zone B herbs', space: '0.8m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '+4%',       dir: 'up'   },
+      { name: 'pH value',    emoji: '🧪',  change: 'No change', dir: 'ok'   },
+      { name: 'Light (h/d)', emoji: '☀️',  change: '-1h',       dir: 'down' },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+6%',       dir: 'up'   },
+    ],
+    ai: 'Kangkung is one of the easiest greens to grow indoors — ready in 3 weeks, low light needed. Great for beginners.',
+  },
+  pandan: {
+    emoji: '🌿', readyDays: 14, readyZone: 'Zone A herbs', space: '0.6m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '+5%',       dir: 'up' },
+      { name: 'pH value',    emoji: '🧪',  change: '-0.1',      dir: 'ok' },
+      { name: 'Light (h/d)', emoji: '☀️',  change: 'No change', dir: 'ok' },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+3%',       dir: 'up' },
+    ],
+    ai: 'Pandan grows slowly but needs minimal care. Harvest individual leaves from the outer layer — do not uproot.',
+  },
+  ulam_raja: {
+    emoji: '🌱', readyDays: 21, readyZone: 'Zone B herbs', space: '1.0m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '+3%',       dir: 'up' },
+      { name: 'pH value',    emoji: '🧪',  change: 'No change', dir: 'ok' },
+      { name: 'Light (h/d)', emoji: '☀️',  change: '+0.5h',     dir: 'up' },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+5%',       dir: 'up' },
+    ],
+    ai: 'Ulam raja is hardy and grows well in Malaysian indoor conditions. Good for salads and ulam.',
+  },
+  curry_leaf: {
+    emoji: '🌿', readyDays: 30, readyZone: 'Zone C herbs', space: '0.7m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '-2%',       dir: 'down' },
+      { name: 'pH value',    emoji: '🧪',  change: '+0.2',      dir: 'ok'   },
+      { name: 'Light (h/d)', emoji: '☀️',  change: '+1.5h',     dir: 'up'   },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+4%',       dir: 'up'   },
+    ],
+    ai: 'Curry leaf needs more light than other herbs. Place near the top tier for best results. Harvest sparingly at first.',
+  },
+  cili_padi: {
+    emoji: '🌶️', readyDays: 14, readyZone: 'Zone C', space: '1.0m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '-3%',       dir: 'down' },
+      { name: 'pH value',    emoji: '🧪',  change: '+0.2',      dir: 'up'   },
+      { name: 'Light (h/d)', emoji: '☀️',  change: '+2h',       dir: 'up'   },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+12%',      dir: 'up'   },
+    ],
+    ai: 'Cili padi needs bright light and warm temps — same conditions as your other chili plants. Prune the base leaves to improve airflow.',
+  },
 };
 
 const WIF_ZONES = [
@@ -830,35 +890,35 @@ export function render() {
       <!-- TAB BAR -->
       <div class="wif-tab-bar">
         <button class="wif-tab-btn active" onclick="wifSwitchTab('harvest',this)">
-          <span class="wif-tab-icon">🌿</span><span>Harvest</span>
+          <span class="wif-tab-icon">🌿</span><span>This Week</span>
         </button>
         <button class="wif-tab-btn" onclick="wifSwitchTab('cost',this)">
-          <span class="wif-tab-icon">💰</span><span>Savings</span>
+          <span class="wif-tab-icon">🏷️</span><span>Savings</span>
         </button>
         <button class="wif-tab-btn" onclick="wifSwitchTab('newplant',this)">
-          <span class="wif-tab-icon">🌱</span><span>New Plant</span>
+          <span class="wif-tab-icon">❓</span><span>Can I Grow?</span>
         </button>
       </div>
 
       <!-- ===== TAB 1: HARVEST PREDICT ===== -->
       <div id="wif-harvest" class="wif-section active">
         <div class="wif-card">
-          <div class="wif-card-title">📅 Harvest timeline</div>
+          <div class="wif-card-title">📅 What can I pick?</div>
           <div class="wif-slider-row">
-            <label for="wif-sl-days">Forecast</label>
+            <label for="wif-sl-days">In the next</label>
             <input type="range" min="7" max="365" value="30" step="1" id="wif-sl-days" oninput="wifUpdateHarvest()">
             <span class="wif-slider-val" id="wif-v-days">30 days</span>
           </div>
-          <!-- MODIFIED: replaced "Days left" metric with "Total units" to show exact harvest count -->
+          <!-- Units first — mum counts individual plants/stalks/heads, not kg -->
           <div class="wif-metric-grid">
-            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-items">0</div><div class="wif-metric-lbl">Crops ready</div></div>
-            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-yield">0.00 kg</div><div class="wif-metric-lbl">Est. yield</div></div>
-            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-units">0</div><div class="wif-metric-lbl">Total units</div></div>
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-units">0</div><div class="wif-metric-lbl">Units ready</div></div>
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-items">0</div><div class="wif-metric-lbl">Crop types</div></div>
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-yield">0.00 kg</div><div class="wif-metric-lbl">Est. weight</div></div>
           </div>
           <div id="wif-crop-timelines"></div>
         </div>
         <div class="wif-card">
-          <div class="wif-card-title">✅ Select harvested crops</div>
+          <div class="wif-card-title">✅ Select what you picked</div>
           <div class="wif-crop-pills" id="wif-crop-select"></div>
         </div>
         <div class="wif-card">
@@ -895,7 +955,7 @@ export function render() {
         <div class="wif-card">
           <div class="wif-savings-big">
             <div class="wif-savings-num" id="wif-net-saving">RM 0.00</div>
-            <div class="wif-savings-lbl">Net savings vs buying</div>
+            <div class="wif-savings-lbl">saved vs buying at pasar</div>
           </div>
           <hr class="wif-divider">
           <div id="wif-cost-breakdown"></div>
@@ -914,7 +974,7 @@ export function render() {
       <!-- ===== TAB 3: NEW PLANT ===== -->
       <div id="wif-newplant" class="wif-section">
         <div class="wif-card">
-          <div class="wif-card-title">🌱 Add new plant</div>
+          <div class="wif-card-title">🔍 Can I grow this?</div>
           <!-- MODIFIED: replaced <select> with smart-search input + suggestion dropdown -->
           <div class="wif-np-search-wrap">
             <span class="wif-np-search-icon">🔍</span>
@@ -941,11 +1001,11 @@ export function render() {
 
         <!-- ✅ FIX 4.3: AI advisor card — shown below add-plant form, updated by wifFetchNewPlantAi -->
         <div id="wif-np-advisor-card" class="wif-card" style="display:none;border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
-          <div class="wif-card-title">🤖 AI Advisor</div>
+          <div class="wif-card-title">🌱 Grow verdict</div>
           <div id="wif-np-advisor-body"></div>
         </div>
         <div class="wif-card">
-          <div class="wif-card-title">⏰ Planting readiness</div>
+          <div class="wif-card-title">🪴 Space available?</div>
           <div class="wif-readiness" id="wif-readiness">
             <span style="font-size:24px;">📅</span>
             <div>
@@ -957,7 +1017,7 @@ export function render() {
           <div id="wif-zone-list"></div>
         </div>
         <div class="wif-card">
-          <div class="wif-card-title">📈 Predicted resource impact</div>
+          <div class="wif-card-title">📋 What this plant needs</div>
           <!-- MODIFIED: grid is now 2-col instead of auto-fit 3-col -->
           <div class="wif-impact-grid" id="wif-impact-grid"></div>
           <div class="wif-ai-note" id="wif-np-ai-note-wrap" style="display:none;"><span> </span><span id="wif-np-ai-note">Loading...</span></div>
@@ -1071,9 +1131,9 @@ function wifUpdateHarvest() {
   const totalKg    = ready.reduce((a, c) => a + c.kg, 0);
   const totalUnits = ready.reduce((a, c) => a + c.units, 0);
 
+  document.getElementById('wif-hm-units').textContent = totalUnits;
   document.getElementById('wif-hm-items').textContent = ready.length;
   document.getElementById('wif-hm-yield').textContent = totalKg.toFixed(2) + ' kg';
-  document.getElementById('wif-hm-units').textContent = totalUnits;
 
   document.getElementById('wif-crop-timelines').innerHTML = CROPS.map(c => {
     const pct = Math.min(100, Math.round((days / c.readyIn) * 100));
@@ -1085,7 +1145,7 @@ function wifUpdateHarvest() {
           <div class="wif-tl-fill" style="width:${pct}%;background:${rdy ? 'var(--accent,#639922)' : 'var(--amber-100,#FAC775)'};"></div>
         </div>
         ${rdy
-          ? `<span class="wif-tl-count">${c.units} units <span class="wif-badge wif-badge-green">Ready</span></span>`
+          ? `<span class="wif-tl-count">${c.units} unit${c.units !== 1 ? 's' : ''} <span class="wif-badge wif-badge-green">Ready</span></span>`
           : `<span class="wif-tl-end" style="color:var(--text-secondary,#666)">Day ${c.readyIn}</span>`}
       </div>`;
   }).join('');
@@ -1323,27 +1383,34 @@ function wifUpdateCost() {
   </div>`;
   const badge = isMeasured => `<span class="wif-badge ${isMeasured ? 'wif-badge-green' : 'wif-badge-amber'}" style="margin-left:6px;">${isMeasured ? 'Measured' : 'Estimated'}</span>`;
 
+  // Resource costs collapsed by default — beginner sees the win first
   document.getElementById('wif-cost-breakdown').innerHTML = `
     <div class="wif-cost-row wif-cost-income">
-      <span class="wif-cost-lbl">📦 Harvest value ${badge(calc.measured.harvest && calc.measured.price)}<span style="font-size:10px;opacity:.7;"> (${calc.harvestKg.toFixed(2)} kg × RM ${calc.marketPricePerKg.toFixed(2)}/kg)</span></span>
-      <span style="color:var(--green-600,#3B6D11);font-weight:500;">+RM ${calc.income.toFixed(2)}</span>
+      <span class="wif-cost-lbl">🛒 Pasar price for same amount ${badge(calc.measured.harvest && calc.measured.price)}<span style="font-size:10px;opacity:.7;"> (${calc.harvestKg.toFixed(2)} kg @ RM ${calc.marketPricePerKg.toFixed(2)}/kg)</span></span>
+      <span style="color:var(--green-600,#3B6D11);font-weight:500;">RM ${calc.income.toFixed(2)}</span>
     </div>
-    <div class="wif-cost-row wif-cost-expense">
-      <span class="wif-cost-lbl">💧 Water needed ${badge(calc.measured.water)}<span style="font-size:10px;opacity:.7;"> (${calc.waterLiters.toFixed(2)} L × RM ${WATER_RATE_RM_PER_LITRE}/L)</span></span>
-      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${calc.waterCost.toFixed(2)}</span>
+    <div class="wif-cost-row" style="background:var(--bg-secondary,#f5f5f5);cursor:pointer;" onclick="document.getElementById('wif-cost-detail').style.display=document.getElementById('wif-cost-detail').style.display==='none'?'block':'none'">
+      <span class="wif-cost-lbl" style="color:var(--text-secondary,#666);font-size:11px;">💧⚡🧪 Your growing cost — RM ${calc.expenses.toFixed(2)} <span style="font-size:10px;opacity:.7;">(tap to see breakdown)</span></span>
+      <span style="color:var(--red-400,#E24B4A);font-size:12px;">−RM ${calc.expenses.toFixed(2)}</span>
     </div>
-    <div class="wif-cost-row wif-cost-expense">
-      <span class="wif-cost-lbl">⚡ Energy/light needed ${badge(calc.measured.energy)}<span style="font-size:10px;opacity:.7;"> (${calc.energyKWh.toFixed(2)} kWh × RM ${ELECTRICITY_RATE_RM_PER_KWH}/kWh)</span></span>
-      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${calc.energyCost.toFixed(2)}</span>
+    <div id="wif-cost-detail" style="display:none;">
+      <div class="wif-cost-row wif-cost-expense">
+        <span class="wif-cost-lbl">💧 Water ${badge(calc.measured.water)}<span style="font-size:10px;opacity:.7;"> (${calc.waterLiters.toFixed(2)} L × RM ${WATER_RATE_RM_PER_LITRE}/L)</span></span>
+        <span style="color:var(--red-400,#E24B4A);">−RM ${calc.waterCost.toFixed(2)}</span>
+      </div>
+      <div class="wif-cost-row wif-cost-expense">
+        <span class="wif-cost-lbl">⚡ Electricity ${badge(calc.measured.energy)}<span style="font-size:10px;opacity:.7;"> (${calc.energyKWh.toFixed(2)} kWh × RM ${ELECTRICITY_RATE_RM_PER_KWH}/kWh)</span></span>
+        <span style="color:var(--red-400,#E24B4A);">−RM ${calc.energyCost.toFixed(2)}</span>
+      </div>
+      <div class="wif-cost-row wif-cost-expense">
+        <span class="wif-cost-lbl">🧪 Fertilizer ${badge(calc.measured.fertilizer)}<span style="font-size:10px;opacity:.7;"> (${calc.fertilizerML.toFixed(1)} mL × RM ${FERTILIZER_RATE_RM_PER_ML}/mL)</span></span>
+        <span style="color:var(--red-400,#E24B4A);">−RM ${calc.fertCost.toFixed(2)}</span>
+      </div>
+      ${assumptionNote}
     </div>
-    <div class="wif-cost-row wif-cost-expense">
-      <span class="wif-cost-lbl">🧪 Fertilizer needed ${badge(calc.measured.fertilizer)}<span style="font-size:10px;opacity:.7;"> (${calc.fertilizerML.toFixed(1)} mL × RM ${FERTILIZER_RATE_RM_PER_ML}/mL)</span></span>
-      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${calc.fertCost.toFixed(2)}</span>
-    </div>
-    ${assumptionNote}
     <div class="wif-cost-row wif-cost-net">
-      <span>⭐ Net savings</span>
-      <span style="color:${netClass};">RM ${calc.net.toFixed(2)}</span>
+      <span>⭐ You saved</span>
+      <span style="color:${netClass};font-weight:500;">RM ${calc.net.toFixed(2)}</span>
     </div>`;
 
   // Only set the note if AI hasn't already filled it with a real response
@@ -1460,12 +1527,12 @@ function wifRenderCostAiDetail(data = {}) {
         </div>
         <div class="wif-metric">
           <div class="wif-metric-val" style="font-size:15px;color:${netColour};">${money(calc.net)}</div>
-          <div class="wif-metric-lbl">Net savings</div>
+          <div class="wif-metric-lbl">Saved vs pasar</div>
         </div>
       </div>
       <div class="wif-cost-row wif-cost-income">
-        <span class="wif-cost-lbl">📦 Harvest market value</span>
-        <span style="color:var(--green-600,#3B6D11);">${calc.income === null ? '--' : `+${money(calc.income)}`}</span>
+        <span class="wif-cost-lbl">🛒 Pasar value of your harvest</span>
+        <span style="color:var(--green-600,#3B6D11);">${calc.income === null ? '--' : `${money(calc.income)}`}</span>
       </div>
       <div class="wif-cost-row wif-cost-expense">
         <span class="wif-cost-lbl">💧⚡🧪 Resource cost</span>
@@ -1867,7 +1934,7 @@ function wifRenderNewPlantFallback({ species, quantity, sensors, reason }) {
       </div>
       ${warningHtml}
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-        <span class="wif-badge ${blocked ? 'wif-badge-red' : 'wif-badge-green'}">${blocked ? 'Not suitable' : 'Fast estimate'}</span>
+        <span class="wif-badge ${blocked ? 'wif-badge-red' : 'wif-badge-green'}">${blocked ? '😟 Not suitable' : '😊 Worth trying'}</span>
         <span class="wif-badge wif-badge-blue">AI timed out</span>
       </div>
       <div style="font-size:10px;color:var(--text-secondary,#777);margin-top:8px;">Reason: ${wifEscapeHtml(reason)} · Source: ${wifEscapeHtml(source)}</div>`;
@@ -1984,16 +2051,22 @@ async function wifFetchNewPlantAi(species, quantity) {
               <span style="font-size:11px;color:var(--teal-600,#0F6E56);">${action}</span>
             </div>`;
           }).join('');
-        const scoreBadge = data.score !== null
-          ? `<span class="wif-badge wif-badge-blue">AI Score: ${Math.round(data.score)}%</span>`
-          : `<span class="wif-badge wif-badge-blue">AI checked</span>`;
+        const diffEmoji = data.score === null ? '🌱'
+          : data.score >= 75 ? '😊'
+          : data.score >= 50 ? '😐'
+          : '😟';
+        const diffLabel = data.score === null ? 'Checking...'
+          : data.score >= 75 ? 'Easy to grow'
+          : data.score >= 50 ? 'Needs some care'
+          : 'Needs attention';
+        const scoreBadge = `<span class="wif-badge wif-badge-green" style="font-size:11px;">${diffEmoji} ${diffLabel}</span>`;
         const sourceText = data.sensorSource || sensors?.source || 'Firebase sensorReadings';
         advisorBody.innerHTML = `
           <div style="font-size:12px;color:var(--teal-600,#0F6E56);line-height:1.5;">${wifEscapeHtml(data.insight)}</div>
           ${warningHtml}
           ${gapRows ? `<div style="margin-top:10px;">${gapRows}</div>` : ''}
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-            <span class="wif-badge wif-badge-green">Suitable Indoor Crop</span>
+            <span class="wif-badge wif-badge-green">✅ Good for your farm</span>
             ${scoreBadge}
           </div>
           <div style="font-size:10px;color:var(--text-secondary,#777);margin-top:8px;">Source: ${wifEscapeHtml(sourceText)}</div>`;
