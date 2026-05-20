@@ -42,8 +42,7 @@ const LIGHT_HRS_PER_DAY = { dark: 10, mid: 8, bright: 6 };
 // Fertilizer multiplier depending on nutrient band
 const FERT_MULTIPLIER = { low: 1.5, mid: 1.0, high: 0.7 };
 
-// Default sensor values — used as fallback when Firebase is unreachable.
-// Single source of truth; referenced in fetchSensorData() and wifUpdateCost().
+// Legacy display defaults only. Sensor calculations must come from Firebase.
 const DEFAULT_SENSORS = { temp: 28, humid: 68, light: 82, water: 45, nutrient: 78 };
 
 // ── Farm data helpers ──────────────────────────────────────────
@@ -127,27 +126,21 @@ function plantedToWifCrops(plantedCrops) {
 async function fetchSensorData() {
   // Use the current farm's ID if available; fall back to the module default
   const deviceId = AppState.currentFarmId || DEFAULT_DEVICE_ID;
-  const fallback = {
-    temp:     AppState.sensors?.temp?.val     ?? DEFAULT_SENSORS.temp,
-    humid:    AppState.sensors?.humid?.val    ?? DEFAULT_SENSORS.humid,
-    light:    AppState.sensors?.light?.val    ?? DEFAULT_SENSORS.light,
-    water:    AppState.sensors?.water?.val    ?? DEFAULT_SENSORS.water,
-    nutrient: AppState.sensors?.nutrient?.val ?? DEFAULT_SENSORS.nutrient,
-  };
   try {
     const res = await fetch(`${API_BASE}/api/sensors/latest?deviceId=${deviceId}`);
+    if (!res.ok) throw new Error('sensor HTTP ' + res.status);
     const data = await res.json();
     // Normalize field names — sensorService.js stores as temperature/humidity/soilRaw etc.
     return {
-      temp:     data.temperature  ?? data.temp     ?? fallback.temp,
-      humid:    data.humidity     ?? data.humid     ?? fallback.humid,
-      light:    data.light        ?? data.lux       ?? fallback.light,
-      water:    data.soilMoisture ?? data.water     ?? fallback.water,
-      nutrient: data.nutrient     ?? data.ec        ?? fallback.nutrient,
+      temp:     data.temperature  ?? data.temp     ?? null,
+      humid:    data.humidity     ?? data.humid     ?? null,
+      light:    data.light        ?? data.lux       ?? null,
+      water:    data.soilMoisture ?? data.moisture  ?? data.water ?? null,
+      nutrient: data.nutrient     ?? data.ec        ?? null,
     };
-  } catch {
-    // Fallback to AppState live values (updated by IotSimulator / real sensor push)
-    return fallback;
+  } catch (err) {
+    console.warn('[WhatIf] Firebase latest sensor unavailable:', err.message);
+    return null;
   }
 }
 
@@ -155,18 +148,20 @@ async function fetchWeeklyAvgSensors() {
   const deviceId = AppState.currentFarmId || DEFAULT_DEVICE_ID;
   try {
     const res = await fetch(`${API_BASE}/api/sensors/weekly-avg?deviceId=${deviceId}`);
+    if (!res.ok) throw new Error('weekly avg HTTP ' + res.status);
     const data = await res.json();
     const avg = data.avg || {};
     return {
-      temp:     avg.temperature  ?? DEFAULT_SENSORS.temp,
-      humid:    avg.humidity     ?? DEFAULT_SENSORS.humid,
-      light:    avg.light        ?? DEFAULT_SENSORS.light,
-      water:    avg.soilMoisture ?? DEFAULT_SENSORS.water,
-      nutrient: avg.nutrient     ?? DEFAULT_SENSORS.nutrient,
+      temp:     avg.temperature  ?? null,
+      humid:    avg.humidity     ?? null,
+      light:    avg.light        ?? null,
+      water:    avg.soilMoisture ?? avg.moisture ?? avg.water ?? null,
+      nutrient: avg.nutrient     ?? avg.ec ?? null,
       days:     data.days,
       source:   data.source,
     };
-  } catch {
+  } catch (err) {
+    console.warn('[WhatIf] Firebase weekly sensor average unavailable:', err.message);
     return fetchSensorData(); // fallback to latest reading
   }
 }
@@ -927,8 +922,17 @@ function wifUpdateCost() {
   const harvestKg  = wif_cosRows * d.perRowKgWk * weeks;
   const income     = harvestKg * d.mktPrice;
 
-  // ✅ Use named constants; DEFAULT_SENSORS is the single shared fallback object
-  const sensors = window._wif_lastSensors || DEFAULT_SENSORS;
+  const sensors = window._wif_lastSensors;
+  if (!sensors || sensors.water === null || sensors.light === null || sensors.nutrient === null) {
+    document.getElementById('wif-net-saving').textContent = '—';
+    document.getElementById('wif-cost-breakdown').innerHTML = `
+      <div class="wif-cost-row">
+        <span class="wif-cost-lbl">Firebase sensor readings required for water, energy, and fertilizer cost calculations.</span>
+      </div>`;
+    const noteEl = document.getElementById('wif-cost-ai-note');
+    if (noteEl && !window._wif_aiNoteSet) noteEl.textContent = 'Waiting for Firebase sensor readings before calculating costs.';
+    return;
+  }
 
   // Water cost: higher soil moisture → less watering needed
   const waterLitersPerPlantPerWeek =
@@ -1002,8 +1006,9 @@ function wifRenderSavingsChart(weeks, d) {
 function wifDrawChart(canvas, weeks, d) {
   if (wif_savingsChart) { wif_savingsChart.destroy(); wif_savingsChart = null; }
 
-  // Use the same sensor-driven values as wifUpdateCost() so chart matches the breakdown
-  const sensors = window._wif_lastSensors || DEFAULT_SENSORS;
+  // Use the same Firebase sensor-driven values as wifUpdateCost() so chart matches the breakdown
+  const sensors = window._wif_lastSensors;
+  if (!sensors || sensors.water === null || sensors.light === null || sensors.nutrient === null) return;
   const waterLPW =
     sensors.water < SENSOR_BANDS.water.low  ? WATER_L_PER_PLANT_WK.dry :
     sensors.water > SENSOR_BANDS.water.high ? WATER_L_PER_PLANT_WK.wet :
@@ -1083,6 +1088,12 @@ async function wifFetchCostAi(plant, units, weeks) {
   noteEl.textContent = '🤖 Analyzing your sensor data...';
 
   const sensors = await fetchWeeklyAvgSensors();
+  if (!sensors || sensors.temp === null || sensors.humid === null || sensors.water === null || sensors.light === null || sensors.nutrient === null) {
+    window._wif_lastSensors = null;
+    wifUpdateCost();
+    noteEl.textContent = 'Firebase sensor readings are required before AI cost analysis.';
+    return;
+  }
 
   // Cache sensors and re-render cost breakdown once with real values
   window._wif_lastSensors = sensors;
