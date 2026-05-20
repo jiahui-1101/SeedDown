@@ -99,6 +99,8 @@ function normalizeReading(body = {}, deviceContext = {}) {
     phRaw: numberOrUndefined(body.phRaw),
     lightRaw: numberOrUndefined(body.lightRaw),
     waterDistanceCm: numberOrUndefined(body.waterDistanceCm),
+    waterFlowRaw: numberOrUndefined(body.waterFlowRaw),
+    waterFlowLpm: numberOrUndefined(body.waterFlowLpm),
     ecRaw: numberOrUndefined(body.ecRaw),
     ec: numberOrUndefined(body.ec),
     co2Raw: numberOrUndefined(body.co2Raw),
@@ -178,6 +180,10 @@ function analyzeSensorData(reading, preferences) {
 
   if (reading.waterDistanceCm !== undefined && reading.waterDistanceCm > preferences.waterLowCm) {
     addCommand('BUZZER_ON', 'Water reservoir level is low');
+  }
+
+  if (reading.waterFlowLpm !== undefined && reading.waterFlowLpm < preferences.waterFlowMinLpm) {
+    addCommand('WATER_ON', 'Water flow is below the minimum irrigation flow threshold', preferences.wateringDurationSeconds);
   }
 
   if (!commands.length) {

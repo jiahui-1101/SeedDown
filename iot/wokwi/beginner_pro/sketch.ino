@@ -42,8 +42,8 @@
 const char* WIFI_SSID = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
 const char* BACKEND_BASE_URL = "https://nextlevelfarm.onrender.com";
-const char* DEVICE_ID = "dev_bgn_pro_demo";
-const char* DEVICE_TOKEN = "PASTE_DEVICE_TOKEN_HERE";
+const char* DEVICE_ID = "beginner_pro";
+const char* DEVICE_TOKEN = "sd_demo_beginner_pro";
 const int DEFAULT_INTERVAL_SECONDS = 2;
 
 // Real sensors
@@ -216,6 +216,16 @@ void executeCommand(const String& command) {
     phWarn ? "ON" : "off", fert ? "ON" : "off", co2 ? "ON" : "off");
 }
 
+void clearOutputs() {
+  digitalWrite(WATER_LED_PIN, LOW);
+  digitalWrite(LIGHT_LED_PIN, LOW);
+  digitalWrite(FAN_LED_PIN, LOW);
+  digitalWrite(BUZZER_LED_PIN, LOW);
+  digitalWrite(PH_LED_PIN, LOW);
+  digitalWrite(FERT_LED_PIN, LOW);
+  digitalWrite(CO2_LED_PIN, LOW);
+}
+
 void pollAndExecuteCommand() {
   String path = String("/api/sensors/command?deviceId=") + DEVICE_ID + "&format=text";
   String response = httpGet(path);
@@ -306,13 +316,7 @@ void loop() {
   bool fanOn = tempHigh || gasDanger;
   bool buzzerOn = gasDanger || waterLow;
 
-  digitalWrite(WATER_LED_PIN, soilDry ? HIGH : LOW);
-  digitalWrite(LIGHT_LED_PIN, lightLow ? HIGH : LOW);
-  digitalWrite(FAN_LED_PIN, fanOn ? HIGH : LOW);
-  digitalWrite(BUZZER_LED_PIN, buzzerOn ? HIGH : LOW);
-  digitalWrite(PH_LED_PIN, phBad ? HIGH : LOW);
-  digitalWrite(FERT_LED_PIN, ecBad ? HIGH : LOW);
-  digitalWrite(CO2_LED_PIN, co2Low ? HIGH : LOW);
+  clearOutputs(); // Physical LEDs are driven only after the backend command is received.
 
   Serial.println();
   Serial.println("========== SeedDown Beginner Pro ==========");
@@ -328,7 +332,7 @@ void loop() {
   Serial.printf("EC POT5 raw: %d | EC %.2f ms/cm | Range %.1f-%.1f | %s\n", ecRaw, ec, EC_MIN, EC_MAX, statusLabel(ecBad).c_str());
   Serial.printf("CO2 POT6 raw: %d | CO2 %d ppm | Min %d | %s\n", co2Raw, co2, CO2_MIN_PPM, statusLabel(co2Low).c_str());
 
-  Serial.println("----- Output Status -----");
+  Serial.println("----- Local Threshold Preview (backend command drives LEDs) -----");
   Serial.printf("WATER_ON: %s\n", soilDry ? "ON" : "off");
   Serial.printf("LIGHT_ON: %s\n", lightLow ? "ON" : "off");
   Serial.printf("FAN_ON: %s\n", fanOn ? "ON" : "off");
