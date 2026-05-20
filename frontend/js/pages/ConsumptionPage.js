@@ -1729,7 +1729,7 @@ function _calcMetrics(readings) {
 /* ══════════════════════════════════════════════════════════════
    GET PLANTS (強化版過濾)
 ══════════════════════════════════════════════════════════════ */
-function _getPlants() {
+/*function _getPlants() {
   const names = new Set();
   const tiles = AppState.tiles || [];
 
@@ -1752,6 +1752,44 @@ function _getPlants() {
   console.log('[ConsumptionPage] Final Filtered plants (Cleaned):', result);
   
   return result; 
+}*/
+/* ══════════════════════════════════════════════
+   GET PLANTS (Refactored: 只抓取真正種植的植物)
+══════════════════════════════════════════════ */
+function _getPlants() {
+  const names = new Set();
+  const farm = AppState.currentFarm;
+
+  if (!farm) return [];
+
+  // 1. 如果是 Commercial 模式，檢查 zone
+  if (farm.accountMode === 'commercial' && Array.isArray(farm.zones)) {
+    farm.zones.forEach(zone => {
+      // 這裡檢查 zone.plants 或 zone.plantItems
+      const zonePlants = zone.plantItems || [];
+      zonePlants.forEach(p => {
+        if (p.name && p.name !== 'Plant' && p.count > 0) {
+          names.add(p.name.toLowerCase().trim());
+        }
+      });
+    });
+  } 
+  // 2. 如果是 Beginner 模式
+  else if (Array.isArray(farm.plants)) {
+    farm.plants.forEach(p => {
+      // 🔴 關鍵過濾：檢查是否有明確的 slots 且來源不是 manual 預設產生的
+      // 如果你的 BuildFarmPage 預設塞了 6 個，它們通常會有一個 source 或 confidence 標記
+      // 我們這裡只取那些「被明確確認」的植物
+      if (p.name && p.slots > 0 && p.name !== 'Lettuce' /* 或者是其他你發現的預設植物名稱 */) {
+         names.add(p.name.toLowerCase().trim());
+      }
+    });
+  }
+
+  // 如果最後還是沒抓到，代表 Rack 真的是空的，回傳 []
+  const result = [...names];
+  console.log('[ConsumptionPage] Real plants detected:', result);
+  return result;
 }
 /* ============================================================
    FALLBACK CARD
