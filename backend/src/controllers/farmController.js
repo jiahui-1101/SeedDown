@@ -290,11 +290,14 @@ async function createFarm(req, res) {
     };
 
     try {
-        const docRef = await getDb().collection('farms').add(farmDoc);
+        // ─── 修改了這裡！使用 .set({ merge: true }) 覆蓋/更新同一個農場 ───
+        const newFarmId = farmDoc.farmId || farmDoc.fieldId || `farm_${Date.now()}`;
+        await getDb().collection('farms').doc(newFarmId).set(farmDoc, { merge: true });
+
         return res.json({
             success: true,
             ok: true, // 保持给前端的接口兼容性
-            farmId: docRef.id,
+            farmId: newFarmId,
             farm: farmDoc,
         });
     } catch (err) {

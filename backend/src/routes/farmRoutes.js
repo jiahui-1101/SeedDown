@@ -38,4 +38,19 @@ router.get('/', verifyToken, async (req, res) => {
     }
 });
 
+router.delete('/:id', verifyToken, async (req, res) => {
+    try {
+        const db = require('../config/db').getDb();
+        // 確認刪除的是自己的農場
+        const docRef = db.collection('farms').doc(req.params.id);
+        const doc = await docRef.get();
+        if (doc.exists && doc.data().ownerId === req.user.userId) {
+            await docRef.delete();
+        }
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ ok: false });
+    }
+});
+
 module.exports = router;

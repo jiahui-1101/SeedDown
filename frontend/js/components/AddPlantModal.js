@@ -1,7 +1,6 @@
 import { AppState } from '../store.js';
 import { FarmCanvas } from './FarmCanvas.js';
 import { showToast } from '../utils/toast.js';
-import { saveFarmsToFirestore } from '../utils/firebase.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -244,18 +243,30 @@ async function saveUpdatedFarm(current, plants, index, saved, fallbackTargetPlan
     targetPlant: plants[0]?.name || fallbackTargetPlant,
   };
 
+  // 1. 保存到 LocalStorage 以供畫面即時渲染
   if (index >= 0) {
     saved[index] = updated;
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(saved));
   }
-  if (AppState.uid) {
-    try {
-        await saveFarmsToFirestore(AppState.uid, saved);
-        console.log('✅ Plant synced to Firebase');
-    } catch (err) {
-        console.error('❌ Failed to sync plant to Firebase', err);
-    }
-}
+
+  // 2. 替換舊 Firebase SDK，改為呼叫後端 API (JWT Bearer)
+  const token = localStorage.getItem('token');
+  if (token) {
+      try {
+          await fetch(`${API_BASE}/api/farms/create`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+              },
+              // 帶上 farmId 以確保後端的 .set() 會覆蓋並更新同一個農場
+              body: JSON.stringify({ ...updated, farmId: updated.id })
+          });
+          console.log('✅ Plant synced to Backend successfully');
+      } catch (err) {
+          console.error('❌ Failed to sync plant to Backend:', err);
+      }
+  }
 
   AppState.currentFarm = updated;
   AppState.currentFarmId = updated.id || AppState.currentFarmId;
@@ -728,4 +739,3 @@ function closeModal() {
   const overlay = document.getElementById('addPlantModalOverlay');
   if (overlay) overlay.remove();
 }
-

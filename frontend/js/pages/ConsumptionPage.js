@@ -1710,7 +1710,7 @@ function _calcMetrics(readings) {
 /* ============================================================
    GET PLANTS
 ============================================================ */
-function _getPlants() {
+/*function _getPlants() {
   const names = new Set();
 
   const tiles = AppState.tiles || [];
@@ -1722,6 +1722,36 @@ function _getPlants() {
 
   // NO MORE HARDCODED LETTUCE! Return exactly what's planted.
   return [...names];
+}*/
+/* ══════════════════════════════════════════════
+   GET PLANTS (嚴格篩選版)
+══════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   GET PLANTS (強化版過濾)
+══════════════════════════════════════════════════════════════ */
+function _getPlants() {
+  const names = new Set();
+  const tiles = AppState.tiles || [];
+
+  // 定義一個無效名稱清單，過濾掉那些其實是空的佔位符
+  const invalidNames = ['empty', 'none', 'placeholder', 'undefined', 'null', ''];
+
+  tiles.forEach(tile => {
+    const name = tile.name ? String(tile.name).toLowerCase().trim() : '';
+    
+    // 嚴格檢查：
+    // 1. status 必須不是 empty
+    // 2. name 必須存在且長度大於 0
+    // 3. name 不能是我們定義的無效名稱
+    if (tile.status !== 'empty' && name && !invalidNames.includes(name)) {
+      names.add(name);
+    }
+  });
+
+  const result = [...names];
+  console.log('[ConsumptionPage] Final Filtered plants (Cleaned):', result);
+  
+  return result; 
 }
 /* ============================================================
    FALLBACK CARD

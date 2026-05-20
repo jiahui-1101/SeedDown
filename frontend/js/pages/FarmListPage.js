@@ -1,11 +1,22 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
-import { saveFarmsToFirestore } from '../utils/firebase.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
 const COMMERCIAL_ACCOUNT_KEY = 'commercial_account';
 const COMMERCIAL_TERMS_KEY = 'commercial_terms_accepted';
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
+
+/* ── JWT HEADER HELPER ── */
+function getAuthHeaders() {
+    const token = localStorage.getItem('token');
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    };
+}
 
 export function render() {
     console.log('[FarmListPage] render called');
@@ -13,20 +24,29 @@ export function render() {
     let savedFarms = loadSavedFarms();
 
     if (savedFarms.length === 0) {
-        savedFarms = [
-            {
-                id: `farm_${Date.now()}`,
-                name: 'Farm 1 - Rack Alpha',
-                plants: 6,
-                plantSlots: 6,
-                zone: 'A',
-                location: 'Zone A',
-                targetPlant: 'Lettuce',
-                rackLabel: '3-Tier Vertical Rack',
-                createdAt: new Date().toISOString(),
-            },
-        ];
+        const dummyFarm = {
+            id: `farm_${Date.now()}`,
+            name: 'Farm 1 - Rack Alpha',
+            plants: 6,
+            plantSlots: 6,
+            zone: 'A',
+            location: 'Zone A',
+            targetPlant: 'Lettuce',
+            rackLabel: '3-Tier Vertical Rack',
+            createdAt: new Date().toISOString(),
+        };
+        savedFarms = [dummyFarm];
         saveFarms(savedFarms);
+
+        // ─── 把預設的農場同步給後端 ───
+        const token = localStorage.getItem('token');
+        if (token) {
+            fetch(`${API_BASE}/api/farms/create`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(dummyFarm)
+            }).catch(e => console.warn('[FarmListPage] Dummy farm sync skipped:', e.message));
+        }
     }
 
     const isCommercial = currentMode() === 'commercial';
@@ -228,6 +248,7 @@ function saveCommercialAccount(account) {
     localStorage.setItem(COMMERCIAL_ACCOUNT_KEY, JSON.stringify(account));
     localStorage.setItem(COMMERCIAL_TERMS_KEY, 'true');
 }
+
 function farmCard(f) {
     return `
         <div class="farm-card" data-farm-id="${escapeAttr(f.id)}" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px; display:flex; align-items:center; gap:12px; cursor:pointer;">
@@ -316,9 +337,23 @@ function openDeleteFarmConfirm(farm, savedFarms) {
     document.getElementById('confirmDeleteFarm').onclick = () => deleteFarm(farm.id, savedFarms);
 }
 
-function deleteFarm(farmId, savedFarms) {
+// ─── 修改：刪除農場並同步後端 ───
+async function deleteFarm(farmId, savedFarms) {
     const nextFarms = savedFarms.filter(farm => farm.id !== farmId);
     saveFarms(nextFarms);
+
+    // 呼叫後端 API 刪除資料庫中的農場 (若後端有做 DELETE API)
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            await fetch(`${API_BASE}/api/farms/${farmId}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders()
+            });
+        } catch (e) {
+            console.warn('[FarmListPage] Backend delete request failed:', e.message);
+        }
+    }
 
     if (AppState.currentFarmId === farmId) {
         AppState.currentFarmId = nextFarms[0]?.id || null;
@@ -341,8 +376,8 @@ function enterFarm(farm) {
 }
 
 function saveFarms(farms) {
+    // 現在只負責存入 LocalStorage，後端同步交給各個操作動作自己負責
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(farms));
-    if (AppState.uid) saveFarmsToFirestore(AppState.uid, farms);
 }
 
 function loadSavedFarms() {
@@ -414,5 +449,3 @@ function escapeHTML(value) {
 function escapeAttr(value) {
     return escapeHTML(value).replace(/`/g, '&#096;');
 }
-
-
