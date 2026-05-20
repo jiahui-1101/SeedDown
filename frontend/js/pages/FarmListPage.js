@@ -1,11 +1,20 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
-import { saveFarmsToFirestore } from '../utils/firebase.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
-const COMMERCIAL_ACCOUNT_KEY = 'commercial_account';
-const COMMERCIAL_TERMS_KEY = 'commercial_terms_accepted';
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
+
+/* ── JWT HEADER HELPER ── */
+function getAuthHeaders() {
+    const token = localStorage.getItem('token');
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    };
+}
 
 export function render() {
     console.log('[FarmListPage] render called');
@@ -13,24 +22,31 @@ export function render() {
     let savedFarms = loadSavedFarms();
 
     if (savedFarms.length === 0) {
-        savedFarms = [
-            {
-                id: `farm_${Date.now()}`,
-                name: 'Farm 1 - Rack Alpha',
-                plants: 6,
-                plantSlots: 6,
-                zone: 'A',
-                location: 'Zone A',
-                targetPlant: 'Lettuce',
-                rackLabel: '3-Tier Vertical Rack',
-                createdAt: new Date().toISOString(),
-            },
-        ];
+        const dummyFarm = {
+            id: `farm_${Date.now()}`,
+            name: 'Farm 1 - Rack Alpha',
+            plants: 6,
+            plantSlots: 6,
+            zone: 'A',
+            location: 'Zone A',
+            targetPlant: 'Lettuce',
+            rackLabel: '3-Tier Vertical Rack',
+            createdAt: new Date().toISOString(),
+        };
+        savedFarms = [dummyFarm];
         saveFarms(savedFarms);
+
+        const token = localStorage.getItem('token');
+        if (token) {
+            fetch(`${API_BASE}/api/farms/create`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(dummyFarm)
+            }).catch(e => console.warn('[FarmListPage] Dummy farm sync skipped:', e.message));
+        }
     }
 
-    const isCommercial = currentMode() === 'commercial';
-    AppState.mode = isCommercial ? 'commercial' : 'beginner';
+    const isCommercial = AppState.mode === 'commercial';
 
     container.innerHTML = `
         <div class="screen active" id="farmlistScreen">
@@ -38,16 +54,9 @@ export function render() {
                 <div class="topbar-brand">
                     <span style="font-size:24px;">🌿</span>
                     <span style="font-weight:700;">SeedDown</span>
-                    <span style="margin-left:8px; color:var(--muted);">Farms</span>
+                    <span style="margin-left:8px; color:var(--muted);">${isCommercial ? 'Commercial' : 'Beginner'}</span>
                 </div>
                 <div style="flex:1"></div>
-                <div id="switchModeBtn" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                    <span style="font-size:0.72rem; font-weight:700; color:${!isCommercial ? 'var(--accent)' : 'var(--muted)'};">🌱</span>
-                    <div style="position:relative; width:48px; height:26px; background:${isCommercial ? 'var(--accent)' : 'var(--border)'}; border-radius:100px; transition:background 0.25s;">
-                        <div style="position:absolute; top:3px; left:${isCommercial ? '25px' : '3px'}; width:20px; height:20px; border-radius:50%; background:white; box-shadow:0 1px 4px rgba(0,0,0,0.25); transition:left 0.25s;"></div>
-                    </div>
-                    <span style="font-size:0.72rem; font-weight:700; color:${isCommercial ? 'var(--accent)' : 'var(--muted)'};">🏭</span>
-                </div>
             </div>
 
             <div style="padding:16px; flex:1; overflow-y:auto;">
@@ -96,25 +105,9 @@ function bindEvents(savedFarms) {
     });
 
     document.getElementById('buildFarmBtn').onclick = () => {
-        const mode = currentMode();
-        AppState.mode = mode;
-        localStorage.setItem('seeddown_mode', mode);
-        localStorage.setItem('seeddown_build_flow', mode);
         showScreen('buildfarm');
     };
 
-    document.getElementById('switchModeBtn').onclick = () => {
-        if (AppState.mode === 'beginner') {
-            openCommercialGate();
-            return;
-        }
-
-        AppState.mode = 'beginner';
-        localStorage.setItem('seeddown_mode', 'beginner');
-        AppState.isGuest = true;
-        showToast('info', 'Switched to 🌱 Beginner mode');
-        render();
-    };
     document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
         item.onclick = () => {
             if (item.dataset.screen === 'profile') {
@@ -125,109 +118,6 @@ function bindEvents(savedFarms) {
     });
 }
 
-function currentMode() {
-    try {
-        return localStorage.getItem('seeddown_mode') === 'commercial' ? 'commercial' : 'beginner';
-    } catch {
-        return AppState.mode === 'commercial' ? 'commercial' : 'beginner';
-    }
-}
-
-function openCommercialGate() {
-    const modalContainer = document.getElementById('modalContainer');
-    if (!modalContainer) return;
-
-    const account = getCommercialAccount();
-    const hasAccount = Boolean(account?.password);
-
-    modalContainer.innerHTML = `
-        <div class="modal-overlay open" id="commercialGateModal">
-            <div class="modal-sheet">
-                <div style="padding:18px;">
-                    <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">Commercial Access</div>
-                    <div style="font-size:18px;font-weight:900;margin-bottom:6px;">Switch to Commercial mode</div>
-                    <div style="font-size:13px;color:var(--sub);line-height:1.45;margin-bottom:14px;">
-                        ${hasAccount ? 'Enter the same password/key used during Commercial Register.' : 'Create a commercial password/key for this device before entering Commercial mode.'}
-                    </div>
-
-                    <label style="display:block;font-size:0.7rem;font-weight:800;margin-bottom:6px;">Password / Access Key</label>
-                    <input id="commercialGatePassword" type="password" placeholder="Minimum 6 characters" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid var(--border);margin-bottom:12px;">
-
-                    <label style="display:flex;gap:10px;align-items:flex-start;font-size:0.76rem;color:var(--muted);line-height:1.4;margin-bottom:12px;">
-                        <input id="commercialGateTerms" type="checkbox" style="margin-top:2px;">
-                        <span>I agree to the Commercial Terms & Conditions and understand this mode can affect automation controls.</span>
-                    </label>
-
-                    <div id="commercialGateError" style="display:none;color:var(--danger);font-size:0.76rem;margin-bottom:12px;"></div>
-
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                        <button id="cancelCommercialGate" style="padding:13px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);font-weight:800;cursor:pointer;color:var(--text);">Cancel</button>
-                        <button id="confirmCommercialGate" class="btn-primary" style="padding:13px;">Enter</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const showError = (message) => {
-        const error = document.getElementById('commercialGateError');
-        error.textContent = message;
-        error.style.display = message ? 'block' : 'none';
-    };
-
-    document.getElementById('cancelCommercialGate').onclick = closeFarmModal;
-    document.getElementById('commercialGateModal').addEventListener('click', event => {
-        if (event.target.id === 'commercialGateModal') closeFarmModal();
-    });
-
-    document.getElementById('confirmCommercialGate').onclick = () => {
-        const password = document.getElementById('commercialGatePassword').value;
-        const termsAccepted = document.getElementById('commercialGateTerms').checked;
-
-        if (password.length < 6) {
-            showError('Password/key must be at least 6 characters.');
-            return;
-        }
-        if (!termsAccepted) {
-            showError('Please tick the Commercial Terms & Conditions first.');
-            return;
-        }
-        if (hasAccount && password !== account.password) {
-            showError('Wrong commercial password/key. Use the same one from Commercial Register.');
-            return;
-        }
-
-        if (!hasAccount) {
-            saveCommercialAccount({
-                email: AppState.userEmail || 'commercial@seeddown.local',
-                password,
-                createdAt: new Date().toISOString(),
-            });
-        } else {
-            localStorage.setItem(COMMERCIAL_TERMS_KEY, 'true');
-        }
-
-        AppState.mode = 'commercial';
-        localStorage.setItem('seeddown_mode', 'commercial');
-        AppState.isGuest = false;
-        closeFarmModal();
-        showToast('success', 'Switched to 🏭 Commercial mode');
-        render();
-    };
-}
-
-function getCommercialAccount() {
-    try {
-        return JSON.parse(localStorage.getItem(COMMERCIAL_ACCOUNT_KEY)) || null;
-    } catch (error) {
-        return null;
-    }
-}
-
-function saveCommercialAccount(account) {
-    localStorage.setItem(COMMERCIAL_ACCOUNT_KEY, JSON.stringify(account));
-    localStorage.setItem(COMMERCIAL_TERMS_KEY, 'true');
-}
 function farmCard(f) {
     return `
         <div class="farm-card" data-farm-id="${escapeAttr(f.id)}" style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px; display:flex; align-items:center; gap:12px; cursor:pointer;">
@@ -316,9 +206,21 @@ function openDeleteFarmConfirm(farm, savedFarms) {
     document.getElementById('confirmDeleteFarm').onclick = () => deleteFarm(farm.id, savedFarms);
 }
 
-function deleteFarm(farmId, savedFarms) {
+async function deleteFarm(farmId, savedFarms) {
     const nextFarms = savedFarms.filter(farm => farm.id !== farmId);
     saveFarms(nextFarms);
+
+    const token = localStorage.getItem('token');
+    if (token) {
+        try {
+            await fetch(`${API_BASE}/api/farms/${farmId}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders()
+            });
+        } catch (e) {
+            console.warn('[FarmListPage] Backend delete request failed:', e.message);
+        }
+    }
 
     if (AppState.currentFarmId === farmId) {
         AppState.currentFarmId = nextFarms[0]?.id || null;
@@ -335,14 +237,12 @@ function enterFarm(farm) {
     AppState.currentFarmId = farm.id;
     AppState.currentFarm = farm;
     AppState.farmName = farm.name;
-    console.log(`[FarmListPage] Entering Farm ID: ${farm.id}`);
     const target = AppState.mode === 'beginner' ? 'home' : 'dash-c';
     showScreen(target);
 }
 
 function saveFarms(farms) {
     localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(farms));
-    if (AppState.uid) saveFarmsToFirestore(AppState.uid, farms);
 }
 
 function loadSavedFarms() {
@@ -379,7 +279,6 @@ function plantChips(farm) {
         const target = farm.targetPlant || 'Plant';
         return `<span style="padding:7px 10px;border-radius:999px;background:var(--accent-l);color:var(--accent);font-size:12px;font-weight:800;">${escapeHTML(target)}</span>`;
     }
-
     return plants.map(plant => {
         const position = plant.tier && plant.position ? ` · T${plant.tier} S${plant.position}` : '';
         return `<span style="padding:7px 10px;border-radius:999px;background:var(--accent-l);color:var(--accent);font-size:12px;font-weight:800;">${escapeHTML(plant.emoji || '🌱')} ${escapeHTML(plant.name || plant.species || 'Plant')}${position}</span>`;
@@ -414,5 +313,3 @@ function escapeHTML(value) {
 function escapeAttr(value) {
     return escapeHTML(value).replace(/`/g, '&#096;');
 }
-
-

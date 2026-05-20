@@ -6,3 +6,4 @@ frontend/package-lock.json
 firebase-service-account.json
 backend/firebase-service-account.json.bak
 backend/firebase-service-account.json
+frontend/js/utils/api.js

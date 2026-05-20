@@ -1710,7 +1710,7 @@ function _calcMetrics(readings) {
 /* ============================================================
    GET PLANTS
 ============================================================ */
-function _getPlants() {
+/*function _getPlants() {
   const names = new Set();
 
   const tiles = AppState.tiles || [];
@@ -1722,6 +1722,74 @@ function _getPlants() {
 
   // NO MORE HARDCODED LETTUCE! Return exactly what's planted.
   return [...names];
+}*/
+/* ══════════════════════════════════════════════
+   GET PLANTS (嚴格篩選版)
+══════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   GET PLANTS (強化版過濾)
+══════════════════════════════════════════════════════════════ */
+/*function _getPlants() {
+  const names = new Set();
+  const tiles = AppState.tiles || [];
+
+  // 定義一個無效名稱清單，過濾掉那些其實是空的佔位符
+  const invalidNames = ['empty', 'none', 'placeholder', 'undefined', 'null', ''];
+
+  tiles.forEach(tile => {
+    const name = tile.name ? String(tile.name).toLowerCase().trim() : '';
+    
+    // 嚴格檢查：
+    // 1. status 必須不是 empty
+    // 2. name 必須存在且長度大於 0
+    // 3. name 不能是我們定義的無效名稱
+    if (tile.status !== 'empty' && name && !invalidNames.includes(name)) {
+      names.add(name);
+    }
+  });
+
+  const result = [...names];
+  console.log('[ConsumptionPage] Final Filtered plants (Cleaned):', result);
+  
+  return result; 
+}*/
+/* ══════════════════════════════════════════════
+   GET PLANTS (Refactored: 只抓取真正種植的植物)
+══════════════════════════════════════════════ */
+function _getPlants() {
+  const names = new Set();
+  const farm = AppState.currentFarm;
+
+  if (!farm) return [];
+
+  // 1. 如果是 Commercial 模式，檢查 zone
+  if (farm.accountMode === 'commercial' && Array.isArray(farm.zones)) {
+    farm.zones.forEach(zone => {
+      // 這裡檢查 zone.plants 或 zone.plantItems
+      const zonePlants = zone.plantItems || [];
+      zonePlants.forEach(p => {
+        if (p.name && p.name !== 'Plant' && p.count > 0) {
+          names.add(p.name.toLowerCase().trim());
+        }
+      });
+    });
+  } 
+  // 2. 如果是 Beginner 模式
+  else if (Array.isArray(farm.plants)) {
+    farm.plants.forEach(p => {
+      // 🔴 關鍵過濾：檢查是否有明確的 slots 且來源不是 manual 預設產生的
+      // 如果你的 BuildFarmPage 預設塞了 6 個，它們通常會有一個 source 或 confidence 標記
+      // 我們這裡只取那些「被明確確認」的植物
+      if (p.name && p.slots > 0 && p.name !== 'Lettuce' /* 或者是其他你發現的預設植物名稱 */) {
+         names.add(p.name.toLowerCase().trim());
+      }
+    });
+  }
+
+  // 如果最後還是沒抓到，代表 Rack 真的是空的，回傳 []
+  const result = [...names];
+  console.log('[ConsumptionPage] Real plants detected:', result);
+  return result;
 }
 /* ============================================================
    FALLBACK CARD

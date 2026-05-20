@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { getDb } = require('../config/db');
+const verifyToken = require('../middleware/authMiddleware'); // 新增引入 middleware
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'seeddown_super_secret_2026';
@@ -65,6 +66,43 @@ router.post('/login', async (req, res) => {
         );
 
         res.json({ ok: true, token, user: { email: user.email, mode: user.mode } });
+    } catch (error) {
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// ─── 3. 获取个人资料 API (新增) ───
+router.get('/me', verifyToken, async (req, res) => {
+    try {
+        const db = getDb();
+        const userRef = db.collection('users').doc(req.user.userId);
+        const doc = await userRef.get();
+        
+        if (!doc.exists) {
+            return res.status(404).json({ ok: false, error: "User not found" });
+        }
+        
+        const userData = doc.data();
+        delete userData.password; // 移除密码后再返回给前端
+        
+        res.json({ ok: true, user: userData });
+    } catch (error) {
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// ─── 4. 更新个人资料 API (新增) ───
+router.put('/profile', verifyToken, async (req, res) => {
+    try {
+        const { name, email } = req.body;
+        const db = getDb();
+        
+        // 更新用户的 name
+        await db.collection('users').doc(req.user.userId).update({ 
+            name: name || ''
+        });
+        
+        res.json({ ok: true, message: "Profile updated" });
     } catch (error) {
         res.status(500).json({ ok: false, error: error.message });
     }

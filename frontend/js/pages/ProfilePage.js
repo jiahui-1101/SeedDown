@@ -8,13 +8,21 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
-import { saveFarmsToFirestore, saveFarmProfileToFirestore, saveGlobalProfileToFirestore } from '../utils/firebase.js';
 
 const PROFILE_KEY = 'farm_profile';
 const FARMS_KEY   = 'user_farms';
 const API_BASE    = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
     : window.location.origin;
+
+/* ── JWT HEADER HELPER ── */
+function getAuthHeaders() {
+    const token = localStorage.getItem('token');
+    return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+    };
+}
 
 /* ── PER-FARM KEY ── */
 function farmProfileKey(farmId) { return `farm_profile_${farmId}`; }
@@ -54,9 +62,9 @@ function getDefaultProfile() {
     };
 }
 
-/* ══════════════════════════════════════════════
+/* ============================================================
    RENDER
-══════════════════════════════════════════════ */
+============================================================ */
 export function render() {
     const container  = document.getElementById('screenContainer');
     const savedFarms = loadSavedFarms();
@@ -114,6 +122,29 @@ export function render() {
     `;
 
     _bindEvents(savedFarms);
+    _fetchFreshProfileData(); // 異步從後端拉取最新用戶資料
+}
+
+/* ── 異步向後端請求真實的用戶資料 (替換原本寫死的 LocalStorage) ── */
+async function _fetchFreshProfileData() {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/auth/me`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+
+        if (res.ok && data.ok && data.user) {
+            _setInputValue('profileEmail', data.user.email);
+            // 如果後端有提供 Name，就在這更新
+            if (data.user.name) _setInputValue('profileName', data.user.name);
+        }
+    } catch (err) {
+        console.warn('[ProfilePage] Failed to fetch fresh profile data:', err);
+    }
 }
 
 /* ── NOTIFICATION SECTION with real browser push UI ── */
@@ -162,9 +193,9 @@ function _notificationSection(checked, blocked) {
         </div>`;
 }
 
-/* ══════════════════════════════════════════════
+/* ============================================================
    BIND EVENTS
-══════════════════════════════════════════════ */
+============================================================ */
 function _bindEvents(savedFarms) {
     const selector = document.getElementById('farmSelector');
     if (selector) {
@@ -303,7 +334,6 @@ export function sendFarmNotification(title, body) {
 function _doSave() {
     const profile   = _collectForm();
     const currentId = AppState.currentFarmId;
-    const uid       = AppState.uid;
 
     saveProfile(profile, currentId);
     AppState.farmName = profile.farmName;
@@ -314,10 +344,15 @@ function _doSave() {
         if (currentId) {
             savedFarms = savedFarms.map(f => f.id === currentId ? { ...f, name: profile.farmName } : f);
             localStorage.setItem(FARMS_KEY, JSON.stringify(savedFarms));
-            if (uid) {
-                saveFarmProfileToFirestore(uid, currentId, profile);
-                saveFarmsToFirestore(uid, savedFarms);
-                saveGlobalProfileToFirestore(uid, { name: profile.name, email: profile.email });
+            
+            // ─── 替換掉了原本的 Firebase SDK，改為呼叫後端 API 來更新資料（若後端有對應接口） ───
+            const token = localStorage.getItem('token');
+            if (token) {
+                fetch(`${API_BASE}/api/auth/profile`, {
+                    method: 'PUT',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({ name: profile.name, email: profile.email })
+                }).catch(() => {});
             }
         }
     } catch (e) {
@@ -347,7 +382,7 @@ async function _doSync() {
     try {
         const res = await fetch(`${API_BASE}/api/sensors/preferences`, {
             method:  'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(), // <--- 加上 Authorization Token
             body:    JSON.stringify(payload),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -363,14 +398,15 @@ async function _doSync() {
 
 /* ── LOGOUT ── */
 function _doLogout() {
-    // Sign out of Firebase if available
-    if (window._firebaseReady && typeof firebase !== 'undefined') {
-        try { firebase.auth().signOut(); } catch (e) {}
-    }
+    // 徹底廢除 Firebase Logout，改為清除 JWT Token
+    localStorage.removeItem('token');
+    localStorage.removeItem('seeddown_mode');
+    
     AppState.uid       = null;
     AppState.userEmail = '';
     AppState.userName  = '';
     AppState.isGuest   = false;
+    
     showToast('info', '👋 Logged out. See you next harvest!');
     setTimeout(() => showScreen('login'), 800);
 }
@@ -389,9 +425,9 @@ function _collectForm() {
     };
 }
 
-/* ══════════════════════════════════════════════
+/* ============================================================
    HTML HELPERS
-══════════════════════════════════════════════ */
+============================================================ */
 function _farmSelectorSection(savedFarms) {
     return `
         <div style="background:var(--accent-l);border:1px solid var(--accent);border-radius:var(--radius);padding:14px;flex-shrink:0;">
