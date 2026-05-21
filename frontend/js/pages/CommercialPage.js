@@ -618,7 +618,7 @@ function handleMascotAsk(event) {
     const context = event.detail || CommercialFarmCanvas.getSelectedContext?.();
     if (!input) return;
     const label = context?.label || 'this commercial farm';
-    input.value = `Explain ${label} using the current live data.`;
+    input.value = `SeedDown AI, explain ${label} using the current live data.`;
     sendCommercialChat();
 }
 

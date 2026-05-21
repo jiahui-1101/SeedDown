@@ -52,6 +52,9 @@ export const CommercialFarmCanvas = {
     mascotGroup: null,
     mascotTarget: null,
     mascotHome: null,
+    mascotBaseY: 0.58,
+    mascotWalkPhase: 0,
+    mascotWalking: false,
     mascotBubble: null,
     mascotSelectedContext: null,
     originalParent: null,
@@ -915,6 +918,9 @@ export const CommercialFarmCanvas = {
         const group = new THREE.Group();
         this.mascotHome = new THREE.Vector3(4.35, 0.58, 4.7);
         this.mascotTarget = this.mascotHome.clone();
+        this.mascotBaseY = this.mascotHome.y;
+        this.mascotWalkPhase = 0;
+        this.mascotWalking = false;
         group.position.copy(this.mascotHome);
         group.userData.isMascot = true;
 
@@ -1310,6 +1316,7 @@ export const CommercialFarmCanvas = {
         if (!this.mascotGroup || !this.mascotTarget) return;
         if (!root) {
             this.mascotTarget.copy(this.mascotHome || new THREE.Vector3(4.35, 0.58, 4.7));
+            this.mascotBaseY = this.mascotTarget.y;
             this.mascotSelectedContext = null;
             this.updateMascotBubble();
             return;
@@ -1322,9 +1329,10 @@ export const CommercialFarmCanvas = {
         const zSide = center.z >= 0 ? 1 : -1;
         this.mascotTarget.set(
             THREE.MathUtils.clamp(center.x + xSide * Math.max(0.7, size.x * 0.36), -7.2, 7.2),
-            THREE.MathUtils.clamp(center.y + Math.max(0.55, size.y * 0.18), 0.58, 3.2),
+            0.58,
             THREE.MathUtils.clamp(center.z + zSide * Math.max(0.5, size.z * 0.26), -5.9, 5.9)
         );
+        this.mascotBaseY = this.mascotTarget.y;
         this.mascotSelectedContext = this.contextFromRoot(root);
         this.updateMascotBubble();
     },
@@ -1344,7 +1352,7 @@ export const CommercialFarmCanvas = {
                 value: data.value || '',
                 purpose: devicePurpose(data.key),
                 latestReading: sensors,
-                prompt: `Ask about ${data.zoneLabel || data.scope || 'farm'} ${data.label || 'device'}`,
+                prompt: `${data.label || 'This device'} context`,
             };
         }
         if (data.isTank) {
@@ -1353,7 +1361,7 @@ export const CommercialFarmCanvas = {
                 label: `${data.label || 'Nutrient'} tank`,
                 status: data.status || 'healthy',
                 latestReading: sensors,
-                prompt: `Ask about ${data.label || 'nutrient'} tank`,
+                prompt: `${data.label || 'Nutrient'} tank context`,
             };
         }
         if (data.isTower) {
@@ -1365,7 +1373,7 @@ export const CommercialFarmCanvas = {
                 status: data.status || 'empty',
                 plantCount: Array.isArray(data.plants) ? data.plants.length : 0,
                 latestReading: sensors,
-                prompt: `Ask about ${data.label || 'this zone'}`,
+                prompt: `${data.label || 'Zone'} context`,
             };
         }
         return null;
@@ -1377,7 +1385,7 @@ export const CommercialFarmCanvas = {
             label: this.farm?.name || AppState.farmName || 'Commercial Farm',
             status: facilityStatus(this.slotPlants, this.sensorSnapshot),
             latestReading: { ...(this.sensorSnapshot || {}) },
-            prompt: 'Ask about the full commercial farm',
+            prompt: 'Commercial farm context',
         };
     },
 
@@ -1386,14 +1394,24 @@ export const CommercialFarmCanvas = {
         const context = this.mascotSelectedContext;
         const status = String(context?.status || '').toLowerCase();
         const isRisk = status.includes('warning') || status.includes('danger') || status.includes('critical');
-        const title = context?.prompt || 'Ask SeedDown AI';
-        const message = context
-            ? isRisk
-                ? `${context.label} needs attention. Ask me to explain the live reading.`
-                : `I can explain ${context.label} using the current farm data.`
-            : 'Click a zone, sensor, tank, or output to ask about that exact object.';
+        const title = context ? 'I am checking this now' : 'I am SeedDown AI';
+        let message = 'Click a zone, sensor, tank, or output and I will explain what the live data means.';
+        if (context?.objectType === 'zone') {
+            message = `I am looking at ${context.label}. I can explain its temperature, pH, water, and risk status.`;
+        } else if (context?.objectType === 'sensor') {
+            message = `This ${context.label} is linked to ${context.zoneLabel || context.scope || 'the farm'}. Ask me what this reading means.`;
+        } else if (context?.objectType === 'output') {
+            message = `This ${context.label} controls ${context.purpose || 'farm automation'}. I can explain when it should run.`;
+        } else if (context?.objectType === 'tank') {
+            message = `I am checking the ${context.label}. I can explain how it affects nutrient balance.`;
+        } else if (context) {
+            message = `I am looking at ${context.label}. Ask me what the current data means.`;
+        }
+        if (context && isRisk) {
+            message = 'This area may need attention. I can help you understand the risk before you act.';
+        }
         this.mascotBubble.innerHTML = `
-            <div class="cf-mascot-kicker">Radish AI</div>
+            <div class="cf-mascot-kicker">SeedDown AI</div>
             <strong>${escapeHTML(title)}</strong>
             <span>${escapeHTML(message)}</span>
             <button type="button" data-mascot-ask>Ask now</button>
@@ -1505,11 +1523,36 @@ export const CommercialFarmCanvas = {
 
     updateMascot() {
         if (!this.mascotGroup || !this.mascotTarget) return;
-        const bob = Math.sin(this.frame * 0.045) * 0.055;
-        const target = this.mascotTarget.clone();
-        target.y += bob;
-        this.mascotGroup.position.lerp(target, 0.055);
-        this.mascotGroup.rotation.y = Math.sin(this.frame * 0.028) * 0.08;
+        const current = this.mascotGroup.position;
+        const flatDelta = new THREE.Vector3(
+            this.mascotTarget.x - current.x,
+            0,
+            this.mascotTarget.z - current.z
+        );
+        const distance = flatDelta.length();
+        this.mascotWalking = distance > 0.045;
+
+        if (this.mascotWalking) {
+            const step = Math.min(distance, 0.045 + distance * 0.025);
+            flatDelta.normalize();
+            current.x += flatDelta.x * step;
+            current.z += flatDelta.z * step;
+            this.mascotWalkPhase += 0.32;
+            const footLift = Math.abs(Math.sin(this.mascotWalkPhase)) * 0.035;
+            current.y += ((this.mascotBaseY || 0.58) + footLift - current.y) * 0.24;
+            this.mascotGroup.rotation.y = Math.atan2(flatDelta.x, flatDelta.z);
+            this.mascotGroup.rotation.z = Math.sin(this.mascotWalkPhase) * 0.11;
+            this.mascotGroup.rotation.x = Math.cos(this.mascotWalkPhase * 0.8) * 0.035;
+            return;
+        }
+
+        const idleY = (this.mascotBaseY || 0.58) + Math.sin(this.frame * 0.045) * 0.025;
+        current.x += (this.mascotTarget.x - current.x) * 0.08;
+        current.z += (this.mascotTarget.z - current.z) * 0.08;
+        current.y += (idleY - current.y) * 0.12;
+        this.mascotGroup.rotation.x += (0 - this.mascotGroup.rotation.x) * 0.08;
+        this.mascotGroup.rotation.z += (0 - this.mascotGroup.rotation.z) * 0.08;
+        this.mascotGroup.rotation.y += (Math.sin(this.frame * 0.028) * 0.06 - this.mascotGroup.rotation.y) * 0.08;
     },
 
     updateParticles() {
@@ -1606,6 +1649,9 @@ export const CommercialFarmCanvas = {
         this.mascotGroup = null;
         this.mascotTarget = null;
         this.mascotHome = null;
+        this.mascotBaseY = 0.58;
+        this.mascotWalkPhase = 0;
+        this.mascotWalking = false;
         this.mascotBubble = null;
         this.mascotSelectedContext = null;
         this.originalParent = null;
