@@ -12,6 +12,7 @@ export const AppState = {
     currentScreen: 'splash',
     farmName: 'My Farm',
     currentFarmId: null,
+    currentFarm: null,     
     tiles: [],
    sensors: {
     temp:     { val: '--', unit: '°C',    status: 'normal' },
