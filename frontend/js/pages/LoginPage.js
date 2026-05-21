@@ -335,7 +335,7 @@ function _bindEvents() {
             localStorage.setItem('token', data.token);
             
             const mockFirebaseUser = { uid: data.user.email, email: data.user.email };
-            await _onLoginSuccess(selectedMode, mockFirebaseUser, true);
+            await _onLoginSuccess(data.user.mode, mockFirebaseUser, true);
             
         } catch (err) {
             showToast('error', 'Demo mode unavailable. Please sign in or register.');
@@ -382,6 +382,8 @@ async function _onLoginSuccess(mode, user, isGuest) {
 
     const greeting = isGuest ? '👀 Welcome, Guest!' : `👋 Welcome, ${AppState.userName}!`;
     showToast('success', greeting);
+    // 👉 加上這行，確保全域狀態更新
+    AppState.notify();
     showScreen('farmlist');
 }
 
