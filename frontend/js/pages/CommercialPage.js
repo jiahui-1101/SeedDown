@@ -22,7 +22,9 @@ const RACK_OPTIONS = {
 let chatMessages = [];
 let selectedZoneId = null;
 let zoneSnapshots = {};
+let activeZoneCameraStream = null;
 const LIVE_READING_CACHE_KEY = 'seeddown_commercial_live_cache';
+const LAST_CAMERA_SNAPSHOT_KEY = 'seeddown_last_camera_snapshot';
 
 const DEFAULT_COMMERCIAL_ZONES = [
     { id: 'zone_A', label: 'Zone A', crop: 'Leafy Greens' },
@@ -745,7 +747,7 @@ function openZoneCameraModal() {
     const farm = getCurrentFarm();
     const zones = commercialZonesForFarm(farm);
     const zone = zones.find(item => item.id === selectedZoneId) || zones[0];
-    const image = farm?.photoPreview || farm?.image || farm?.thumbnail || '';
+    const image = getZoneCameraSnapshot(farm, zone?.id) || farm?.photoPreview || farm?.image || farm?.thumbnail || '';
     const reading = zoneSnapshots[zone?.id] || null;
 
     const overlay = document.createElement('div');
@@ -765,6 +767,8 @@ function openZoneCameraModal() {
             <div style="padding:16px;overflow:auto;">
                 <div style="display:grid;grid-template-columns:minmax(0,1.35fr) minmax(220px,.65fr);gap:14px;">
                     <div id="cameraFeed" style="position:relative;min-height:360px;border-radius:20px;overflow:hidden;background:${image ? `url(${image}) center/cover` : 'linear-gradient(135deg,#dcfce7,#f8fafc)'};border:1px solid #dbe7dc;">
+                        <video id="zoneCameraVideo" autoplay playsinline muted style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#0f172a;"></video>
+                        <canvas id="zoneCameraCanvas" style="display:none;"></canvas>
                         ${!image ? cameraPlaceholder(zone) : ''}
                         <div style="position:absolute;left:12px;top:12px;display:flex;gap:7px;align-items:center;background:rgba(15,23,42,.66);color:#fff;border-radius:999px;padding:7px 10px;font-size:11px;font-weight:900;">
                             <span style="width:7px;height:7px;background:#22c55e;border-radius:50%;box-shadow:0 0 12px #22c55e;"></span>
@@ -786,8 +790,12 @@ function openZoneCameraModal() {
                         ${cameraMetric('Humidity', reading?.humidity !== undefined ? `${reading.humidity}%` : '--')}
                         ${cameraMetric('Light', reading?.lightRaw ?? '--')}
                         ${cameraMetric('Plant count', `${zone?.planted ?? plantCount(farm)} plants`)}
-                        <button id="cameraCaptureBtn" style="margin-top:4px;padding:13px;border:none;border-radius:14px;background:#166534;color:#fff;font-weight:950;cursor:pointer;">Capture latest frame</button>
-                        <div id="cameraStatus" style="font-size:12px;color:#64748b;line-height:1.45;">Camera feed uses the latest farm photo / camera snapshot attached to this commercial farm. Each zone camera can be checked before running disease analysis.</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+                            <button id="cameraStartBtn" style="padding:13px;border:1px solid #99f6e4;border-radius:14px;background:#ecfeff;color:#0f766e;font-weight:950;cursor:pointer;">Start camera</button>
+                            <button id="cameraCaptureBtn" style="padding:13px;border:none;border-radius:14px;background:#166534;color:#fff;font-weight:950;cursor:pointer;">Capture frame</button>
+                        </div>
+                        <button id="cameraStopBtn" style="padding:12px;border:1px solid #dbe7dc;border-radius:14px;background:#fff;color:#64748b;font-weight:900;cursor:pointer;">Stop camera</button>
+                        <div id="cameraStatus" style="font-size:12px;color:#64748b;line-height:1.45;">Use browser camera for the demo, or keep the latest farm photo/captured snapshot as fallback. Captured frames are saved to the selected zone for disease analysis context.</div>
                     </div>
                 </div>
             </div>
@@ -795,19 +803,132 @@ function openZoneCameraModal() {
     `;
     document.body.appendChild(overlay);
 
-    document.getElementById('cameraClose')?.addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
-    document.getElementById('cameraCaptureBtn')?.addEventListener('click', () => {
-        document.getElementById('cameraTimestamp').textContent = `Live snapshot · ${new Date().toLocaleTimeString()}`;
-        document.getElementById('cameraStatus').textContent = 'Latest camera frame captured for review. Use Disease Analysis if this zone looks unhealthy.';
+    const closeCamera = () => {
+        stopZoneCameraStream();
+        overlay.remove();
+    };
+    document.getElementById('cameraClose')?.addEventListener('click', closeCamera);
+    overlay.addEventListener('click', event => { if (event.target === overlay) closeCamera(); });
+    document.getElementById('cameraStartBtn')?.addEventListener('click', () => startZoneCamera());
+    document.getElementById('cameraCaptureBtn')?.addEventListener('click', captureZoneCameraFrame);
+    document.getElementById('cameraStopBtn')?.addEventListener('click', () => {
+        stopZoneCameraStream();
+        document.getElementById('cameraStatus').textContent = 'Browser camera stopped. The latest saved snapshot is still available for this zone.';
     });
     document.getElementById('cameraZoneSelect')?.addEventListener('change', event => {
         selectedZoneId = event.target.value;
         AppState.currentZoneId = selectedZoneId;
+        stopZoneCameraStream();
         overlay.remove();
         updateZoneSelectionUI();
         openZoneCameraModal();
     });
+}
+
+async function startZoneCamera() {
+    const status = document.getElementById('cameraStatus');
+    const video = document.getElementById('zoneCameraVideo');
+    if (!navigator.mediaDevices?.getUserMedia) {
+        if (status) status.textContent = 'This browser does not support direct camera preview. Using saved snapshot/photo fallback.';
+        return;
+    }
+
+    stopZoneCameraStream();
+    try {
+        activeZoneCameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false,
+        });
+        if (video) {
+            video.srcObject = activeZoneCameraStream;
+            video.style.display = 'block';
+            await video.play().catch(() => {});
+        }
+        document.querySelector('[data-camera-placeholder]')?.setAttribute('style', 'display:none;');
+        if (status) status.textContent = 'Browser camera is live. Capture a frame to save it as this zone camera snapshot.';
+    } catch (error) {
+        if (status) status.textContent = `Camera unavailable: ${error.message}. Saved snapshot/photo fallback is still available.`;
+    }
+}
+
+function stopZoneCameraStream() {
+    if (activeZoneCameraStream) {
+        activeZoneCameraStream.getTracks().forEach(track => track.stop());
+        activeZoneCameraStream = null;
+    }
+    const video = document.getElementById('zoneCameraVideo');
+    if (video) {
+        video.pause();
+        video.srcObject = null;
+        video.style.display = 'none';
+    }
+}
+
+function captureZoneCameraFrame() {
+    const status = document.getElementById('cameraStatus');
+    const video = document.getElementById('zoneCameraVideo');
+    const canvas = document.getElementById('zoneCameraCanvas');
+    const zoneId = document.getElementById('cameraZoneSelect')?.value || selectedZoneId;
+    if (!video || !canvas || !activeZoneCameraStream || !video.videoWidth) {
+        document.getElementById('cameraTimestamp').textContent = `Live snapshot · ${new Date().toLocaleTimeString()}`;
+        if (status) status.textContent = 'No browser camera frame is active yet. Start camera first, or continue using the saved snapshot/photo fallback.';
+        return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+    saveZoneCameraSnapshot(zoneId, dataUrl);
+    updateCameraFeedSnapshot(dataUrl);
+    document.getElementById('cameraTimestamp').textContent = `Captured · ${new Date().toLocaleTimeString()}`;
+    if (status) status.textContent = 'Frame saved to this zone. Disease Analysis can use the latest captured snapshot as context.';
+}
+
+function getZoneCameraSnapshot(farm, zoneId) {
+    if (!zoneId) return '';
+    const farmKey = farm?.id || AppState.currentFarmId || 'commercial_demo';
+    if (farm?.zoneCameraSnapshots?.[zoneId]) return farm.zoneCameraSnapshots[zoneId];
+    try {
+        const saved = JSON.parse(localStorage.getItem(LAST_CAMERA_SNAPSHOT_KEY) || '{}');
+        return saved?.farmKey === farmKey && saved?.zoneId === zoneId ? saved.dataUrl : '';
+    } catch {
+        return '';
+    }
+}
+
+function saveZoneCameraSnapshot(zoneId, dataUrl) {
+    const farm = getCurrentFarm() || {};
+    const nextFarm = {
+        ...farm,
+        zoneCameraSnapshots: {
+            ...(farm.zoneCameraSnapshots || {}),
+            [zoneId]: dataUrl,
+        },
+        lastCameraZoneId: zoneId,
+        lastCameraSnapshotAt: new Date().toISOString(),
+    };
+    AppState.currentFarm = nextFarm;
+    persistCurrentFarm(nextFarm);
+    try {
+        localStorage.setItem(LAST_CAMERA_SNAPSHOT_KEY, JSON.stringify({
+            farmKey: nextFarm.id || AppState.currentFarmId || 'commercial_demo',
+            zoneId,
+            dataUrl,
+            capturedAt: nextFarm.lastCameraSnapshotAt,
+        }));
+    } catch (error) {
+        console.warn('[CommercialPage] could not save camera snapshot:', error.message);
+    }
+}
+
+function updateCameraFeedSnapshot(dataUrl) {
+    const feed = document.getElementById('cameraFeed');
+    const video = document.getElementById('zoneCameraVideo');
+    if (feed) feed.style.background = `url(${dataUrl}) center/cover`;
+    if (video) video.style.display = 'none';
+    document.querySelector('[data-camera-placeholder]')?.setAttribute('style', 'display:none;');
 }
 
 function getAuthHeaders() {
@@ -1144,7 +1265,7 @@ function cameraMetric(label, value) {
 function cameraPlaceholder(zone) {
     const crop = zone?.crop || 'Mixed crops';
     return `
-        <div style="position:absolute;inset:0;display:grid;place-items:center;padding:28px;">
+        <div data-camera-placeholder style="position:absolute;inset:0;display:grid;place-items:center;padding:28px;">
             <div style="width:min(420px,92%);aspect-ratio:4/3;border-radius:22px;background:linear-gradient(180deg,#ecfdf5,#dbeafe);border:1px solid rgba(22,101,52,.16);box-shadow:inset 0 0 0 8px rgba(255,255,255,.38);display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:24px;">
                 ${Array.from({ length: 12 }, (_, index) => `
                     <div style="border-radius:999px;background:${index % 3 === 0 ? '#22c55e' : index % 3 === 1 ? '#16a34a' : '#84cc16'};box-shadow:0 12px 24px rgba(22,101,52,.18);"></div>
