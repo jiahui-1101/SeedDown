@@ -17,14 +17,6 @@ export function render() {
                 <h1 style="font-size:2.35rem;">SeedDown</h1>
                 <p style="color:var(--sub); text-align:center; margin:18px 0 24px;">AI-powered farming intelligence for urban vertical farms</p>
 
-                <div class="splash-package-card">
-                    <div class="package-title">IoT Package</div>
-                    <div class="package-grid">
-                        ${packageItem('Beginner · 3', 'Starter · Standard · Pro')}
-                        ${packageItem('Commercial · 3', 'Farm Master · Zone Node · Legacy Pro')}
-                    </div>
-                </div>
-
                 <button class="btn-primary" id="getStartedBtn" style="margin-top:24px;">Get Started →</button>
 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; width:100%; margin-top:30px;">
@@ -32,6 +24,14 @@ export function render() {
                     <div class="splash-feature" style="background:var(--surface); padding:16px; border-radius:18px;"><span>🌱</span> Smart Alerts</div>
                     <div class="splash-feature" style="background:var(--surface); padding:16px; border-radius:18px;"><span>🏘️</span> Community</div>
                     <div class="splash-feature" style="background:var(--surface); padding:16px; border-radius:18px;"><span>📦</span> Package Guide</div>
+                </div>
+
+                <div class="splash-package-card">
+                    <div class="package-title">IoT Package</div>
+                    <div class="package-grid">
+                        ${packageItem('Beginner · 3', 'Starter · Standard · Pro')}
+                        ${packageItem('Commercial · 3', 'Farm Master · Zone Node · Legacy Pro')}
+                    </div>
                 </div>
             </div>
         </div>
@@ -71,7 +71,7 @@ function ensureSplashStyles() {
         }
         #splashScreen .splash-badge {
             color: #0f766e;
-            border: 1.5px solid #14b8a6;
+            border: 1.5px solid #0f766e;
             font-weight: 800;
             letter-spacing: .04em;
         }
@@ -95,7 +95,7 @@ function ensureSplashStyles() {
             place-items: center;
             border-radius: 30px;
             background: rgba(255, 255, 255, .84);
-            border: 1.5px solid #5eead4;
+            border: 1.5px solid #0f766e;
             box-shadow: 0 14px 34px rgba(15, 118, 110, .14);
             overflow: hidden;
         }
@@ -133,10 +133,11 @@ function ensureSplashStyles() {
         .water-drop.d3 { left: 88px; animation-delay: .44s; }
         .splash-package-card {
             width: 100%;
+            margin-top: 18px;
             padding: 16px;
             border-radius: 20px;
             background: rgba(255, 255, 255, .86);
-            border: 1.5px solid #5eead4;
+            border: 1.5px solid #0f766e;
             box-shadow: 0 10px 26px rgba(15, 118, 110, .08);
         }
         .package-title {
@@ -157,7 +158,7 @@ function ensureSplashStyles() {
             border-radius: 16px;
             padding: 15px;
             background: #f7fffd;
-            border: 1.5px solid #5eead4;
+            border: 1.5px solid #115e59;
             animation: packageFloat 3s ease-in-out infinite;
         }
         .package-item:nth-child(2) { animation-delay: .18s; }
@@ -177,7 +178,7 @@ function ensureSplashStyles() {
             font-weight: 600;
         }
         .splash-feature {
-            border: 1.5px solid #5eead4;
+            border: 1.5px solid #115e59;
             box-shadow: 0 8px 22px rgba(15, 118, 110, .07);
             color: #12312f;
             min-height: 58px;

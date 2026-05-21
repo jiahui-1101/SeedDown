@@ -149,7 +149,7 @@ export function render() {
                 </div>
 
                 <div style="text-align:center; margin-top:20px; font-size:0.65rem; color:#94a3b8;">
-                    Powered by PERSAKA <span style="color:#ef4444;">UTM</span>
+                    Powered by next level utm
                 </div>
             </div>
         </div>
