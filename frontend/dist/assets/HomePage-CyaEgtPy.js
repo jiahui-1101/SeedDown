@@ -1,4 +1,4 @@
-import{A as d,F as r,S as o,N as l,s as i}from"./index-CsAh1mPh.js";import{o as c}from"./AddPlantModal-1CThvP5l.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function u(){var t,s;console.log("[HomePage] render called");const n=document.getElementById("screenContainer");n.innerHTML=`
+import{A as d,F as r,S as o,N as l,s as i}from"./index-kXpGLROK.js";import{o as c}from"./AddPlantModal-CwiDsBVi.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function u(){var t,s;console.log("[HomePage] render called");const n=document.getElementById("screenContainer");n.innerHTML=`
         <div class="screen active" id="homeScreen">
             <div class="topbar">
                 <button id="backToFarms" class="back-btn" style="background:transparent; border:none; font-size:20px;">←</button>
@@ -19,10 +19,10 @@ import{A as d,F as r,S as o,N as l,s as i}from"./index-CsAh1mPh.js";import{o as 
                 <div id="dashStrip" class="sensor-strip"></div>
                 <div class="advisor-wrap" style="margin:12px 16px;">
                     <div class="advisor-card" style="background:var(--surface); border-radius:20px; padding:14px; display:flex; gap:12px;">
-                        <div id="npcAvatar" style="font-size:36px;">🧑‍🌾</div>
+                        <div id="npcAvatar" style="font-size:36px;">🌿</div>
                         <div style="flex:1;">
-                            <div id="npcName" style="font-weight:700; color:var(--accent);">FARM ADVISOR</div>
-                            <div id="npcText" style="font-size:0.8rem; color:var(--sub);">Loading insights...</div>
+                            <div id="npcName" style="font-weight:700; color:var(--accent);">SEEDDOWN AI ADVISOR</div>
+                            <div id="npcText" style="font-size:0.8rem; color:var(--sub);">Loading farm context...</div>
                             <div style="display:flex; gap:8px; margin-top:8px;">
                                 <button id="npcNext" class="advisor-btn primary">Next →</button>
                                 <button id="npcDismiss" class="advisor-btn">Dismiss</button>
