@@ -8,9 +8,14 @@ const FARMS_KEY = 'user_farms';
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
     : window.location.origin;
+const MASCOT_VISIBILITY_KEY = 'seeddown_ai_mascot_enabled';
 
 function farmProfileKey(farmId) {
     return `farm_profile_${farmId}`;
+}
+
+function isMascotEnabled() {
+    return localStorage.getItem(MASCOT_VISIBILITY_KEY) !== 'false';
 }
 
 function defaultControls() {
@@ -65,6 +70,13 @@ export function render() {
                         <label style="font-size:0.72rem;font-weight:800;color:var(--sub);display:block;margin-bottom:5px;">Device ID</label>
                         <input id="controlDeviceId" value="${escapeAttr(profile.deviceId)}" style="width:100%;border:none;background:transparent;color:var(--text);font-weight:800;outline:none;font-family:'DM Mono',monospace;">
                     </div>
+                    <label style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f8fffd;border:1px solid var(--border);border-radius:12px;padding:11px 12px;cursor:pointer;">
+                        <span>
+                            <b style="display:block;color:var(--text);font-size:13px;">SeedDown AI mascot</b>
+                            <small style="display:block;color:var(--sub);font-size:11px;margin-top:2px;">Show the 3D guide on Commercial Digital Twin</small>
+                        </span>
+                        <input id="controlMascotToggle" type="checkbox" ${isMascotEnabled() ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--accent);">
+                    </label>
                 </div>
 
                 <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
@@ -251,6 +263,12 @@ function bindEvents() {
         input.addEventListener('input', updateControlRecommendations);
     });
     document.getElementById('controlDeviceId')?.addEventListener('input', updateControlRecommendations);
+    document.getElementById('controlMascotToggle')?.addEventListener('change', event => {
+        const enabled = Boolean(event.target.checked);
+        localStorage.setItem(MASCOT_VISIBILITY_KEY, enabled ? 'true' : 'false');
+        window.dispatchEvent(new CustomEvent('seeddown:mascotVisibility', { detail: { enabled } }));
+        showToast('success', enabled ? 'SeedDown AI mascot enabled' : 'SeedDown AI mascot hidden');
+    });
     updateControlRecommendations();
 }
 

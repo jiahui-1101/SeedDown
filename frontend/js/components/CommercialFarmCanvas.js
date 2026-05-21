@@ -3,6 +3,7 @@ import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
+const MASCOT_VISIBILITY_KEY = 'seeddown_ai_mascot_enabled';
 
 const RACK_OPTIONS = {
     '2-tier': { id: '2-tier', label: '2-Tier Starter Rack', tiers: 2, slotsPerTier: 3, total: 6 },
@@ -55,6 +56,8 @@ export const CommercialFarmCanvas = {
     mascotBaseY: 0.58,
     mascotWalkPhase: 0,
     mascotWalking: false,
+    mascotVisible: true,
+    mascotVisibilityHandler: null,
     mascotBubble: null,
     mascotSelectedContext: null,
     originalParent: null,
@@ -83,6 +86,7 @@ export const CommercialFarmCanvas = {
         this.rack = resolveRack(this.farm);
         this.slotPlants = resolveSlotPlants(this.farm, this.rack);
         this.sensorSnapshot = getSensorSnapshot();
+        this.mascotVisible = localStorage.getItem(MASCOT_VISIBILITY_KEY) !== 'false';
         this.clock = new THREE.Clock();
 
         this.prepareHost();
@@ -1084,6 +1088,15 @@ export const CommercialFarmCanvas = {
         this.mascotBubble = document.createElement('div');
         this.mascotBubble.className = 'cf-overlay cf-mascot-bubble';
         this.mascotBubble.addEventListener('click', event => {
+            const hide = event.target.closest('[data-mascot-hide]');
+            if (hide) {
+                event.preventDefault();
+                event.stopPropagation();
+                localStorage.setItem(MASCOT_VISIBILITY_KEY, 'false');
+                this.setMascotVisible(false);
+                window.dispatchEvent(new CustomEvent('seeddown:mascotVisibility', { detail: { enabled: false } }));
+                return;
+            }
             const button = event.target.closest('[data-mascot-ask]');
             if (!button) return;
             event.preventDefault();
@@ -1147,6 +1160,9 @@ export const CommercialFarmCanvas = {
         this.canvas.addEventListener('click', this.onClick);
         this.canvas.addEventListener('dblclick', this.onDoubleClick);
         this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
+        this.mascotVisibilityHandler = event => this.setMascotVisible(event.detail?.enabled !== false);
+        window.addEventListener('seeddown:mascotVisibility', this.mascotVisibilityHandler);
+        this.setMascotVisible(this.mascotVisible);
     },
 
     onPointerMove: null,
@@ -1412,10 +1428,17 @@ export const CommercialFarmCanvas = {
         }
         this.mascotBubble.innerHTML = `
             <div class="cf-mascot-kicker">SeedDown AI</div>
+            <button type="button" class="cf-mascot-hide" data-mascot-hide aria-label="Hide SeedDown AI">Hide</button>
             <strong>${escapeHTML(title)}</strong>
             <span>${escapeHTML(message)}</span>
             <button type="button" data-mascot-ask>Ask now</button>
         `;
+    },
+
+    setMascotVisible(visible) {
+        this.mascotVisible = Boolean(visible);
+        if (this.mascotGroup) this.mascotGroup.visible = this.mascotVisible;
+        if (this.mascotBubble) this.mascotBubble.style.display = this.mascotVisible ? 'block' : 'none';
     },
 
     async toggleFullscreen() {
@@ -1557,7 +1580,7 @@ export const CommercialFarmCanvas = {
     },
 
     positionMascotBubble() {
-        if (!this.mascotBubble || !this.mascotGroup || !this.camera || !this.canvas || !this.parent) return;
+        if (!this.mascotVisible || !this.mascotBubble || !this.mascotGroup || !this.camera || !this.canvas || !this.parent) return;
         const world = new THREE.Vector3();
         this.mascotGroup.getWorldPosition(world);
         world.y += 0.58;
@@ -1637,6 +1660,7 @@ export const CommercialFarmCanvas = {
         this.rafId = null;
         if (this.resizeHandler) window.removeEventListener('resize', this.resizeHandler);
         if (this.fullscreenHandler) document.removeEventListener('fullscreenchange', this.fullscreenHandler);
+        if (this.mascotVisibilityHandler) window.removeEventListener('seeddown:mascotVisibility', this.mascotVisibilityHandler);
         if (this.canvas && this.onPointerMove) this.canvas.removeEventListener('pointermove', this.onPointerMove);
         if (this.canvas && this.onClick) this.canvas.removeEventListener('click', this.onClick);
         if (this.canvas && this.onDoubleClick) this.canvas.removeEventListener('dblclick', this.onDoubleClick);
@@ -1684,6 +1708,8 @@ export const CommercialFarmCanvas = {
         this.mascotBaseY = 0.58;
         this.mascotWalkPhase = 0;
         this.mascotWalking = false;
+        this.mascotVisible = true;
+        this.mascotVisibilityHandler = null;
         this.mascotBubble = null;
         this.mascotSelectedContext = null;
         this.originalParent = null;
@@ -2378,6 +2404,19 @@ function ensureCommercialStyles() {
             text-transform: uppercase;
             letter-spacing: .12em;
             margin-bottom: 4px;
+            padding-right: 46px;
+        }
+        .cf-mascot-bubble .cf-mascot-hide {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            margin: 0;
+            padding: 4px 7px;
+            border-radius: 999px;
+            background: #f8fafc;
+            border-color: #dbe7dc;
+            color: #64748b;
+            font-size: 9px;
         }
         .cf-mascot-bubble strong {
             display: block;
