@@ -553,7 +553,7 @@ async function _processData(readings, isMock, ctx) {
     `${isMock ? '⚡ Demo mode · ' : ''}Last updated: ${new Date(ts).toLocaleString('en-MY')}`;
 
   await _loadChartLib();
-  _renderCharts(readings, metrics, { min: 65, max: 80, mid: 72 }, 3.0);
+ // _renderCharts(readings, metrics, { min: 65, max: 80, mid: 72 }, 3.0);
   _fetchAI(metrics, readings, isMock, ctx);
 }
 
@@ -644,6 +644,8 @@ async function _fetchAI(metrics, readings, isMock, ctx) {
     const rb    = data.ruleBasedSummary       || {};
     const iz    = data.idealWaterZone         || { min: 65, max: 80, mid: 72 };
     const tradE = data.traditionalEnergyPerDay || 3.0;
+
+    _renderCharts(readings, metrics, iz, tradE);
 
     _el('con-water-vs').textContent   = rb.waterSavePct      ? `↓ ${rb.waterSavePct}% vs traditional`                 : 'vs traditional';
     _el('con-energy-vs').textContent  = combinedPd[0]        ? `↓ ${combinedPd[0].energySavePct || 0}% vs traditional` : 'vs traditional';
