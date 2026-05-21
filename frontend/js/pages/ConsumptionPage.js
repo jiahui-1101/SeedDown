@@ -320,7 +320,7 @@ export function render() {
 export async function init() {
 
   // 👉 加上這行，強迫系統認定現在是 Commercial Mode
-  AppState.mode = 'commercial';
+  //AppState.mode = 'commercial';
   _showAllPlants = false;
   _allPlantData  = [];
 
@@ -391,7 +391,7 @@ function _resolveFarmContext() {
     farmId = accountMode === 'commercial' 
       ? 'farm_commercial_demo_001' 
       : 'farm_beginner_demo_001';
-      
+      //farmId = 'some_fake_id_with_zero_data'; //demo mode
     console.log(`[DEBUG] Auto-switched to Demo Farm ID: ${farmId} (${accountMode} mode)`);
   }
 
@@ -413,6 +413,43 @@ function _resolveFarmContext() {
 
   return { farmId, farmName: farm?.name || 'Demo Farm', accountMode, queryParams, plants, farmLabel };
 }
+
+/*TEST for GUEST commercial mode only
+function _resolveFarmContext() {
+  const farm = AppState.currentFarm;
+  
+  // 💥 终极暴力破解：不管农场设定、不管 AppState，我全都要 Commercial！
+  const accountMode = 'commercial'; 
+
+  let farmId = farm ? (farm.id || farm.farmId) : AppState.currentFarmId;
+
+  // 2. Localhost 開發強制切換 Demo ID
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+   // farmId = accountMode === 'commercial' 
+     // ? 'farm_commercial_demo_001' 
+     // : 'farm_beginner_demo_001';
+      farmId = 'some_fake_id_with_zero_data'; //demo mode
+    console.log(`[DEBUG] Auto-switched to Demo Farm ID: ${farmId} (${accountMode} mode)`);
+  }
+
+  // ── Query params ─────────────────────
+  const queryParams = farmId
+    ? { farmId, limit: 48 }
+    : { deviceId: 'farm_001', limit: 24 };
+
+  const plants = _extractPlants(farm || {}, accountMode);
+
+  // ── Human-readable badge ───────────────────────────────────
+  let farmLabel;
+  if (accountMode === 'commercial') {
+   const zoneCount = 3;
+    farmLabel = `📍 ${farm?.name || 'Commercial Farm'} · ${zoneCount} zones · Overall Analysis`;
+  } else {
+    farmLabel = `📍 ${farm?.name || 'My Farm'} · Beginner Mode`;
+  }
+
+  return { farmId, farmName: farm?.name || 'Demo Farm', accountMode, queryParams, plants, farmLabel };
+}*/
 
 /* ============================================================
    EXTRACT PLANTS
@@ -546,9 +583,28 @@ async function _fetchAI(metrics, readings, isMock, ctx) {
   };
 
   // Demo / no real data → skip AI entirely
+  // Demo / no real data → 强行显示 AI 风格的 Demo 叙述
   if (isMock) {
-    console.log('[ConsumptionPage] Demo mode — skipping AI call.');
-    applyFallback('Demo mode active — showing benchmark data.');
+    console.log('[ConsumptionPage] Demo mode active — showing benchmark data.');
+    
+    // 把 spinner 关掉，因为我们不 fetch 了
+    _el('con-ai-spinner').style.display = 'none';
+    
+    // 直接塞一段看起来很专业的 AI 建议
+    const demoNarrative = `Based on your simulated vertical farm setup, your water usage is 45% more efficient than traditional soil-based farming today. Your current light cycle is optimal for leafy greens, contributing to an estimated 12% faster growth rate compared to the baseline. Recommendation: Consider adjusting the fan threshold to 26°C if humidity levels continue to rise, as this will further stabilize your vapor pressure deficit.`;
+    
+    _el('con-ai-text').textContent = demoNarrative;
+    _el('con-ai-text').style.fontStyle = 'normal'; // 看起来更像正式报告
+    _el('con-ai-source').style.display = 'block';
+    _el('con-ai-source').textContent = 'Powered by SeedDown AI (Simulated)';
+    
+    // 依然要执行 fallback 以确保卡片显示
+    const allPlants = _resolveFarmContext().plants;
+    const fallbackPd = allPlants.length > 0 ? allPlants.map(n => _benchmarkFallback(n)) : [_benchmarkFallback('lettuce')];
+    _allPlantData = fallbackPd;
+    _renderPlantCards(fallbackPd, false);
+    _renderCompBars(fallbackPd, _calcMetrics(_lastReadings));
+    
     return;
   }
 
@@ -640,7 +696,23 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
   const labels = readings.map((_, i) => `${i}`);
 
   // ── Water ──────────────────────────────────────────────────
-  const waterData = readings.map(r => Number(r.waterLevel ?? 70));
+  //const waterData = readings.map(r => Number(r.waterLevel ?? 70));
+  const waterData = readings.map(r => {
+    // 1. 如果你以后改了 DB，直接存了 percentage，就优先用它
+    if (r.waterLevel !== undefined && r.waterLevel !== null) {
+      return Number(r.waterLevel);
+    }
+
+    // 2. 如果 DB 里面只有水面距离 (waterDistanceCm)，我们就把距离换算成百分比
+    const TANK_DEPTH_CM = 30; // 假设你的水箱总深度是 30cm (你可以根据真实的桶高度修改)
+    const distance = r.waterDistanceCm ?? 10; // 如果找不到数据，预设距离为 10cm
+    
+    // 公式：(总深度 - 目前水面距离) / 总深度 * 100
+    let pct = ((TANK_DEPTH_CM - distance) / TANK_DEPTH_CM) * 100;
+    
+    // 确保画出来的图表数据卡在 0% 到 100% 之间，不会爆表
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  });
   const izMin = idealZone.min;
   const izMax = idealZone.max;
   const inRange = waterData.filter(v => v >= izMin && v <= izMax).length;
