@@ -1,5 +1,8 @@
 **/node_modules/
 **/.env
+**/.pio/
+.vercel/
+frontend/dist/
 **/firebase-service-account.json
 backend/recipes_data.csv
 frontend/package-lock.json
