@@ -1,10 +1,8 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { AppState } from '../store.js';
 import { showScreen } from '../utils/navigation.js';
 import { hasRealSensorData, normalizeSensorReading, sensorStatusRange, toFiniteNumber } from '../utils/sensorReading.js';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
 
 const PACKAGE_SENSOR_KEYS = {
     starter: ['temp', 'humid', 'light'],

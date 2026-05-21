@@ -1,7 +1,6 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { showScreen } from '../utils/navigation.js';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000' : window.location.origin;
 
 // Matches CommercialPage's formula: light * 0.0002 + temp * 0.003 + water * 0.0015
 // So dashboard and detail always show the same number.

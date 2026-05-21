@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
@@ -5,9 +6,7 @@ import { conciseAIText } from '../utils/aiFormat.js';
 
 const PROFILE_KEY = 'farm_profile';
 const FARMS_KEY = 'user_farms';
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
+
 const MASCOT_VISIBILITY_KEY = 'seeddown_ai_mascot_enabled';
 const DEMO_COMMERCIAL_ZONE_DEVICES = {
     zone_A: 'commercial-zone-node-1',

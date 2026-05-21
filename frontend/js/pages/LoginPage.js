@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { showScreen } from '../utils/navigation.js';
 import { showToast }  from '../utils/toast.js';
 import { AppState }   from '../store.js';
@@ -7,9 +8,7 @@ const GUEST_EMAIL    = 'demo@seeddown.com';
 const GUEST_PASSWORD = 'seeddown2026';
 
 // 动态解析后端 API 地址
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
+
 
 export function render() {
     const container = document.getElementById('screenContainer');

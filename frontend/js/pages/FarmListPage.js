@@ -1,11 +1,10 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
+
 
 /* ── JWT HEADER HELPER ── */
 function getAuthHeaders() {

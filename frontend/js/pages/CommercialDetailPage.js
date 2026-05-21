@@ -1,10 +1,8 @@
+import { API_BASE } from '../utils/apiBase.js';
 // CommercialDetailPage.js
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
 
 // 💡 这里的阈值直接动态绑定 ProfilePage 保存的全局设置
 const SENSOR_META = {

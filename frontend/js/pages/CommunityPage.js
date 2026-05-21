@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { showScreen } from '../utils/navigation.js';
 // 从子文件中引入拆分好的模块
 import { renderVisitsTab } from './communityTabs/VisitsTab.js';
@@ -76,8 +77,7 @@ function initTabs() {
  * Fetch Coin Balance
  */
 async function fetchMyCoins() {
-    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'http://localhost:3000' : window.location.origin;
+
     try {
         const res = await fetch(`${API_BASE}/api/community/me`);
         const data = await res.json();

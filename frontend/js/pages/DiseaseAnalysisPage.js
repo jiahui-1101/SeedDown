@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 /* ============================================================
    DiseaseAnalysisPage.js — AI Disease Analysis (v4 — New UX)
    Confidence tiers:
@@ -15,10 +16,6 @@
    ============================================================ */
    import { showScreen } from '../utils/navigation.js';
 
-   const API_BASE =
-     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-       ? 'http://localhost:3000'
-       : window.location.origin;
    
    /* ── BASE_CROPS fallback (mirrors AddPlantModal.js) ── */
    const BASE_CROPS = [

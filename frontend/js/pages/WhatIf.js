@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 /* ============================================================
    MODULE: FEATURE - WHAT IF
    WhatIf.js — self-contained module, no external dependencies except Chart.js (lazy-loaded)
@@ -52,8 +53,7 @@ const FERT_MULTIPLIER = { low: 1.5, mid: 1.0, high: 0.7 };
 const DEFAULT_SENSORS = { temp: 28, humid: 68, light: 82, water: 45, nutrient: 78 };
 
 // ── Farm data helpers ──────────────────────────────────────────
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:3000' : window.location.origin;
+
 
 function wifEscapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({

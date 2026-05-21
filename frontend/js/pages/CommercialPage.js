@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
 import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=radish-ai-1';
@@ -6,9 +7,6 @@ import { aiAdvisorHTML, aiChatHTML } from '../utils/aiFormat.js';
 import { formatMetric, hasRealSensorData, normalizeSensorReading, toFiniteNumber } from '../utils/sensorReading.js';
 import jsQR from 'https://esm.sh/jsqr@1.4.0';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
 
 const RACK_OPTIONS = {
     '2-tier': { label: '2-Tier Starter Rack', tiers: 2, slotsPerTier: 3, total: 6 },

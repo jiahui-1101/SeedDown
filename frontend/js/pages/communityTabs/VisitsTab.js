@@ -1,8 +1,6 @@
 // VisitsTab.js — 2D PvZ-style farm visits with close-loop + water-drop drag animation
 import { showToast } from '../../utils/toast.js';
-
-const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:3000' : window.location.origin;
+import { API_BASE as API } from '../../utils/apiBase.js';
 
 let neighborsData     = [];
 let currentContainerId = '';

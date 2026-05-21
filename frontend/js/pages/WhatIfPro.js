@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 /* ============================================================
    WhatIfPro.js  —  ES Module
    export render()       → HTML string (call first)
@@ -31,8 +32,7 @@ import { initFirebase, loadUserData, getDb } from '../utils/firebase.js';
 /* ─────────────────────────────────────────────
    CONSTANTS & RATES
 ───────────────────────────────────────────── */
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:3000' : window.location.origin;
+
 
 // Malaysian utility rates (2024)
 const RATES = {

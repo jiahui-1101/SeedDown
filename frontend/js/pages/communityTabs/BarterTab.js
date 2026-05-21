@@ -1,8 +1,6 @@
 // BarterTab.js — Responsive grid layout for the Barter Board
 import { showToast } from '../../utils/toast.js';
-
-const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:3000' : window.location.origin;
+import { API_BASE as API } from '../../utils/apiBase.js';
 
 const CATEGORY_IMAGES = {
     tomato:  'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31?w=300&q=80',

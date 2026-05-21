@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 // frontend/js/pages/DashboardPro.js
 import { showScreen } from '../utils/navigation.js';
 
@@ -41,9 +42,7 @@ export function getDashboardHTML() {
 
 // 2. 只管你自己的 Firebase 逻辑
 export function initDashboardLogic() {
-    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'http://localhost:3000'
-        : window.location.origin;
+
 
     document.querySelectorAll('.pro-sensor').forEach(card => {
         card.onclick = () => showScreen('sensor-detail', { sensor: card.getAttribute('data-type') });

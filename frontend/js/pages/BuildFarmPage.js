@@ -1,3 +1,4 @@
+import { API_BASE } from '../utils/apiBase.js';
 /**
  * BuildFarmPage.js
  * New Field wizard: Plant analysis setup -> photo capture -> 3D vertical preview.
@@ -13,9 +14,7 @@ import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
 const FARMS_STORAGE_KEY = 'user_farms';
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
+
 
 // ─── 【新增】JWT 认证 Header 助手函数 ───
 function getAuthHeaders(extraHeaders = {}) {

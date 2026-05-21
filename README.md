@@ -615,6 +615,7 @@ DA3_SERVICE_URL=your_optional_3d_service_url
 Create `frontend/.env` only if Firebase Web SDK features are needed:
 
 ```env
+VITE_API_BASE=https://your-seeddown-backend.onrender.com
 VITE_FIREBASE_API_KEY=your_web_api_key
 VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=your_project_id
@@ -624,6 +625,24 @@ VITE_FIREBASE_APP_ID=your_web_app_id
 ```
 
 Do not commit service account files or real API keys.
+
+### Vercel + Render Deployment
+
+Recommended demo deployment:
+
+- Deploy `backend` to Render using `render.yaml`.
+- Deploy `frontend` to Vercel with project root `frontend`.
+- In Vercel, set `VITE_API_BASE` to the Render backend URL.
+- In Render, set `JWT_SECRET`, `FIREBASE_PROJECT_ID`, and `FIREBASE_SERVICE_ACCOUNT_JSON`.
+- Optional AI keys: `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_API_KEY_2`.
+
+After Render deploys, open the backend root URL and confirm it returns:
+
+```json
+{ "status": "SeedDown API running" }
+```
+
+After Vercel deploys, open the site and confirm browser network requests go to the Render URL for `/api/...`.
 
 ---
 

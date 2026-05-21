@@ -1,9 +1,8 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000' : window.location.origin;
 
 // Price per plant per day (RM). Based on avg Malaysian hydroponic market prices.
 // Lettuce: ~RM 3-4, Spinach: ~RM 2-3, Basil: ~RM 4-5

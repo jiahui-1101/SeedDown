@@ -1,11 +1,9 @@
+import { API_BASE } from '../utils/apiBase.js';
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
 import { readMetric, toFiniteNumber } from '../utils/sensorReading.js';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
 
 const SENSOR_META = {
     temp: { field: 'temperature', unit: 'deg C', label: 'Temperature', normal: value => value >= 18 && value <= 35 },

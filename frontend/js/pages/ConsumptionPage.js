@@ -1,3 +1,4 @@
+import { API_BASE as BASE_URL } from '../utils/apiBase.js';
 /* ============================================================
    MODULE: FEATURE — ECO CONSUMPTION DASHBOARD
    ConsumptionPage.js — UPDATED: Real sensor data via farmId,
@@ -6,11 +7,6 @@
 
 import { AppState } from '../store.js';
 
-const BASE_URL =
-  window.location.hostname === 'localhost' ||
-  window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:3000'
-    : window.location.origin;
 
 /* ============================================================
    HARDWARE POWER CONSTANTS
