@@ -70,6 +70,8 @@ document.addEventListener("DOMContentLoaded", () => {
     SensorStrip.init();
     NpcAdvisor.init();
     Community.init();
+NpcAdvisor.init();
+    Community.init();
     
     // 启动 IoT 物联网仿真器 (每5秒推送一次新传感器状态)
     IotSimulator.start(5000);
