@@ -50,7 +50,6 @@ document.addEventListener("DOMContentLoaded", () => {
     SensorStrip.init();
     NpcAdvisor.init();
     Community.init();
-    IotSimulator.start(5000);
     initAiChat();
     
     // 初始化导航

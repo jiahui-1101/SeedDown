@@ -235,8 +235,14 @@ async function fallbackReadingQuery(filters = {}, limitCount = 50) {
     if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate();
     return { _id: doc.id, id: doc.id, ...data };
   });
-  docs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  return docs.slice(0, limitCount);
+  docs.sort((a, b) => {
+    const tDiff = new Date(b.createdAt) - new Date(a.createdAt);
+    if (tDiff !== 0) return tDiff;
+    const numA = parseInt((a.id || '').replace(/\D/g, '')) || 0;
+    const numB = parseInt((b.id || '').replace(/\D/g, '')) || 0;
+    return numA - numB;
+});
+return docs.slice(0, limitCount);
 }
 
 async function getPreferences(deviceId = 'farm_001') {
