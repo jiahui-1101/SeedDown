@@ -746,6 +746,33 @@ function cleanAiCareSentence(raw) {
   return sentence.length > 180 ? '' : sentence;
 }
 
+function fallbackCropProfile({ species, cropSpec, error }) {
+  const req = cropSpec?.requirements || {};
+  const warning = `AI crop profile unavailable: ${error?.message || 'provider not configured'}. Using local crop defaults without source links.`;
+  return {
+    suitable: true,
+    suitableForVerticalFarm: true,
+    aiUnavailable: true,
+    reason: cropSpec
+      ? `${cropSpec.commonName || species} was matched to the local SeedDown crop database. Suitability is calculated from saved crop ranges and live Firebase sensor readings because the AI crop profile service is unavailable.`
+      : `${species} is being assessed with generic vertical-farm defaults because the AI crop profile service is unavailable.`,
+    estimatedHarvestDays: finiteNumber(req.growthDays, 60),
+    impacts: normaliseImpact(cropSpec?.impacts, { tempChange: 0, humidChange: 3, lightChange: 1, waterChange: 6, nutrientChange: 5 }),
+    environmentProfile: {
+      tempIdeal: req.tempMin !== undefined && req.tempMax !== undefined ? [req.tempMin, req.tempMax] : DEFAULT_ENV_PROFILE.tempIdeal,
+      humidityIdeal: req.humidityMin !== undefined && req.humidityMax !== undefined ? [req.humidityMin, req.humidityMax] : DEFAULT_ENV_PROFILE.humidityIdeal,
+      moistureIdeal: moistureRangeFromWaterDemand(req.waterPerDay),
+      moistureBasis: 'Local SeedDown crop defaults; AI source profile unavailable.',
+      phIdeal: DEFAULT_ENV_PROFILE.phIdeal,
+      ecIdeal: DEFAULT_ENV_PROFILE.ecIdeal,
+      waterDemand: cropWaterDemand(req.waterPerDay),
+    },
+    cropResourceProfile: normaliseCropResourceProfile({}, req, cropSpec?.yield || {}),
+    warnings: [warning],
+    resourceLinks: [],
+  };
+}
+
 async function askAiCropProfile({ species, quantity, planting, currentCrops, sensors, cropSpec, historicalStats }) {
   const cropContext = cropSpec ? {
     species: cropSpec.species,
@@ -1112,10 +1139,7 @@ exports.getNewPlantImpact = async (req, res) => {
       aiSuitability = await askAiCropProfile({ species, quantity, planting, currentCrops, sensors, cropSpec, historicalStats });
     } catch (err) {
       console.warn('[WhatIf] AI species profile failed:', err.message);
-      return res.status(503).json({
-        error: 'AI crop profile unavailable',
-        message: 'New plant suitability needs an AI-generated crop profile with source links. Configure GROQ_API_KEY, GEMINI_API_KEY_2, or GEMINI_API_KEY and try again.',
-      });
+      aiSuitability = fallbackCropProfile({ species, cropSpec, error: err });
     }
 
     // ── 5. Unsuitable → return early with AI explanation ─────────────────────
@@ -1154,6 +1178,11 @@ exports.getNewPlantImpact = async (req, res) => {
     };
 
     const plan = environmentPlan({ species, quantity, planting, cropSpec, aiSuitability, sensors, impacts });
+    const advisoryWarnings = [
+      ...(aiSuitability?.warnings || []),
+      ...plan.warnings,
+    ];
+    plan.warnings = advisoryWarnings;
 
     // ── 7. Translate plan → sensorGap + demand for the frontend ──────────────
     // sensorGap: deterministic current vs ideal band comparison (no AI numbers)
@@ -1218,7 +1247,7 @@ exports.getNewPlantImpact = async (req, res) => {
       demand,
       environmentPlan: plan,
       planting,
-      warnings: plan.warnings,
+      warnings: advisoryWarnings,
       insight,
       analysis: aiSuitability,
       historicalStats: historicalStats || null,

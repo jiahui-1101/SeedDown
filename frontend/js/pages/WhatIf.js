@@ -1530,12 +1530,8 @@ function wifRenderCostAiDetail(data = {}) {
           <div class="wif-metric-lbl">Saved vs pasar</div>
         </div>
       </div>
-      <div class="wif-cost-row wif-cost-income">
-        <span class="wif-cost-lbl">🛒 Pasar value of your harvest</span>
-        <span style="color:var(--green-600,#3B6D11);">${calc.income === null ? '--' : `${money(calc.income)}`}</span>
-      </div>
       <div class="wif-cost-row wif-cost-expense">
-        <span class="wif-cost-lbl">💧⚡🧪 Resource cost</span>
+        <span class="wif-cost-lbl">💧⚡🧪 Resource cost breakdown</span>
         <span style="color:var(--red-400,#E24B4A);">${calc.expenses === null ? '--' : `−${money(calc.expenses)}`}</span>
       </div>
       <div class="wif-cost-row" style="background:var(--bg-secondary,#f5f5f5);">

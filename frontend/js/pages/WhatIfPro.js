@@ -227,17 +227,21 @@ function _mapFarmCrops(farm) {
       growDays: 60, yieldKgPerRow: 4.0, pricePerKg: 5.0,
       waterLpR: 20, energyKWhpR: 2.0, fertMLpR: 120,
     };
+    // Resource values are kept as per-row (per-slot) figures — NOT pre-multiplied
+    // by slots. _renderNpEconomics divides by baseUnitsPerRow to get a per-unit
+    // figure and then scales by totalUnits. Pre-multiplying here and then
+    // dividing by baseUnitsPerRow (which ≠ slots) produced wrong per-unit values.
     return {
       id:           speciesId,
       name:         p.name || fallback.name || speciesId,
       icon:         p.emoji || '🌱',
       slots:        p.slots || 1,
       growDays:     fallback.growDays,
-      yieldKgPerRow: fallback.yieldKgPerRow * (p.slots || 1),
+      yieldKgPerRow: fallback.yieldKgPerRow,
       pricePerKg:   fallback.pricePerKg,
-      waterLpR:     fallback.waterLpR * (p.slots || 1),
-      energyKWhpR:  fallback.energyKWhpR * (p.slots || 1),
-      fertMLpR:     fallback.fertMLpR * (p.slots || 1),
+      waterLpR:     fallback.waterLpR,
+      energyKWhpR:  fallback.energyKWhpR,
+      fertMLpR:     fallback.fertMLpR,
     };
   });
 }
@@ -2381,32 +2385,51 @@ function _renderNpEconomics(sp, planting) {
   const serverData = _npServerData(sp);
   const demand = serverData?.demand;
   const resourceProfile = serverData?.cropResourceProfile || demand?.cropResourceProfile || null;
+  const fallbackYieldKgPerUnit = sp.yieldKgPerRow / planting.baseUnitsPerRow;
   const profileYieldKgPerPlant = Number(resourceProfile?.yieldKgPerPlant);
-  const yieldKgPerUnit = Number.isFinite(profileYieldKgPerPlant) && profileYieldKgPerPlant > 0
-    ? profileYieldKgPerPlant
-    : sp.yieldKgPerRow / planting.baseUnitsPerRow;
-  const growDays = Number(serverData?.analysis?.estimatedHarvestDays || sp.growDays || 60);
   const profileHarvests = Number(resourceProfile?.harvestsPerCycle);
-  const harvestsPerCycle = Number.isFinite(profileHarvests) && profileHarvests > 0
+  const safeProfileHarvests = Number.isFinite(profileHarvests) && profileHarvests > 0
     ? Math.round(profileHarvests)
     : 1;
-  const estYieldKgRaw = yieldKgPerUnit * planting.totalUnits * harvestsPerCycle * sensorFactor;
+  const profileCycleYieldKgPerUnit = Number.isFinite(profileYieldKgPerPlant) && profileYieldKgPerPlant > 0
+    ? profileYieldKgPerPlant * safeProfileHarvests
+    : null;
+  const maxProfileYieldKgPerUnit = Math.max(2, fallbackYieldKgPerUnit * 2);
+  const useProfileYield = Boolean(sp.custom
+    && profileCycleYieldKgPerUnit
+    && profileCycleYieldKgPerUnit <= maxProfileYieldKgPerUnit);
+  // Known crop yields in NP_SPECIES_DB are already per row for the sell window.
+  // Do not multiply them by harvestsPerCycle again; tomato 2 kg x 8 harvests
+  // produced unrealistic 300 kg+ projections for a small rack.
+  const yieldKgPerUnit = useProfileYield
+    ? profileCycleYieldKgPerUnit
+    : fallbackYieldKgPerUnit;
+  // cycleGrowDays = full grow cycle used for cost-period and harvest-date projection.
+  // Prefer the species default; only fall back to AI's estimatedHarvestDays if no
+  // species value is available, because estimatedHarvestDays can mean "days to first
+  // pick" which is shorter than the full cycle and would understate costToHarvest.
+  const cycleGrowDays = Number(sp.growDays || serverData?.analysis?.estimatedHarvestDays || 60);
+  const growDays = cycleGrowDays; // alias kept for readability below
+  const estYieldKgRaw = yieldKgPerUnit * planting.totalUnits * sensorFactor;
   const estValueRaw = estYieldKgRaw * market.bestPrice;
   const weeksPerMonth = 4.33;
   const waterLPerUnit = sp.waterLpR / planting.baseUnitsPerRow;
   const fertMLPerUnit = sp.fertMLpR / planting.baseUnitsPerRow;
+  // energyKWhpR is already a per-month value (not per-week), so do NOT multiply
+  // by weeksPerMonth — doing so inflated energy cost by ~4.33×.
   const energyKWhPerUnit = (sp.energyKWhpR || 0) / planting.baseUnitsPerRow;
+  // Compute fallback costs first so they can be reused in both extraCostPerMoRaw
+  // and the individual breakdown variables — this keeps the formula text consistent
+  // with the displayed total (Bug 4 fix).
+  const fallbackWaterCost  = planting.totalUnits * waterLPerUnit  * RATES.waterRM  * weeksPerMonth;
+  const fallbackFertCost   = planting.totalUnits * fertMLPerUnit  * RATES.fertRM   * weeksPerMonth;
+  const fallbackEnergyCost = planting.totalUnits * energyKWhPerUnit * RATES.energyRM; // monthly, no weeksPerMonth
   const extraCostPerMoRaw = demand
     ? Number(demand.totalMonthlyCostRM || 0)
-    : (planting.totalUnits * waterLPerUnit * RATES.waterRM * weeksPerMonth) +
-      (planting.totalUnits * fertMLPerUnit * RATES.fertRM * weeksPerMonth) +
-      (planting.totalUnits * energyKWhPerUnit * RATES.energyRM * weeksPerMonth);
-  const fallbackWaterCost = planting.totalUnits * waterLPerUnit * RATES.waterRM * weeksPerMonth;
-  const fallbackFertCost = planting.totalUnits * fertMLPerUnit * RATES.fertRM * weeksPerMonth;
-  const fallbackEnergyCost = planting.totalUnits * energyKWhPerUnit * RATES.energyRM * weeksPerMonth;
-  const waterCostMo = Number(demand?.waterCostPerMonth ?? fallbackWaterCost);
-  const fertCostMo = Number(demand?.fertCostPerMonth ?? fallbackFertCost);
-  const energyCostMo = Number(demand?.lightCostPerMonth ?? fallbackEnergyCost);
+    : fallbackWaterCost + fallbackFertCost + fallbackEnergyCost;
+  const waterCostMo  = Number(demand?.waterCostPerMonth  ?? fallbackWaterCost);
+  const fertCostMo   = Number(demand?.fertCostPerMonth   ?? fallbackFertCost);
+  const energyCostMo = Number(demand?.lightCostPerMonth  ?? fallbackEnergyCost);
   const costToHarvest = extraCostPerMoRaw * (growDays / 30);
   const estProfit = estValueRaw - costToHarvest;
   const harvestDate = new Date(Date.now() + growDays * 24 * 60 * 60 * 1000);
@@ -2429,7 +2452,10 @@ function _renderNpEconomics(sp, planting) {
     const costText = demand
       ? `Extra cost/mo = water RM ${waterCostMo.toFixed(2)} + fertilizer RM ${fertCostMo.toFixed(2)} + light energy RM ${energyCostMo.toFixed(2)} = RM ${extraCostPerMoRaw.toFixed(2)}.`
       : `Extra cost/mo = fallback water RM ${waterCostMo.toFixed(2)} + fertilizer RM ${fertCostMo.toFixed(2)} + light energy RM ${energyCostMo.toFixed(2)} = RM ${extraCostPerMoRaw.toFixed(2)}.`;
-    formulaEl.textContent = `Yield = ${planting.totalUnits} units x ${yieldKgPerUnit.toFixed(2)} kg/plant/harvest x ${harvestsPerCycle} harvests x ${sensorFactorText}. Market value = yield x ${_fmtRM(market.bestPrice, 2)}/kg via ${market.bestLabel}. ${costText} Profit = market value RM ${estValueRaw.toFixed(0)} - harvest-period cost RM ${costToHarvest.toFixed(2)}.`;
+    const yieldBasisText = useProfileYield
+      ? `${yieldKgPerUnit.toFixed(2)} kg/plant/cycle from AI resource profile`
+      : `${yieldKgPerUnit.toFixed(2)} kg/plant/cycle from SeedDown crop table`;
+    formulaEl.textContent = `Yield = ${planting.totalUnits} units x ${yieldBasisText} x ${sensorFactorText}. Market value = yield x ${_fmtRM(market.bestPrice, 2)}/kg via ${market.bestLabel}. ${costText} Profit = market value RM ${estValueRaw.toFixed(0)} - harvest-period cost RM ${costToHarvest.toFixed(2)}.`;
   }
 }
 
