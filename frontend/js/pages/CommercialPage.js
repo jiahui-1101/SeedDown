@@ -715,8 +715,12 @@ function openAssignDeviceModal() {
                     <span style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">Serial</span>
                     <input id="assignSerial" value="SD-COM-ZON-01001" style="width:100%;padding:12px;border:1px solid #d7eef0;border-radius:14px;outline:none;background:#f7feff;">
                 </label>
-                <button id="assignScanQr" type="button" style="height:42px;padding:0 13px;border:1px solid #99f6e4;border-radius:14px;background:#ecfeff;color:#0f766e;font-weight:950;cursor:pointer;">Scan QR</button>
-                <input id="assignQrInput" type="file" accept="image/*" capture="environment" style="display:none;">
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <button id="assignScanQr" type="button" style="height:42px;padding:0 13px;border:1px solid #99f6e4;border-radius:14px;background:#ecfeff;color:#0f766e;font-weight:950;cursor:pointer;">Take QR Photo</button>
+                    <button id="assignUploadQr" type="button" style="height:38px;padding:0 13px;border:1px solid #d7eef0;border-radius:14px;background:#fff;color:#0f766e;font-weight:900;cursor:pointer;">Upload QR Image</button>
+                </div>
+                <input id="assignQrInput" type="file" accept="image/*" style="display:none;">
+                <input id="assignQrCameraInput" type="file" accept="image/*" capture="environment" style="display:none;">
             </div>
             <label style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">Zone</label>
             <select id="assignZone" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:14px;margin-bottom:12px;outline:none;">
@@ -735,8 +739,9 @@ function openAssignDeviceModal() {
     document.getElementById('assignClose').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
     document.getElementById('assignSubmit').addEventListener('click', assignCommercialDevice);
-    document.getElementById('assignScanQr')?.addEventListener('click', () => document.getElementById('assignQrInput')?.click());
-    document.getElementById('assignQrInput')?.addEventListener('change', async event => {
+    document.getElementById('assignScanQr')?.addEventListener('click', () => document.getElementById('assignQrCameraInput')?.click());
+    document.getElementById('assignUploadQr')?.addEventListener('click', () => document.getElementById('assignQrInput')?.click());
+    const handleQrFile = async event => {
         const file = event.target.files?.[0];
         if (!file) return;
         try {
@@ -752,7 +757,9 @@ function openAssignDeviceModal() {
         } finally {
             event.target.value = '';
         }
-    });
+    };
+    document.getElementById('assignQrInput')?.addEventListener('change', handleQrFile);
+    document.getElementById('assignQrCameraInput')?.addEventListener('change', handleQrFile);
 }
 
 async function assignCommercialDevice() {

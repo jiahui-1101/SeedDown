@@ -132,15 +132,21 @@
            <div id="dropZone"
                 style="border:2px dashed #D1FAE5;border-radius:12px;padding:28px 16px;
                        text-align:center;cursor:pointer;background:#FAFFFE;transition:all .2s;"
-                onclick="document.getElementById('photoInput').click()"
                 ondragover="event.preventDefault();this.style.borderColor='#10B981';this.style.background='#F0FDF4';"
                 ondragleave="this.style.borderColor='#D1FAE5';this.style.background='#FAFFFE';"
                 ondrop="window._daDrop(event)">
              <div style="font-size:2.2rem;margin-bottom:8px;">📸</div>
-             <div style="font-weight:700;color:#065F46;margin-bottom:3px;font-size:.9rem;">Tap or drag photo here</div>
+             <div style="font-weight:700;color:#065F46;margin-bottom:3px;font-size:.9rem;">Take or upload plant photo</div>
              <div style="font-size:.73rem;color:#9CA3AF;">JPG · PNG · WEBP — max 8 MB</div>
+             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;">
+               <button type="button" onclick="event.stopPropagation();document.getElementById('photoCameraInput').click()"
+                       style="padding:10px;border:none;border-radius:10px;background:#059669;color:white;font-weight:800;cursor:pointer;">Take Photo</button>
+               <button type="button" onclick="event.stopPropagation();document.getElementById('photoInput').click()"
+                       style="padding:10px;border:1.5px solid #A7F3D0;border-radius:10px;background:white;color:#065F46;font-weight:800;cursor:pointer;">Upload Photo</button>
+             </div>
            </div>
            <input type="file" id="photoInput" accept="image/*" style="display:none;">
+           <input type="file" id="photoCameraInput" accept="image/*" capture="environment" style="display:none;">
    
            <div id="imgPreviewWrap" style="display:none;margin-top:12px;position:relative;">
              <img id="imgPreview" style="width:100%;max-height:240px;object-fit:contain;border-radius:10px;
@@ -221,6 +227,9 @@
      // FIX: use .onchange instead of addEventListener to prevent listener accumulation
      // on repeated render() calls (e.g. every 'Analyse another plant' click)
      document.getElementById('photoInput').onchange = e => {
+       if (e.target.files[0]) _loadFile(e.target.files[0]);
+     };
+     document.getElementById('photoCameraInput').onchange = e => {
        if (e.target.files[0]) _loadFile(e.target.files[0]);
      };
    }
@@ -559,13 +568,20 @@
               <div id="fqa_photo_preview_wrap_${i}" style="display:none;margin-bottom:8px;">
                 <img id="fqa_photo_preview_${i}" style="max-height:120px;border-radius:6px;border:1px solid #FDE68A;">
               </div>
-              <button onclick="document.getElementById('fqa_file_input_${i}').click()"
-                      id="fqa_upload_btn_${i}"
-                      style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:white;
-                             border:1.5px dashed #F59E0B;color:#92400E;font-size:.82rem;font-weight:700;
-                             border-radius:8px;cursor:pointer;width:100%;justify-content:center;box-sizing:border-box;">
-                📸 Tap to take / upload a photo
-              </button>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <button onclick="document.getElementById('fqa_camera_input_${i}').click()"
+                        id="fqa_camera_btn_${i}"
+                        style="padding:10px 12px;background:#D97706;color:white;font-size:.82rem;font-weight:800;border:none;border-radius:8px;cursor:pointer;">
+                  Take Photo
+                </button>
+                <button onclick="document.getElementById('fqa_file_input_${i}').click()"
+                        id="fqa_upload_btn_${i}"
+                        style="padding:10px 12px;background:white;border:1.5px dashed #F59E0B;color:#92400E;font-size:.82rem;font-weight:800;border-radius:8px;cursor:pointer;">
+                  Upload Photo
+                </button>
+              </div>
+              <input type="file" id="fqa_camera_input_${i}" accept="image/*" capture="environment" style="display:none;"
+                     onchange="window._daHandleFollowUpPhoto(this,${i})">
               <input type="file" id="fqa_file_input_${i}" accept="image/*" style="display:none;"
                      onchange="window._daHandleFollowUpPhoto(this,${i})">
               <input type="hidden" id="fqa_${i}" value="">
@@ -712,6 +728,8 @@
        btn.innerHTML         = `✅ Photo attached (${(file.size / 1024).toFixed(1)} KB) — tap to change`;
        btn.style.background  = '#FEF3C7';
        btn.style.borderStyle = 'solid';
+       const cameraBtn = document.getElementById(`fqa_camera_btn_${index}`);
+       if (cameraBtn) cameraBtn.textContent = 'Retake Photo';
        const hidden = document.getElementById(`fqa_${index}`);
        if (hidden) hidden.value = '[New Photo Attached]';
      };
