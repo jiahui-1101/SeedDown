@@ -27,6 +27,7 @@
 - [Technical Stack](#technical-stack)
 - [Installation](#installation)
 - [Environment Variables](#environment-variables)
+- [Cloud Deployment](#cloud-deployment)
 - [Current Demo IoT Setup](#current-demo-iot-setup)
 - [Wokwi Simulation](#wokwi-simulation)
 - [API Reference](#api-reference)
@@ -626,7 +627,9 @@ VITE_FIREBASE_APP_ID=your_web_app_id
 
 Do not commit service account files or real API keys.
 
-### Vercel + Render Deployment
+## Cloud Deployment
+
+Full step-by-step deployment instructions are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 Recommended demo deployment:
 
@@ -634,7 +637,7 @@ Recommended demo deployment:
 - Deploy `frontend` to Vercel with project root `frontend`.
 - In Vercel, set `VITE_API_BASE` to the Render backend URL.
 - In Render, set `JWT_SECRET`, `FIREBASE_PROJECT_ID`, and `FIREBASE_SERVICE_ACCOUNT_JSON`.
-- Optional AI keys: `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_API_KEY_2`.
+- Optional AI/service keys: `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `DA3_SERVICE_URL`.
 
 After Render deploys, open the backend root URL and confirm it returns:
 

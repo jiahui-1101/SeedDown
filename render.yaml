@@ -20,3 +20,5 @@ services:
         sync: false
       - key: GEMINI_API_KEY_2
         sync: false
+      - key: DA3_SERVICE_URL
+        sync: false
