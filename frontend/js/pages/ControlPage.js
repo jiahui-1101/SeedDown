@@ -127,9 +127,111 @@ export function render() {
         </div>
     `;
 
+    ensureControlStyles();
     bindEvents();
     fetchCurrentPreferences(false);
     fetchLatestCommand(false);
+}
+
+function ensureControlStyles() {
+    if (document.getElementById('control-polish-style')) return;
+    const style = document.createElement('style');
+    style.id = 'control-polish-style';
+    style.textContent = `
+        #controlScreen {
+            --accent: #0f766e;
+            --accent-l: #ecfeff;
+            --surface: #ffffff;
+            --surface2: #f7fefe;
+            --border: #ccfbf1;
+            --text: #12312f;
+            --sub: #4f6f6a;
+            --muted: #78908b;
+            --danger: #dc2626;
+            --radius: 16px;
+            --radius-sm: 12px;
+            --shadow-sm: 0 10px 28px rgba(15, 118, 110, .08);
+            background: #f5fffc !important;
+            color: var(--text);
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+            letter-spacing: 0 !important;
+        }
+        #controlScreen *,
+        #controlScreen button,
+        #controlScreen input,
+        #controlScreen select {
+            font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+            letter-spacing: 0 !important;
+        }
+        #controlScreen .topbar {
+            background: rgba(255, 255, 255, .94) !important;
+            border-bottom: 1px solid var(--border) !important;
+            box-shadow: 0 8px 28px rgba(15, 118, 110, .07) !important;
+            backdrop-filter: blur(16px);
+        }
+        #controlScreen input,
+        #controlScreen select {
+            min-height: 42px;
+            box-sizing: border-box;
+        }
+        #controlScreen #controlDeviceId {
+            background: #ffffff !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 12px !important;
+            padding: 10px 12px !important;
+            color: var(--accent) !important;
+            font-size: 15px !important;
+        }
+        #controlScreen .control-threshold-card {
+            border-radius: 18px !important;
+            border-color: var(--border) !important;
+            box-shadow: 0 12px 30px rgba(15, 118, 110, .07) !important;
+        }
+        #controlScreen .control-threshold-card > div:nth-child(2) {
+            grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)) !important;
+            gap: 12px !important;
+        }
+        #controlScreen .control-threshold-card label {
+            background: #f8fffd !important;
+            border-color: var(--border) !important;
+            border-radius: 14px !important;
+            gap: 8px !important;
+        }
+        #controlScreen .control-threshold-input {
+            width: 100% !important;
+            min-height: 44px !important;
+            background: #ffffff !important;
+            border: 1px solid #99f6e4 !important;
+            border-radius: 12px !important;
+            padding: 9px 12px !important;
+            color: var(--accent) !important;
+            font-size: 17px !important;
+            font-weight: 850 !important;
+        }
+        #controlScreen .manual-command-btn {
+            min-height: 72px !important;
+            background: #ecfeff !important;
+            border-color: #99f6e4 !important;
+            color: #0f766e !important;
+            border-radius: 14px !important;
+        }
+        #controlScreen #controlSyncBtn,
+        #controlScreen #controlSaveBtn {
+            background: #0f766e !important;
+            box-shadow: 0 12px 26px rgba(15, 118, 110, .18);
+        }
+        #controlScreen #controlLoadBtn,
+        #controlScreen #refreshCommandBtn {
+            background: #ffffff !important;
+            border-color: var(--border) !important;
+        }
+        @media (max-width: 560px) {
+            #controlScreen .control-threshold-card > div:nth-child(2) {
+                grid-template-columns: 1fr !important;
+            }
+        }
+    `;
+    document.head.appendChild(style);
 }
 
 function bindEvents() {
