@@ -748,27 +748,26 @@ function cleanAiCareSentence(raw) {
 
 function fallbackCropProfile({ species, cropSpec, error }) {
   const req = cropSpec?.requirements || {};
-  const warning = `AI crop profile unavailable: ${error?.message || 'provider not configured'}. Using local crop defaults without source links.`;
   return {
     suitable: true,
     suitableForVerticalFarm: true,
-    aiUnavailable: true,
+    source: 'local_crop_defaults',
     reason: cropSpec
-      ? `${cropSpec.commonName || species} was matched to the local SeedDown crop database. Suitability is calculated from saved crop ranges and live Firebase sensor readings because the AI crop profile service is unavailable.`
-      : `${species} is being assessed with generic vertical-farm defaults because the AI crop profile service is unavailable.`,
+      ? `${cropSpec.commonName || species} was matched to the local SeedDown crop database. Suitability is calculated from saved crop ranges and live Firebase sensor readings.`
+      : `${species} is being assessed with generic vertical-farm defaults and live Firebase sensor readings.`,
     estimatedHarvestDays: finiteNumber(req.growthDays, 60),
     impacts: normaliseImpact(cropSpec?.impacts, { tempChange: 0, humidChange: 3, lightChange: 1, waterChange: 6, nutrientChange: 5 }),
     environmentProfile: {
       tempIdeal: req.tempMin !== undefined && req.tempMax !== undefined ? [req.tempMin, req.tempMax] : DEFAULT_ENV_PROFILE.tempIdeal,
       humidityIdeal: req.humidityMin !== undefined && req.humidityMax !== undefined ? [req.humidityMin, req.humidityMax] : DEFAULT_ENV_PROFILE.humidityIdeal,
       moistureIdeal: moistureRangeFromWaterDemand(req.waterPerDay),
-      moistureBasis: 'Local SeedDown crop defaults; AI source profile unavailable.',
+      moistureBasis: 'Local SeedDown crop defaults.',
       phIdeal: DEFAULT_ENV_PROFILE.phIdeal,
       ecIdeal: DEFAULT_ENV_PROFILE.ecIdeal,
       waterDemand: cropWaterDemand(req.waterPerDay),
     },
     cropResourceProfile: normaliseCropResourceProfile({}, req, cropSpec?.yield || {}),
-    warnings: [warning],
+    warnings: [],
     resourceLinks: [],
   };
 }
@@ -1269,16 +1268,16 @@ exports.getNewPlantImpact = async (req, res) => {
         environmentPlan: null,
         planting: null,
         warnings: [err.message],
-        insight: `No Firebase sensor readings were found for this selected farm/device. Connect a real deviceId/farmId with sensorReadings before running new plant suitability.`,
+        insight: `No sensor readings were found for this selected farm/device. Connect a real deviceId/farmId with sensorReadings before running new plant suitability.`,
         analysis: { suitable: null, reason: err.message },
         historicalStats: null,
         latestSensorReading: null,
-        sensorSource: 'Firebase sensorReadings unavailable',
+        sensorSource: 'Sensor readings unavailable',
         resourceLinks: [],
       });
     }
     console.error('New plant impact error:', err);
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: 'New plant impact unavailable' });
   }
 };
 

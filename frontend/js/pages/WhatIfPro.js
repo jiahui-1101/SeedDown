@@ -971,10 +971,8 @@ function _predictResourcesFromHistory(sp, planting, histData, reason = '') {
     energyTrend: 'stable',
     topRisk: moistureAlertPct > fertAlertPct ? 'Moisture demand may rise' : 'Nutrient demand may rise',
     confidence: histData?.totalReadings >= 50 ? 'medium' : 'low',
-    insight: reason
-      ? 'Using Firebase history fallback because AI response was unavailable.'
-      : 'Estimated from Firebase history and crop defaults.',
-    source: `Firebase history fallback (${histData?.totalReadings || 0} readings${reason ? `; ${reason}` : ''})`,
+    insight: 'Estimated from Firebase history and crop defaults.',
+    source: `Firebase history (${histData?.totalReadings || 0} readings)`,
   };
 }
 
@@ -982,7 +980,7 @@ function _predictResourcesFromHistory(sp, planting, histData, reason = '') {
 // Now includes temp/humid/pH context and richer analysis tasks.
 async function _predictResourcesWithAI(sp, planting, histData) {
   if (!histData || !histData.totalReadings) {
-    throw new Error('Firebase sensor history is required for AI resource prediction');
+    throw new Error('Sensor history is required for resource prediction');
   }
 
   const waterStats = histData ? _seriesStats(histData.water) : null;
@@ -1064,20 +1062,20 @@ async function _predictResourcesWithAI(sp, planting, histData) {
     }),
   });
 
-  if (!response.ok) throw new Error('AI HTTP ' + response.status);
+  if (!response.ok) throw new Error('Resource forecast request failed');
   const data = await response.json();
   const raw = data.text ?? data.content?.map(b => b.text || '').join('') ?? '';
   const clean = raw.replace(/```json|```/g, '').trim();
   const parsed = JSON.parse(clean);
   if (parsed.error) {
-    throw new Error(parsed.insight || 'AI resource prediction unavailable');
+    throw new Error(parsed.insight || 'Resource forecast unavailable');
   }
   const waterLitresPerWeek = Number(parsed.waterLitresPerWeek);
   const fertMLPerWeek = Number(parsed.fertMLPerWeek);
   const energyKWhPerMonth = Number(parsed.energyKWhPerMonth);
   const fallbackEnergy = ((sp.energyKWhpR || 0) / Math.max(1, planting.baseUnitsPerRow)) * planting.totalUnits * 4.33;
   if (!Number.isFinite(waterLitresPerWeek) || !Number.isFinite(fertMLPerWeek)) {
-    throw new Error('AI resource response missing water or fertilizer number');
+    throw new Error('Resource forecast missing water or fertilizer number');
   }
 
   return {
@@ -1090,7 +1088,7 @@ async function _predictResourcesWithAI(sp, planting, histData) {
     topRisk:      parsed.topRisk      || '',
     confidence:   parsed.confidence   || 'low',
     insight:      parsed.insight      || '',
-    source: `AI + ${histData.totalReadings} Firebase sensor readings`,
+    source: `Sensor forecast (${histData.totalReadings} Firebase readings)`,
   };
 }
 
@@ -1118,8 +1116,8 @@ async function _loadAndRenderResourcePrediction(sp, planting) {
       _resourcePrediction = {
         error: true,
         confidence: 'low',
-        insight: 'No Firebase sensor history found for the active farm identifiers.',
-        source: _sensorIdentifierSummary(),
+        insight: 'Connect farm sensor history to calculate resource demand from live operating data.',
+        source: '',
       };
       _resourcePredictionKey = cacheKey;
       _renderResourceDelta(sp, planting, _resourcePrediction);
@@ -1132,12 +1130,12 @@ async function _loadAndRenderResourcePrediction(sp, planting) {
   } catch (err) {
     const histData = _historicalResourceData;
     _resourcePrediction = histData?.totalReadings
-      ? _predictResourcesFromHistory(sp, planting, histData, err.message)
+      ? _predictResourcesFromHistory(sp, planting, histData)
       : {
           error: true,
           confidence: 'low',
-          insight: err.message || 'Firebase sensor history and AI response are required before calculating water and fertilizer impact.',
-          source: 'Firebase sensor history unavailable',
+          insight: 'Resource forecast is unavailable until the farm has sensor history.',
+          source: '',
         };
     _resourcePredictionKey = cacheKey;
     _renderResourceDelta(sp, planting, _resourcePrediction);
@@ -1163,7 +1161,7 @@ function _predictionFromBackendDemand(sp, planting, data) {
     insight: data.cropResourceProfile?.sourceBasis
       ? `Crop-specific resource profile: ${data.cropResourceProfile.sourceBasis}`
       : 'Crop-specific resource needs from suitability analysis.',
-    source: data.resourceLinks?.length ? 'AI crop profile + Firebase history' : 'Crop profile + Firebase history',
+    source: data.resourceLinks?.length ? 'Crop profile + Firebase history' : 'Crop defaults + Firebase history',
   };
 }
 
@@ -1220,9 +1218,9 @@ function _renderResourceDelta(sp, planting, prediction) {
   if (!prediction) {
     // Loading state
     ig.innerHTML = `
-      <div class="pro-resource-loading" style="grid-column:1/-1;padding:20px 12px;text-align:center;color:#64748b;font-size:12px;font-style:italic;">
-        <div style="font-size:22px;margin-bottom:6px;">⏳</div>
-        Fetching sensor history and running prediction…
+        <div class="pro-resource-loading" style="grid-column:1/-1;padding:20px 12px;text-align:center;color:#64748b;font-size:12px;font-style:italic;">
+          <div style="font-size:22px;margin-bottom:6px;">⏳</div>
+        Fetching sensor history and preparing forecast…
       </div>`;
     return;
   }
@@ -1230,9 +1228,9 @@ function _renderResourceDelta(sp, planting, prediction) {
   if (prediction.error) {
     ig.innerHTML = `
       <div class="pro-resource-loading" style="grid-column:1/-1;padding:16px 12px;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:11px;line-height:1.45;">
-        <strong>Sensor-based resource prediction unavailable.</strong><br>
+        <strong>Resource forecast needs more sensor history.</strong><br>
         ${_esc(prediction.insight)}
-        <span style="display:block;margin-top:6px;color:#c2410c;font-size:9px;">${_esc(prediction.source)}</span>
+        ${prediction.source ? `<span style="display:block;margin-top:6px;color:#c2410c;font-size:9px;">${_esc(prediction.source)}</span>` : ''}
       </div>`;
     return;
   }
@@ -1283,7 +1281,7 @@ function _renderResourceDelta(sp, planting, prediction) {
     </div>
     ${riskHtml}
     <div style="grid-column:1/-1;margin-top:4px;padding:8px 10px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;font-size:10px;color:#475569;line-height:1.5;display:flex;align-items:flex-start;gap:8px;">
-      <span style="flex-shrink:0;">🤖</span>
+      <span style="flex-shrink:0;">📊</span>
       <span>
         ${_esc(prediction.insight)}
         <span class="pro-badge ${badge.cls}" style="margin-left:4px;vertical-align:middle;">${badge.label}</span>
@@ -2357,7 +2355,7 @@ function _npRenderSuggestions() {
   }).join('') + (customAllowed ? `
     <div class="pro-suggest-item ${_npSpecies.id === _normaliseCropId(rawQ) ? 'selected' : ''}" data-np-custom="${_esc(rawQ)}">
       <span class="sp-ico">🌱</span>
-      <span>Analyze "${_esc(rawQ)}" with AI</span>
+      <span>Assess "${_esc(rawQ)}"</span>
       <span style="margin-left:auto;font-size:9px;color:#94a3b8;">any species</span>
     </div>` : '');
 
@@ -2453,7 +2451,7 @@ function _renderNpEconomics(sp, planting) {
       ? `Extra cost/mo = water RM ${waterCostMo.toFixed(2)} + fertilizer RM ${fertCostMo.toFixed(2)} + light energy RM ${energyCostMo.toFixed(2)} = RM ${extraCostPerMoRaw.toFixed(2)}.`
       : `Extra cost/mo = fallback water RM ${waterCostMo.toFixed(2)} + fertilizer RM ${fertCostMo.toFixed(2)} + light energy RM ${energyCostMo.toFixed(2)} = RM ${extraCostPerMoRaw.toFixed(2)}.`;
     const yieldBasisText = useProfileYield
-      ? `${yieldKgPerUnit.toFixed(2)} kg/plant/cycle from AI resource profile`
+      ? `${yieldKgPerUnit.toFixed(2)} kg/plant/cycle from crop resource profile`
       : `${yieldKgPerUnit.toFixed(2)} kg/plant/cycle from SeedDown crop table`;
     formulaEl.textContent = `Yield = ${planting.totalUnits} units x ${yieldBasisText} x ${sensorFactorText}. Market value = yield x ${_fmtRM(market.bestPrice, 2)}/kg via ${market.bestLabel}. ${costText} Profit = market value RM ${estValueRaw.toFixed(0)} - harvest-period cost RM ${costToHarvest.toFixed(2)}.`;
   }
@@ -2676,7 +2674,7 @@ async function _fetchNpAdvisor(sp, planting, zones) {
     _npAiUnsuitable = false;
     if (aiBox) aiBox.className = 'pro-ai-inline warn';
     aiEl.className = '';
-    aiEl.textContent = `No Firebase sensor reading found for ${_sensorIdentifierSummary(farm)}. Connect a real deviceId/farmId with sensorReadings before running AI crop suitability.`;
+    aiEl.textContent = `No sensor reading found for ${_sensorIdentifierSummary(farm)}. Connect this farm to live sensor data before running crop suitability.`;
     _renderSensorProofCard();
     _applyNpSuitabilityVisibility(sp);
     return;
@@ -2751,9 +2749,9 @@ async function _fetchNpAdvisor(sp, planting, zones) {
   } catch (err) {
     _npAiAnalysis   = { species: sp.id, data: null };
     _npAiUnsuitable = false;
-    if (aiBox) aiBox.className = 'pro-ai-inline warn';
+    if (aiBox) aiBox.className = 'pro-ai-inline';
     aiEl.className  = '';
-    aiEl.textContent = err.message || 'AI crop advisor is temporarily unavailable. Check that the backend server is running and your AI provider key is set.';
+    aiEl.textContent = 'Using crop defaults and sensor readings for this estimate.';
     _applyNpSuitabilityVisibility(sp);
   }
 }
