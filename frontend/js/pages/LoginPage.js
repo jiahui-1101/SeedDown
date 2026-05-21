@@ -15,7 +15,7 @@ export function render() {
     const container = document.getElementById('screenContainer');
     container.innerHTML = `
         <div class="screen active" id="loginScreen" style="
-            background: linear-gradient(160deg, #f0fdf4 0%, #eff6ff 100%);
+            background: linear-gradient(160deg, #ecfeff 0%, #f8fffe 100%);
             display:flex; flex-direction:column; justify-content:center;
             min-height:100vh; padding:0;
         ">
@@ -31,9 +31,9 @@ export function render() {
                     <div style="font-size:0.65rem; font-weight:700; color:#64748b; letter-spacing:0.1em; margin-bottom:10px;">SELECT FARMING MODE</div>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
                         <div id="modeBeginner" style="
-                            background:white; border:2px solid #2563eb;
+                            background:white; border:2px solid #0f766e;
                             border-radius:14px; padding:14px 12px; cursor:pointer;
-                            box-shadow:0 2px 12px rgba(37,99,235,0.12);
+                            box-shadow:0 2px 12px rgba(15,118,110,0.12);
                             transition:all 0.2s;
                         ">
                             <span style="font-size:24px;">🌱</span>
@@ -75,7 +75,7 @@ export function render() {
                             border:1.5px solid #e2e8f0; font-size:0.85rem;
                             outline:none; font-family:inherit; color:#1a2b3c;
                             box-sizing:border-box; transition:border-color 0.15s;
-                        " onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+                        " onfocus="this.style.borderColor='#0f766e'" onblur="this.style.borderColor='#e2e8f0'">
                     </div>
 
                     <div style="margin-bottom:8px; position:relative;">
@@ -85,7 +85,7 @@ export function render() {
                             border:1.5px solid #e2e8f0; font-size:0.85rem;
                             outline:none; font-family:inherit; color:#1a2b3c;
                             box-sizing:border-box; transition:border-color 0.15s;
-                        " onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+                        " onfocus="this.style.borderColor='#0f766e'" onblur="this.style.borderColor='#e2e8f0'">
                         <button id="togglePw" style="
                             position:absolute; right:12px; bottom:11px;
                             background:none; border:none; cursor:pointer;
@@ -96,7 +96,7 @@ export function render() {
                     <div id="forgotRow" style="text-align:right; margin-bottom:16px;">
                         <button id="forgotBtn" style="
                             background:none; border:none; font-size:0.7rem;
-                            color:#2563eb; cursor:pointer; font-weight:600;
+                            color:#0f766e; cursor:pointer; font-weight:600;
                         ">Forgot password?</button>
                     </div>
 
@@ -108,13 +108,13 @@ export function render() {
                                 border:1.5px solid #e2e8f0; font-size:0.85rem;
                                 outline:none; font-family:inherit; color:#1a2b3c;
                                 box-sizing:border-box; transition:border-color 0.15s;
-                            " onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+                            " onfocus="this.style.borderColor='#0f766e'" onblur="this.style.borderColor='#e2e8f0'">
                         </div>
                         
                         <div style="display:flex; align-items:flex-start; gap:8px; margin-top:14px; padding:8px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0;">
-                            <input type="checkbox" id="tncCheckbox" style="margin-top:2px; accent-color:#2563eb; cursor:pointer;">
+                            <input type="checkbox" id="tncCheckbox" style="margin-top:2px; accent-color:#0f766e; cursor:pointer;">
                             <label for="tncCheckbox" style="font-size:0.7rem; color:#475569; line-height:1.4; cursor:pointer;">
-                                I agree to the <span style="color:#2563eb; font-weight:600; text-decoration:underline;">Terms & Conditions</span> and <span style="color:#2563eb; font-weight:600; text-decoration:underline;">Privacy Policy</span>. I consent to the collection and use of my farm data for AI analysis.
+                                I agree to the <span style="color:#0f766e; font-weight:600; text-decoration:underline;">Terms & Conditions</span> and <span style="color:#0f766e; font-weight:600; text-decoration:underline;">Privacy Policy</span>. I consent to the collection and use of my farm data for AI analysis.
                             </label>
                         </div>
                     </div>
@@ -127,7 +127,7 @@ export function render() {
 
                     <button id="loginBtn" style="
                         width:100%; padding:13px; border:none; border-radius:12px;
-                        background:linear-gradient(135deg, #2563eb, #1d4ed8);
+                        background:linear-gradient(135deg, #0f766e, #14b8a6);
                         color:white; font-weight:700; font-size:0.9rem; cursor:pointer;
                         box-shadow:0 4px 12px rgba(37,99,235,0.3);
                         transition:opacity 0.2s; margin-bottom:12px;
@@ -167,15 +167,15 @@ function _bindEvents() {
 
     modeBeginner.addEventListener('click', () => {
         selectedMode = 'beginner';
-        modeBeginner.style.borderColor   = '#2563eb';
-        modeBeginner.style.boxShadow     = '0 2px 12px rgba(37,99,235,0.12)';
+        modeBeginner.style.borderColor   = '#0f766e';
+        modeBeginner.style.boxShadow     = '0 2px 12px rgba(15,118,110,0.12)';
         modeCommercial.style.borderColor = '#e2e8f0';
         modeCommercial.style.boxShadow   = 'none';
     });
     modeCommercial.addEventListener('click', () => {
         selectedMode = 'commercial';
-        modeCommercial.style.borderColor = '#2563eb';
-        modeCommercial.style.boxShadow   = '0 2px 12px rgba(37,99,235,0.12)';
+        modeCommercial.style.borderColor = '#0f766e';
+        modeCommercial.style.boxShadow   = '0 2px 12px rgba(15,118,110,0.12)';
         modeBeginner.style.borderColor   = '#e2e8f0';
         modeBeginner.style.boxShadow     = 'none';
     });
@@ -287,14 +287,6 @@ function _bindEvents() {
 /* ── Guest 模式 ── */
     document.getElementById('guestBtn').addEventListener('click', async () => {
         _clearError();
-        
-        const guestInput = prompt('Enter Demo Access Code to continue as Guest:');
-        if (guestInput === null) return; 
-        
-        if (guestInput !== GUEST_PASSWORD) {
-            _showError('Incorrect Demo Access Code.');
-            return;
-        }
 
         _setLoading(true);
         

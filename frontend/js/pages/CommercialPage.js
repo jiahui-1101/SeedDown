@@ -2,6 +2,7 @@ import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
 import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=commercial-polish-1';
 import { openAddPlantModal } from '../components/AddPlantModal.js';
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
@@ -535,24 +536,49 @@ function openAssignDeviceModal() {
                 </div>
                 <button id="assignClose" style="width:34px;height:34px;border:none;border-radius:12px;background:#f1f5f9;font-size:18px;font-weight:900;cursor:pointer;">×</button>
             </div>
-            <label style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">Serial</label>
-            <input id="assignSerial" value="SD-COM-ZNB-00001" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:14px;margin-bottom:12px;outline:none;">
+            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:12px;">
+                <label style="display:block;">
+                    <span style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">Serial</span>
+                    <input id="assignSerial" value="SD-COM-ZON-01001" style="width:100%;padding:12px;border:1px solid #d7eef0;border-radius:14px;outline:none;background:#f7feff;">
+                </label>
+                <button id="assignScanQr" type="button" style="height:42px;padding:0 13px;border:1px solid #99f6e4;border-radius:14px;background:#ecfeff;color:#0f766e;font-weight:950;cursor:pointer;">Scan QR</button>
+                <input id="assignQrInput" type="file" accept="image/*" capture="environment" style="display:none;">
+            </div>
             <label style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">Zone</label>
             <select id="assignZone" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:14px;margin-bottom:12px;outline:none;">
+                <option value="farm_master">Farm Master</option>
                 <option value="zone_A">Zone A</option>
                 <option value="zone_B">Zone B</option>
                 <option value="zone_C">Zone C</option>
             </select>
             <label style="display:block;margin-bottom:10px;font-size:11px;font-weight:900;color:#64748b;">WiFi SSID</label>
             <input id="assignWifi" placeholder="Farm WiFi" style="width:100%;padding:12px;border:1px solid #e5e7eb;border-radius:14px;margin-bottom:12px;outline:none;">
-            <button id="assignSubmit" style="width:100%;padding:13px;border:none;border-radius:14px;background:#166534;color:white;font-weight:950;cursor:pointer;">Register and Assign</button>
-            <div id="assignStatus" style="font-size:12px;color:#64748b;line-height:1.45;margin-top:10px;">Commercial serials: SD-COM-ZNB, SD-COM-ZNP, SD-COM-MST.</div>
+            <button id="assignSubmit" style="width:100%;padding:13px;border:none;border-radius:14px;background:#0f766e;color:white;font-weight:950;cursor:pointer;">Reassign Active Device</button>
+            <div id="assignStatus" style="font-size:12px;color:#64748b;line-height:1.45;margin-top:10px;">Scan a replacement QR or enter a serial. The selected target keeps one active device; the old device is preserved as replaced.</div>
         </div>
     `;
     document.body.appendChild(overlay);
     document.getElementById('assignClose').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', event => { if (event.target === overlay) overlay.remove(); });
     document.getElementById('assignSubmit').addEventListener('click', assignCommercialDevice);
+    document.getElementById('assignScanQr')?.addEventListener('click', () => document.getElementById('assignQrInput')?.click());
+    document.getElementById('assignQrInput')?.addEventListener('change', async event => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        try {
+            const payload = await decodeAssignQrFile(file);
+            const serial = normalizeQrSerial(payload);
+            document.getElementById('assignSerial').value = serial;
+            document.getElementById('assignZone').value = inferAssignTarget(serial);
+            document.getElementById('assignStatus').style.color = '#0f766e';
+            document.getElementById('assignStatus').textContent = `QR scanned: ${serial}`;
+        } catch (error) {
+            document.getElementById('assignStatus').style.color = '#dc2626';
+            document.getElementById('assignStatus').textContent = error.message || 'Could not read QR code';
+        } finally {
+            event.target.value = '';
+        }
+    });
 }
 
 async function assignCommercialDevice() {
@@ -566,22 +592,26 @@ async function assignCommercialDevice() {
     button.disabled = true;
     button.textContent = 'Assigning...';
     try {
-        const response = await fetch(`${API_BASE}/api/devices/register`, {
+        const role = zoneId === 'farm_master' ? 'farm_master' : 'zone_node';
+        const response = await fetch(`${API_BASE}/api/devices/reassign`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify({
                 serial,
                 wifi_ssid: wifi,
-                accountType: serial.includes('MST') ? 'commercial_master' : serial.includes('ZNP') ? 'commercial_zone_pro' : 'commercial_zone_basic',
+                accountType: inferCommercialAccountType(serial, role),
                 farmId: AppState.currentFarmId || 'farm_commercial_001',
+                targetId: zoneId,
+                role,
                 zoneId,
             }),
         });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'Device assignment failed');
         const farm = getCurrentFarm() || {};
-        farm.commercialDevices = upsertCommercialDevice(farm.commercialDevices || [], data.device);
-        farm.zoneId = zoneId;
+        farm.commercialDevices = upsertCommercialDevice(farm.commercialDevices || [], data.device, data.replacedDevices || [], zoneId);
+        if (zoneId === 'farm_master') farm.farmMaster = data.device;
+        else farm.zoneId = zoneId;
         AppState.currentFarm = farm;
         persistCurrentFarm(farm);
         selectedZoneId = zoneId;
@@ -593,13 +623,13 @@ async function assignCommercialDevice() {
             updateZoneSelectionUI();
         });
         status.style.color = '#047857';
-        status.textContent = `Assigned ${data.device.deviceId} to ${zoneId}`;
+        status.textContent = `Active device: ${data.device.deviceId}. Replaced ${data.replacedDevices?.length || 0} old device(s).`;
     } catch (error) {
         status.style.color = '#dc2626';
         status.textContent = error.message;
     } finally {
         button.disabled = false;
-        button.textContent = 'Register and Assign';
+        button.textContent = 'Reassign Active Device';
     }
 }
 
@@ -675,13 +705,93 @@ function openZoneCameraModal() {
     });
 }
 
-function upsertCommercialDevice(devices, nextDevice) {
+function getAuthHeaders() {
+    const token = localStorage.getItem('token');
+    return {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+}
+
+function inferCommercialAccountType(serial = '', role = 'zone_node') {
+    const normalized = String(serial).toUpperCase();
+    if (role === 'farm_master' || normalized.includes('FRM') || normalized.includes('MST')) return 'commercial_farm_master';
+    if (normalized.includes('FZK')) return 'commercial_farm_zone';
+    if (normalized.includes('ZNP')) return 'commercial_zone_pro';
+    if (normalized.includes('ZNB')) return 'commercial_zone_basic';
+    return 'commercial_zone';
+}
+
+function inferAssignTarget(serial = '') {
+    const normalized = String(serial).toUpperCase();
+    return normalized.includes('FRM') || normalized.includes('MST') ? 'farm_master' : 'zone_A';
+}
+
+function normalizeQrSerial(payload) {
+    if (typeof payload === 'string') {
+        try {
+            const parsed = JSON.parse(payload);
+            return normalizeQrSerial(parsed);
+        } catch {
+            return payload.trim().toUpperCase();
+        }
+    }
+    const serial = payload?.serial || payload?.deviceSerial || payload?.qrSerial || payload?.id;
+    if (!serial) throw new Error('QR does not contain a SeedDown serial');
+    return String(serial).trim().toUpperCase();
+}
+
+function decodeAssignQrFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Could not read QR image'));
+        reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('Could not load QR image'));
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                if (!code?.data) reject(new Error('No QR code found in image'));
+                else resolve(code.data);
+            };
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function upsertCommercialDevice(devices, nextDevice, replacedDevices = [], targetId = nextDevice?.targetId || nextDevice?.zoneId) {
+    const normalizedTarget = normalizeZoneId(targetId);
+    const replacedIds = new Set(replacedDevices.map(device => device.deviceId));
+    const activeNext = {
+        ...nextDevice,
+        targetId,
+        role: targetId === 'farm_master' ? 'farm_master' : (nextDevice.role || 'zone_node'),
+        active: true,
+        status: 'assigned',
+        assignedAt: new Date().toISOString(),
+    };
     return [
-        ...devices.filter(device =>
-            device.deviceId !== nextDevice.deviceId &&
-            normalizeZoneId(device.zoneId || device.zone) !== normalizeZoneId(nextDevice.zoneId || nextDevice.zone)
-        ),
-        nextDevice,
+        ...devices.map(device => {
+            const sameTarget = normalizeZoneId(device.targetId || device.zoneId || device.zone) === normalizedTarget;
+            if (device.deviceId === nextDevice.deviceId) return null;
+            if (replacedIds.has(device.deviceId) || sameTarget) {
+                return {
+                    ...device,
+                    active: false,
+                    status: 'replaced',
+                    replacedBy: nextDevice.deviceId,
+                    replacedAt: new Date().toISOString(),
+                };
+            }
+            return device;
+        }).filter(Boolean),
+        activeNext,
     ];
 }
 
@@ -765,7 +875,11 @@ function buildCommercialZones(farm, rack) {
             if (explicitZone) return explicitZone === base.id;
             return plantIndex % baseZones.length === index;
         });
-        const device = devices.find(item => normalizeZoneId(item.zoneId || item.zone) === base.id);
+        const device = devices.find(item =>
+            item.status !== 'replaced' &&
+            item.active !== false &&
+            normalizeZoneId(item.targetId || item.zoneId || item.zone) === base.id
+        );
         const crop = dominantCrop(zonePlants) || base.crop;
         const planted = zonePlants.reduce((sum, plant) => sum + (Number.parseInt(plant.slots || plant.count || 1, 10) || 1), 0);
 
@@ -810,7 +924,11 @@ function dominantCrop(plants) {
 function findDeviceForZone(farm, zoneId) {
     if (!zoneId) return null;
     const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
-    return devices.find(item => normalizeZoneId(item.zoneId || item.zone) === zoneId)
+    return devices.find(item =>
+        item.status !== 'replaced' &&
+        item.active !== false &&
+        normalizeZoneId(item.targetId || item.zoneId || item.zone) === zoneId
+    )
         || (normalizeZoneId(farm?.zoneId) === zoneId ? farm : null);
 }
 

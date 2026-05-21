@@ -159,7 +159,6 @@ export const CommercialFarmCanvas = {
     buildFacility() {
         this.addFloor();
         this.addGreenhouseFrame();
-        this.addOverheadGrowLights();
 
         const towers = this.createTowerLayout();
         towers.forEach((tower, index) => this.addTower(tower, index));
@@ -246,26 +245,6 @@ export const CommercialFarmCanvas = {
             sidePanel.rotation.y = Math.PI / 2;
             sidePanel.position.set(side * width / 2, wallH / 2, 0);
             this.scene.add(sidePanel);
-        });
-    },
-
-    addOverheadGrowLights() {
-        const housingMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.5, metalness: 0.72 });
-        const ledMat = new THREE.MeshStandardMaterial({
-            color: 0xdd88ff,
-            emissive: 0xdd88ff,
-            emissiveIntensity: 0.85,
-            roughness: 0.2,
-        });
-        [-4.8, -2.4, 2.4, 4.8].forEach(x => {
-            for (let z = -4.8; z <= 4.8; z += 2.4) {
-                const bar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 0.16), housingMat);
-                bar.position.set(x, 4.15, z);
-                this.scene.add(bar);
-                const led = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.025, 0.09), ledMat);
-                led.position.set(x, 4.11, z);
-                this.scene.add(led);
-            }
         });
     },
 
@@ -524,7 +503,6 @@ export const CommercialFarmCanvas = {
             { key: 'ec', label: 'EC Sensor', type: 'sensor', kind: 'probe', color: 0x14b8a6, dx: -0.18, y: 0.68, dz: 0.74 },
             { key: 'flow', label: 'YF-S201 Flow', type: 'sensor', kind: 'flow', color: 0x38bdf8, dx: 0.58, y: 0.58, dz: 0.42 },
             { key: 'pump', label: 'Water Pump', type: 'output', kind: 'pump', color: 0x0ea5e9, dx: 0.82, y: 0.22, dz: 0.78 },
-            { key: 'grow_light', label: 'LED Grow Light', type: 'output', kind: 'lightbar', color: 0xdd88ff, dx: 0, y: 3.92, dz: 0 },
             { key: 'zone_fan', label: 'Zone Fan', type: 'output', kind: 'fan', color: 0x64748b, dx: -0.9, y: 2.18, dz: 0.12 },
             { key: 'active_buzzer', label: 'Active Buzzer', type: 'output', kind: 'buzzer', color: 0xf97316, dx: 0.78, y: 1.78, dz: -0.58 },
             { key: 'camera', label: 'Camera', type: 'sensor', kind: 'camera', color: 0x111827, dx: -0.72, y: 3.08, dz: 0.68 },
@@ -569,7 +547,7 @@ export const CommercialFarmCanvas = {
             if (child.isMesh || child.isSprite) child.userData.root = group;
         });
 
-        const showTag = !device.compact || ['camera', 'pump', 'grow_light', 'zone_fan'].includes(device.key);
+        const showTag = !device.compact || ['camera', 'pump', 'zone_fan'].includes(device.key);
         if (showTag) {
             const labelText = device.compact ? shortDeviceLabel(device.key) : device.label.replace(/\s+/g, '\n');
             const tag = this.createTextSprite(labelText, {
@@ -610,89 +588,148 @@ export const CommercialFarmCanvas = {
         });
         const dark = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.48, metalness: 0.36 });
         const white = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.52, metalness: 0.04 });
+        const metal = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.28, metalness: 0.72 });
+        const rubber = new THREE.MeshStandardMaterial({ color: 0x020617, roughness: 0.62, metalness: 0.08 });
+        const glass = new THREE.MeshStandardMaterial({
+            color: 0x67e8f9,
+            emissive: 0x0891b2,
+            emissiveIntensity: 0.18,
+            roughness: 0.22,
+            metalness: 0.04,
+            transparent: true,
+            opacity: 0.74,
+        });
 
         const add = mesh => {
             mesh.castShadow = true;
             group.add(mesh);
             return mesh;
         };
+        const led = (x, y, z, color = device.color) => {
+            const dot = add(new THREE.Mesh(
+                new THREE.SphereGeometry(device.compact ? 0.012 : 0.018, 10, 8),
+                new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.7, roughness: 0.24 })
+            ));
+            dot.position.set(x, y, z);
+            return dot;
+        };
 
         if (device.kind === 'fan') {
-            add(new THREE.Mesh(new THREE.TorusGeometry(device.scope === 'zone' ? 0.13 : 0.24, 0.015, 8, 32), dark));
+            const radius = device.scope === 'zone' ? 0.13 : 0.24;
+            add(new THREE.Mesh(new THREE.TorusGeometry(radius, 0.014, 10, 42), dark));
+            add(new THREE.Mesh(new THREE.TorusGeometry(radius * 0.62, 0.006, 8, 34), metal));
+            const hub = add(new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.19, radius * 0.19, 0.035, 18), rubber));
+            hub.rotation.x = Math.PI / 2;
             for (let i = 0; i < 4; i++) {
-                const blade = add(new THREE.Mesh(new THREE.BoxGeometry(device.scope === 'zone' ? 0.22 : 0.38, 0.035, 0.014), mat));
+                const blade = add(new THREE.Mesh(new THREE.BoxGeometry(radius * 1.46, radius * 0.17, 0.012), mat));
+                blade.position.x = radius * 0.22;
                 blade.rotation.z = i * Math.PI / 4;
                 blade.userData.isFanBlade = true;
+            }
+            for (let i = 0; i < 4; i++) {
+                const guard = add(new THREE.Mesh(new THREE.BoxGeometry(radius * 1.92, 0.006, 0.01), metal));
+                guard.rotation.z = i * Math.PI / 4;
             }
             return;
         }
 
         if (device.kind === 'buzzer') {
-            const base = add(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.035, 18), dark));
+            const base = add(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.035, 22), rubber));
             base.position.y = -0.025;
-            const dome = add(new THREE.Mesh(new THREE.SphereGeometry(0.095, 18, 10), mat));
+            const dome = add(new THREE.Mesh(new THREE.SphereGeometry(0.095, 22, 10), mat));
             dome.scale.y = 0.58;
             dome.position.y = 0.045;
+            const ring = add(new THREE.Mesh(new THREE.TorusGeometry(0.092, 0.006, 8, 28), metal));
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.028;
             return;
         }
 
         if (device.kind === 'camera') {
-            const body = add(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.11, 0.12), dark));
+            const body = add(new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.13), rubber));
             body.rotation.y = -0.35;
-            const lens = add(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.045, 16), mat));
+            const face = add(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.075, 0.012), dark));
+            face.position.set(0.045, 0.002, 0.071);
+            face.rotation.y = -0.35;
+            const lens = add(new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.048, 18), metal));
             lens.rotation.x = Math.PI / 2;
             lens.position.set(0.045, 0, 0.075);
-            const mount = add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.24, 8), dark));
+            const glassCap = add(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.052, 18), glass));
+            glassCap.rotation.x = Math.PI / 2;
+            glassCap.position.set(0.045, 0, 0.104);
+            const mount = add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.24, 8), metal));
             mount.position.y = -0.15;
-            return;
-        }
-
-        if (device.kind === 'lightbar') {
-            const bar = add(new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.045, 0.08), dark));
-            const led = add(new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.022, 0.042), mat));
-            led.position.y = -0.035;
+            led(-0.045, -0.036, 0.081, 0x22c55e);
             return;
         }
 
         if (device.kind === 'soil') {
-            add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.055, 0.07), white));
+            const board = add(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.06, 0.07), white));
+            board.position.y = 0.025;
+            const chip = add(new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.024, 0.012), rubber));
+            chip.position.set(0, 0.035, 0.041);
             [-0.035, 0.035].forEach(x => {
-                const prong = add(new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.22, 6), mat));
+                const prong = add(new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.006, 0.24, 8), metal));
                 prong.position.set(x, -0.12, 0);
             });
+            led(0.048, 0.04, 0.042, 0x22c55e);
             return;
         }
 
         if (device.kind === 'probe') {
-            const handle = add(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.03, 0.2, 12), mat));
+            const handle = add(new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.038, 0.18, 14), mat));
             handle.rotation.z = 0.35;
-            const tip = add(new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.24, 8), dark));
-            tip.position.y = -0.2;
+            handle.position.y = 0.035;
+            const collar = add(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.025, 14), rubber));
+            collar.rotation.z = 0.35;
+            collar.position.y = -0.055;
+            const tip = add(new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.01, 0.28, 10), metal));
+            tip.position.y = -0.22;
             tip.rotation.z = 0.35;
+            const cable = add(new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.004, 6, 24), rubber));
+            cable.rotation.set(Math.PI / 2, 0.35, 0);
+            cable.position.set(-0.035, 0.15, 0);
             return;
         }
 
         if (device.kind === 'flow') {
-            const pipe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.36, 12), mat));
+            const pipe = add(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.42, 14), metal));
             pipe.rotation.z = Math.PI / 2;
-            add(new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.012, 8, 20), white));
+            const housing = add(new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.082, 0.05, 24), white));
+            housing.rotation.x = Math.PI / 2;
+            const rotor = add(new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.01, 0.014), mat));
+            rotor.userData.isFanBlade = true;
+            led(0.055, 0.055, 0.03, 0x06b6d4);
             return;
         }
 
         if (device.kind === 'pump') {
-            const body = add(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.18, 18), mat));
+            const body = add(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.18, 20), mat));
             body.rotation.z = Math.PI / 2;
-            const outlet = add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.2, 10), dark));
+            const head = add(new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.06, 18), metal));
+            head.rotation.z = Math.PI / 2;
+            head.position.x = 0.105;
+            const outlet = add(new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.2, 10), metal));
             outlet.rotation.z = Math.PI / 2;
-            outlet.position.x = 0.15;
+            outlet.position.x = 0.19;
+            const inlet = add(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.15, 10), rubber));
+            inlet.rotation.x = Math.PI / 2;
+            inlet.position.set(-0.03, -0.078, 0);
+            const feet = add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.024, 0.08), rubber));
+            feet.position.y = -0.086;
             return;
         }
 
         if (device.kind === 'reservoir') {
-            const tank = add(new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.42, 22), mat));
+            const tank = add(new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.42, 28), mat));
             tank.position.y = 0.12;
+            const lid = add(new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.18, 0.045, 28), rubber));
+            lid.position.y = 0.35;
+            const gauge = add(new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.28, 0.012), glass));
+            gauge.position.set(0.182, 0.12, 0.02);
             const sensor = add(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.055, 0.12), dark));
             sensor.position.y = 0.38;
+            led(0.064, 0.392, 0.064, 0x22c55e);
             return;
         }
 
@@ -700,22 +737,36 @@ export const CommercialFarmCanvas = {
             const panel = add(new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.045), dark));
             const screen = add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.09, 0.012), mat));
             screen.position.z = 0.03;
+            [-0.058, 0, 0.058].forEach((x, index) => {
+                led(x, -0.064, 0.034, index === 0 ? 0x22c55e : 0x06b6d4);
+            });
             return;
         }
 
         if (device.kind === 'gas' || device.kind === 'dht' || device.kind === 'co2') {
-            const box = add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.13, 0.07), device.kind === 'dht' ? white : mat));
+            const box = add(new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.135, 0.075), device.kind === 'dht' ? white : mat));
             for (let i = 0; i < 3; i++) {
-                const slit = add(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.008, 0.01), dark));
-                slit.position.set(0, -0.035 + i * 0.035, 0.043);
+                const slit = add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.007, 0.011), dark));
+                slit.position.set(-0.008, -0.038 + i * 0.032, 0.045);
             }
+            if (device.kind === 'co2' || device.kind === 'gas') {
+                const cap = add(new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.015, 18), rubber));
+                cap.rotation.x = Math.PI / 2;
+                cap.position.set(0.055, 0.038, 0.046);
+            }
+            led(-0.062, 0.044, 0.047, device.kind === 'gas' ? 0xf59e0b : 0x22c55e);
             return;
         }
 
         if (device.kind === 'ldr') {
-            add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.025, 22), mat));
-            const cap = add(new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 8), mat));
-            cap.position.y = 0.035;
+            const board = add(new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.055, 0.08), white));
+            board.position.y = -0.01;
+            const cell = add(new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.02, 24), mat));
+            cell.rotation.x = Math.PI / 2;
+            cell.position.z = 0.045;
+            const cap = add(new THREE.Mesh(new THREE.SphereGeometry(0.038, 14, 8), glass));
+            cap.scale.y = 0.42;
+            cap.position.set(0, 0, 0.058);
             return;
         }
 
@@ -1554,18 +1605,27 @@ function facilityStatus(plants, sensors) {
 
 function getSensorSnapshot() {
     const s = AppState.sensors || {};
+    const reading = AppState.latestReading || AppState.currentReading || {};
+    const sensorNumber = (fallback, ...values) => {
+        for (const value of values) {
+            const raw = value && typeof value === 'object' && 'val' in value ? value.val : value;
+            const num = Number(raw);
+            if (Number.isFinite(num)) return num;
+        }
+        return fallback;
+    };
     return {
-        temperature: s.temp?.val ?? 25,
-        humidity: s.humid?.val ?? 60,
-        lightRaw: s.light?.val ?? 2000,
-        soilRaw: s.soil?.val ?? s.soilRaw?.val ?? 1800,
-        ph: s.ph?.val ?? 6.1,
-        waterDistanceCm: s.water?.val ?? 10,
-        gasRaw: s.nutrient?.val ?? 1000,
-        ec: s.ec?.val ?? 1.5,
-        co2Ppm: s.co2?.val ?? 850,
-        energyKwh: s.energy?.val ?? 5.1,
-        waterFlowLpm: s.flow?.val ?? 0.8,
+        temperature: sensorNumber(25, s.temp, s.temperature, reading.temperature, reading.temp),
+        humidity: sensorNumber(60, s.humid, s.humidity, reading.humidity, reading.humid),
+        lightRaw: sensorNumber(2000, s.lightRaw, s.light, reading.lightRaw, reading.light),
+        soilRaw: sensorNumber(1800, s.soilRaw, s.soil, reading.soilRaw, reading.soilMoisture, reading.moisture),
+        ph: sensorNumber(6.1, s.ph, reading.ph),
+        waterDistanceCm: sensorNumber(10, s.water, s.waterDistanceCm, reading.waterDistanceCm, reading.waterLevel),
+        gasRaw: sensorNumber(1000, s.nutrient, s.gasRaw, reading.gasRaw, reading.gasValue),
+        ec: sensorNumber(1.5, s.ec, reading.ec),
+        co2Ppm: sensorNumber(850, s.co2, reading.co2Ppm),
+        energyKwh: sensorNumber(5.1, s.energy, s.energyKwh, reading.energyKwh),
+        waterFlowLpm: sensorNumber(0.8, s.flow, s.waterFlowLpm, reading.waterFlowLpm),
     };
 }
 
@@ -1578,7 +1638,6 @@ function zoneDeviceValue(key, sensors) {
         ec: `${Number(sensors.ec || 1.5).toFixed(1)} EC`,
         flow: `${Number(sensors.waterFlowLpm || 0.8).toFixed(1)} L/min`,
         pump: Number(sensors.waterDistanceCm || 0) > 20 ? 'ready' : 'standby',
-        grow_light: Number(sensors.lightRaw || 0) < 1500 ? 'active' : 'standby',
         zone_fan: Number(sensors.temperature || 25) > 30 ? 'active' : 'standby',
         active_buzzer: Number(sensors.gasRaw || 0) > 2500 ? 'alert' : 'ready',
         camera: 'scan ready',
@@ -1595,7 +1654,6 @@ function shortDeviceLabel(key) {
         ec: 'EC',
         flow: 'FLOW',
         pump: 'PUMP',
-        grow_light: 'LED',
         zone_fan: 'FAN',
         active_buzzer: 'BUZZ',
         camera: 'CAM',
@@ -1738,7 +1796,6 @@ function devicePurpose(key) {
         ec: 'nutrient strength',
         flow: 'irrigation flow',
         pump: 'irrigation output',
-        grow_light: 'lighting output',
         zone_fan: 'zone airflow',
         active_buzzer: 'zone warning',
         camera: 'plant vision',

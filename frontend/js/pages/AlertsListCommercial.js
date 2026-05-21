@@ -9,7 +9,9 @@ import { showScreen } from '../utils/navigation.js';
 import { showToast }  from '../utils/toast.js';
 import { AppState }   from '../store.js';
 
-const API = 'http://localhost:3000';
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:3000'
+    : window.location.origin;
 let predictMinutes = 60;
 let isLoading      = false;
 
@@ -17,7 +19,7 @@ let isLoading      = false;
 const SEV = {
     critical: { bg: '#FEF2F2', border: '#FECACA', badge: '#EF4444', label: 'CRITICAL' },
     warning:  { bg: '#FFFBEB', border: '#FDE68A', badge: '#F59E0B', label: 'WARNING'  },
-    info:     { bg: '#EFF6FF', border: '#BFDBFE', badge: '#3B82F6', label: 'INFO'     },
+    info:     { bg: '#ECFEFF', border: '#99F6E4', badge: '#14B8A6', label: 'INFO'     },
     stable:   { bg: '#F0FDF4', border: '#BBF7D0', badge: '#22C55E', label: 'STABLE'   },
 };
 
@@ -384,7 +386,7 @@ console.log('[Card] a.zoneId:', a.zoneId, '→ normalized:', normalizedZoneId, '
     const historyData = a.scope === 'farm' ? masterHistory : (matchedZone?.historyReadings || []);
     const encodedHistory = encodeURIComponent(JSON.stringify(historyData));
     const scopeTag = a.scope === 'farm'
-        ? `<span style="background:#EFF6FF; color:#1D4ED8; padding:3px 8px; border-radius:6px; font-size:0.62rem; font-weight:800; border:1px solid #BFDBFE;">🏭 FARM</span>`
+        ? `<span style="background:#ECFEFF; color:#0f766e; padding:3px 8px; border-radius:6px; font-size:0.62rem; font-weight:800; border:1px solid #99F6E4;">🏭 FARM</span>`
         : `<span style="background:#F0FDF4; color:#166534; padding:3px 8px; border-radius:6px; font-size:0.62rem; font-weight:800; border:1px solid #BBF7D0;">🗺️ ZONE ${a.zoneId ?? ''}</span>`;
 
     return `

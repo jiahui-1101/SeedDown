@@ -9,6 +9,15 @@ exports.registerDevice = async (req, res) => {
   }
 };
 
+exports.reassignDevice = async (req, res) => {
+  try {
+    const result = await deviceService.reassignDevice(req.body || {});
+    res.status(200).json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+};
+
 exports.getDevice = async (req, res) => {
   try {
     const device = await deviceService.getDevice(req.params.deviceId);

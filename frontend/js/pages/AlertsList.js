@@ -2,6 +2,9 @@ import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
 
+const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:3000'
+    : window.location.origin;
 let predictMinutes = 45;
 
 // 1. 页面外壳 (保持原样)
@@ -44,9 +47,9 @@ async function loadAlertData() {
     try {
         const deviceId = 'farm_001';
         const [latestRes, historyRes, prefRes] = await Promise.all([
-            fetch(`http://localhost:3000/api/sensors/latest?deviceId=${deviceId}`),
-            fetch(`http://localhost:3000/api/sensors/history?deviceId=${deviceId}&limit=10`),
-            fetch(`http://localhost:3000/api/sensors/preferences?deviceId=${deviceId}`)
+            fetch(`${API_BASE}/api/sensors/latest?deviceId=${deviceId}`),
+            fetch(`${API_BASE}/api/sensors/history?deviceId=${deviceId}&limit=10`),
+            fetch(`${API_BASE}/api/sensors/preferences?deviceId=${deviceId}`)
         ]);
 
         const latest = await latestRes.json();
@@ -56,7 +59,7 @@ async function loadAlertData() {
         const r = latest.reading || { temperature: 24 };
         const hPoints = history.readings ? history.readings.map(item => item.temperature).join(', ') : '22, 23, 24';
 
-        const aiRes = await fetch('http://localhost:3000/api/chat', {
+        const aiRes = await fetch(`${API_BASE}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

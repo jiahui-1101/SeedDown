@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const FirestoreModel = require('../models/firestoreModel');
+const { getDb } = require('../config/db');
 
 const DeviceModel = new FirestoreModel('devices', {
   idField: 'deviceId',
@@ -166,6 +167,112 @@ async function registerDevice(input = {}) {
   return { device: publicDevice(device), existing: false };
 }
 
+function sameAssignment(device, input = {}) {
+  const farmMatches = input.farmId && device.farmId === input.farmId;
+  if (!farmMatches) return false;
+
+  const requestedTarget = input.targetId || input.role || null;
+  if (requestedTarget === 'farm_master' || input.role === 'farm_master') {
+    return device.role === 'farm_master' || device.zoneId === 'farm_master' || device.nodeType === 'farm_master' || device.packageLevel === 'farm_master';
+  }
+
+  return input.zoneId && device.zoneId === input.zoneId;
+}
+
+async function markReplacedDevices(activeDevice, input = {}) {
+  if (!input.farmId) return [];
+  const allDevices = await DeviceModel.find({ farmId: input.farmId }).lean();
+  const replaced = allDevices.filter(device =>
+    device.deviceId !== activeDevice.deviceId &&
+    device.status !== 'replaced' &&
+    sameAssignment(device, input)
+  );
+
+  await Promise.all(replaced.map(device => DeviceModel.findOneAndUpdate(
+    { deviceId: device.deviceId },
+    { $set: {
+      status: 'replaced',
+      replacedBy: activeDevice.deviceId,
+      replacedAt: new Date(),
+      isOnline: false,
+      updatedAt: new Date(),
+    }},
+    { new: true, upsert: true }
+  ).lean()));
+
+  return replaced.map(device => publicDevice({
+    ...device,
+    status: 'replaced',
+    replacedBy: activeDevice.deviceId,
+  }, false));
+}
+
+async function syncFarmDeviceMapping(device, replacedDevices, input = {}) {
+  if (!input.farmId) return;
+  const db = getDb();
+  const ref = db.collection('farms').doc(input.farmId);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+
+  const farm = snap.data() || {};
+  const existing = Array.isArray(farm.commercialDevices) ? farm.commercialDevices : [];
+  const replacedIds = new Set(replacedDevices.map(item => item.deviceId));
+  const nextDevices = [
+    ...existing.map(item => replacedIds.has(item.deviceId)
+      ? {
+          ...item,
+          status: 'replaced',
+          active: false,
+          replacedBy: device.deviceId,
+          replacedAt: new Date().toISOString(),
+        }
+      : item
+    ).filter(item => item.deviceId !== device.deviceId),
+    {
+      ...publicDevice(device),
+      targetId: input.targetId || (input.role === 'farm_master' ? 'farm_master' : input.zoneId),
+      role: input.role || (input.targetId === 'farm_master' ? 'farm_master' : 'zone_node'),
+      active: true,
+      status: 'assigned',
+      assignedAt: new Date().toISOString(),
+    },
+  ];
+
+  const patch = { commercialDevices: nextDevices, updatedAt: new Date().toISOString() };
+  if (input.targetId === 'farm_master' || input.role === 'farm_master') patch.farmMaster = patch.commercialDevices[patch.commercialDevices.length - 1];
+  await ref.set(patch, { merge: true });
+}
+
+async function reassignDevice(input = {}) {
+  const targetId = input.targetId || (input.role === 'farm_master' ? 'farm_master' : input.zoneId);
+  const role = targetId === 'farm_master' ? 'farm_master' : (input.role || 'zone_node');
+  const zoneId = targetId === 'farm_master' ? 'farm_master' : input.zoneId || targetId;
+  const result = await registerDevice({ ...input, targetId, role, zoneId });
+  const device = await DeviceModel.findOneAndUpdate(
+    { deviceId: result.device.deviceId },
+    { $set: {
+      farmId: input.farmId || result.device.farmId || null,
+      zoneId,
+      role,
+      targetId,
+      active: true,
+      status: 'assigned',
+      replacedBy: null,
+      updatedAt: new Date(),
+    }},
+    { new: true, upsert: true }
+  ).lean();
+
+  const replacedDevices = await markReplacedDevices(device, { ...input, targetId, role, zoneId });
+  await syncFarmDeviceMapping(device, replacedDevices, { ...input, targetId, role, zoneId });
+
+  return {
+    device: publicDevice(device),
+    replacedDevices,
+    existing: result.existing,
+  };
+}
+
 async function getDevice(deviceId) {
   return DeviceModel.findOne({ deviceId }).lean();
 }
@@ -214,6 +321,7 @@ async function heartbeat(input = {}, patch = {}) {
 
 module.exports = {
   registerDevice,
+  reassignDevice,
   getDevice,
   getDeviceByToken,
   getDeviceByTokenOrThrow,

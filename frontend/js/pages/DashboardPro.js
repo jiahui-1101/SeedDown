@@ -41,13 +41,17 @@ export function getDashboardHTML() {
 
 // 2. 只管你自己的 Firebase 逻辑
 export function initDashboardLogic() {
+    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:3000'
+        : window.location.origin;
+
     document.querySelectorAll('.pro-sensor').forEach(card => {
         card.onclick = () => showScreen('sensor-detail', { sensor: card.getAttribute('data-type') });
     });
 
     const syncData = async () => {
         try {
-            const res = await fetch('http://localhost:3000/api/sensors/latest?deviceId=farm_001');
+            const res = await fetch(`${API_BASE}/api/sensors/latest?deviceId=farm_001`);
             const { reading: r } = await res.json();
             if (!r) return;
             

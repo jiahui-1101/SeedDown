@@ -9,7 +9,9 @@ import { showScreen } from '../utils/navigation.js';
 import { showToast }  from '../utils/toast.js';
 import { AppState }   from '../store.js';
 
-const API = 'http://localhost:3000';
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:3000'
+    : window.location.origin;
 let predictMinutes = 45;
 let isLoading      = false;
 
@@ -17,7 +19,7 @@ let isLoading      = false;
 const SEV = {
     critical: { bg: '#FEF2F2', border: '#FECACA', badge: '#EF4444', badgeTxt: '#fff', label: 'CRITICAL' },
     warning:  { bg: '#FFFBEB', border: '#FDE68A', badge: '#F59E0B', badgeTxt: '#fff', label: 'WARNING'  },
-    info:     { bg: '#EFF6FF', border: '#BFDBFE', badge: '#3B82F6', badgeTxt: '#fff', label: 'INFO'     },
+    info:     { bg: '#ECFEFF', border: '#99F6E4', badge: '#14B8A6', badgeTxt: '#fff', label: 'INFO'     },
     stable:   { bg: '#F0FDF4', border: '#BBF7D0', badge: '#22C55E', badgeTxt: '#fff', label: 'STABLE'   },
 };
 
@@ -71,7 +73,7 @@ function _buildHTML(pkgLevel, pkgLabel) {
             </select>
         </div>
 
-        <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:14px; padding:10px 16px; margin-bottom:18px; font-size:0.8rem; color:#1E40AF; line-height:1.5;">
+        <div style="background:#ECFEFF; border:1px solid #99F6E4; border-radius:14px; padding:10px 16px; margin-bottom:18px; font-size:0.8rem; color:#0f766e; line-height:1.5;">
             <b>🤖 How this works:</b> SeedDown AI reads your live sensor history from Firebase, calculates the trend slope, and predicts what will happen in the next <b id="pillMinutes">${predictMinutes} minutes</b> — so you can act before a crisis hits.
         </div>
 

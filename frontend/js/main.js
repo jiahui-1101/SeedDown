@@ -37,6 +37,8 @@ const pages = {
     },
     
     "zone-detail": (params) => import("./pages/ZoneDetailPage.js").then((m) => m.render(params)),
+    "commercial-detail": (params) => import("./pages/CommercialDetailPage.js").then((m) => m.render(params)),
+    "zone-overview": (params) => import("./pages/CommercialPage.js").then((m) => m.render(params)),
     profile: () => import("./pages/ProfilePage.js").then((m) => m.render()),
     "profit-detail": () => import("./pages/ProfitDetailPage.js").then((m) => m.render()),
     "energy-detail": () => import("./pages/EnergyDetailPage.js").then((m) => m.render()),
@@ -67,8 +69,6 @@ document.addEventListener("DOMContentLoaded", () => {
     FarmCanvas.init("farmCanvas");
     SensorStrip.init();
     NpcAdvisor.init();
-    Community.init();
-NpcAdvisor.init();
     Community.init();
     
     // 启动 IoT 物联网仿真器 (每5秒推送一次新传感器状态)

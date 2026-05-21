@@ -1,4 +1,4 @@
-import{A as d,F as r,S as o,N as l,s as i}from"./index-CCfX1pzx.js";import{o as c}from"./AddPlantModal-BW1O3L33.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function u(){var t,s;console.log("[HomePage] render called");const n=document.getElementById("screenContainer");n.innerHTML=`
+import{A as d,F as r,S as o,N as l,s as i}from"./index-BwcRKJkh.js";import{o as c}from"./AddPlantModal-CYfjVda2.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function u(){var t,s;console.log("[HomePage] render called");const n=document.getElementById("screenContainer");n.innerHTML=`
         <div class="screen active" id="homeScreen">
             <div class="topbar">
                 <button id="backToFarms" class="back-btn" style="background:transparent; border:none; font-size:20px;">←</button>

@@ -24,6 +24,8 @@ const fallbackPageModules = {
 },
     "whatif-pro": () => import("../pages/WhatIfPro.js").then((m) => m.renderScreen()),
     "zone-detail": (params) => import("../pages/ZoneDetailPage.js").then((m) => m.render(params)),
+    "commercial-detail": (params) => import("../pages/CommercialDetailPage.js").then((m) => m.render(params)),
+    "zone-overview": (params) => import("../pages/CommercialPage.js").then((m) => m.render(params)),
     "farm-master-detail": (params) => import("../pages/FarmMasterDetailPage.js").then((m) => m.render(params)),
     "alert-beginner": (params) => import("../pages/AlertsListBeginner.js").then((m) => {
     m.render(params);

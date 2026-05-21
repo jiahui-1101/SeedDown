@@ -634,6 +634,8 @@ The current demo uses fixed IDs so Wokwi, Firestore, and dashboard can match eac
 | `beginner_standard` | `sd_demo_beginner_standard` | `SD-BGN-STD-00456` | Beginner Standard |
 | `beginner_pro` | `sd_demo_beginner_pro` | `SD-BGN-PRO-00789` | Beginner Pro |
 
+For the commercial Wokwi zone demo, the firmware owns the zone routing. The `commercial_zone_node_1` sketch sends `zoneId: "zone_A"` and uses `sd_demo_commercial_zone_node_1`, so it appears as Zone A even if the dashboard Assign Device modal was not used. Assign/reassign is for real device replacement and ownership mapping; Wokwi demo readings still show through the `zoneId` fallback. If a firmware payload has no `zoneId` and no known device token mapping, the reading is stored but it will not reliably appear inside a commercial zone view.
+
 Seed demo data:
 
 ```bash

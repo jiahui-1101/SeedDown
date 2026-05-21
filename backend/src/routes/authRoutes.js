@@ -71,6 +71,32 @@ router.post('/login', async (req, res) => {
     }
 });
 
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body || {};
+        if (!email) {
+            return res.status(400).json({ ok: false, error: 'Email is required' });
+        }
+
+        const db = getDb();
+        const doc = await db.collection('users').doc(email).get();
+        if (doc.exists) {
+            await db.collection('passwordResetRequests').add({
+                email,
+                status: 'requested',
+                createdAt: new Date().toISOString(),
+            });
+        }
+
+        res.json({
+            ok: true,
+            message: 'If this email is registered, a reset request has been recorded.',
+        });
+    } catch (error) {
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
 // ─── 3. 获取个人资料 API (新增) ───
 router.get('/me', verifyToken, async (req, res) => {
     try {

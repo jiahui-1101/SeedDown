@@ -3,6 +3,10 @@ import { showToast } from '../utils/toast.js';
 let isOpen = false;
 let chatHistory = []; // tracks conversation for multi-turn
 
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : window.location.origin;
+
 
 export function initAiChat() {
     const container = document.getElementById('globalAiChat');
@@ -131,7 +135,7 @@ export function initAiChat() {
         msgDiv.scrollTop = msgDiv.scrollHeight;
 
         try {
-            const res = await fetch('http://localhost:3000/api/chat', {
+            const res = await fetch(`${API_BASE}/api/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
