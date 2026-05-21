@@ -237,6 +237,17 @@ function enterFarm(farm) {
     AppState.currentFarmId = farm.id;
     AppState.currentFarm = farm;
     AppState.farmName = farm.name;
+    if (AppState.mode === 'commercial') {
+        AppState.packageLevel = farm.packageLevel || 'farm_master';
+        AppState.zoneIds = farm.zoneIds || [1, 2, 3];
+    } else {
+        // Beginner — starter / standard / pro，farm 里没有就默认 'pro'
+        AppState.packageLevel = farm.packageLevel || 'pro';
+    }
+    localStorage.setItem('seeddown_package', AppState.packageLevel);
+    // ──────────────────────────────────────────────────────
+
+    console.log(`[FarmListPage] Entering Farm ID: ${farm.id}`);
     const target = AppState.mode === 'beginner' ? 'home' : 'dash-c';
     showScreen(target);
 }

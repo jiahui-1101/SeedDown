@@ -2,22 +2,24 @@ import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
 import * as WhatIf from './WhatIf.js';
-import * as Consumption from './ConsumptionPage.js';   
-import * as AlertsList from './AlertsList.js';
+import * as Consumption from './ConsumptionPage.js';
 
 export function render(params = {}) {
     const { feature, from = 'home' } = params;
+
+    // ✅ alerts 直接跳转到 Beginner alert 页面，不走 FeaturePage 框架
+    if (feature === 'alerts') {
+        showScreen('alert-beginner');
+        return;
+    }
+
     const container = document.getElementById('screenContainer');
     let content = '';
 
     if (feature === 'whatif') {
         content = WhatIf.render();
-
     } else if (feature === 'consumption') {
         content = Consumption.render();
-
-    } else if (feature === 'alerts') {
-        content = AlertsList.render();
     }
 
     container.innerHTML = `
@@ -38,11 +40,7 @@ export function render(params = {}) {
 
     if (feature === 'whatif') {
         WhatIf.init();
-
-     } else if (feature === 'consumption') {
-       Consumption.init();   // ← triggers API fetch + chart render
-   }
-     else if (feature === 'alerts') {
-        AlertsList.init();
+    } else if (feature === 'consumption') {
+        Consumption.init();
     }
 }

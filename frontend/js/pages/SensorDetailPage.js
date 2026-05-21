@@ -98,11 +98,30 @@ const chart = buildChart(historyRows);
     bindEvents({ backTarget, sensorKey, unit: meta.unit, params });
 }
 
+const DEMO_BEGINNER_DEVICES = {
+    starter:          'beginner_starter',
+    beginner_starter: 'beginner_starter',
+    standard:         'beginner_standard',
+    beginner_standard:'beginner_standard',
+    pro:              'beginner_pro',
+    beginner_pro:     'beginner_pro',
+};
+
+function resolveDeviceId(params = {}) {
+    if (params.deviceId && params.deviceId !== 'farm_001' && !String(params.deviceId).startsWith('dev_')) {
+        return params.deviceId;
+    }
+    const farm = getCurrentFarm();
+    const stored = farm?.deviceId;
+    if (stored && stored !== 'farm_001' && !String(stored).startsWith('dev_')) return stored;
+    const level = String(farm?.packageLevel || '').toLowerCase();
+    return DEMO_BEGINNER_DEVICES[level] || 'beginner_standard';
+}
+
 async function fetchHistory(meta, params = {}) {
     try {
-        const farm = getCurrentFarm();
-const deviceId = params.deviceId || farm?.deviceId || 'farm_001';
-const response = await fetch(`${API_BASE}/api/sensors/history?deviceId=${deviceId}&limit=8`);
+        const deviceId = resolveDeviceId(params);
+        const response = await fetch(`${API_BASE}/api/sensors/history?deviceId=${deviceId}&limit=8`);
         
         const result = await response.json();
         const readings = result.readings;
@@ -172,13 +191,9 @@ function bindEvents({ backTarget, sensorKey, unit, params = {} }) {
 
     
 function buildSensorQuery(params = {}) {
-    const farm = getCurrentFarm();
     const query = new URLSearchParams();
-    if (params.deviceId) query.set('deviceId', params.deviceId);
-    else if (farm?.deviceId) query.set('deviceId', farm.deviceId);
-    else if (farm?.zoneId) query.set('zoneId', farm.zoneId);
-    else if (farm?.id) query.set('fieldId', farm.id);
-    else query.set('deviceId', 'farm_001');
+    const deviceId = resolveDeviceId(params);
+    query.set('deviceId', deviceId);
     return query;
 }
 

@@ -32,30 +32,32 @@ export const SensorStrip = {
         this.refreshInterval = setInterval(() => this.fetchLatestData(), 10000);
     },
 
-    async fetchLatestData() {
-        try {
-            const query = buildSensorQuery();
-            this.lastQuery = query;
-            const response = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
-            const data = await response.json();
+   async fetchLatestData() {
+    try {
+        const query = buildSensorQuery();
+        this.lastQuery = query;
+        const response = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
+        const data = await response.json();
+        const reading = data?.readings?.[0] || data?.reading || null;
 
-            if (data?.reading) {
-                const reading = data.reading;
-                this.lastReading = reading;
-                AppState.latestReading = reading;
-                AppState.sensors = mapReadingToSensors(reading, getCurrentFarm()?.thresholds || {});
-                AppState.notify();
-            }
-        } catch (err) {
-            console.error('Dashboard cannot fetch latest sensor data:', err);
+        if (reading) {
+            this.lastReading = reading;
+            AppState.latestReading = reading;
+            AppState.sensors = mapReadingToSensors(reading, getCurrentFarm()?.thresholds || {});
+            AppState.notify();
         }
-    },
+    } catch (err) {
+        console.error('Dashboard cannot fetch latest sensor data:', err);
+    }
+},
 
     render() {
-        if (!this.container) return;
-        const s = AppState.sensors || {};
-        const farm = getCurrentFarm();
-        const reading = this.lastReading || AppState.latestReading || {};
+    if (!this.container) return;
+    const s = AppState.sensors || {};
+    const hasData = Object.values(s).some(v => v.val !== '--');
+    if (!hasData && this.lastReading) return; // don't re-render blank over real data
+    const farm = getCurrentFarm();
+    const reading = this.lastReading || AppState.latestReading || {};
         const metadata = [
             farm?.deviceId || reading.deviceId || 'farm_001',
             reading.fieldId || farm?.id,
@@ -102,18 +104,25 @@ export const SensorStrip = {
 
         this.container.querySelectorAll('.sensor-click-card').forEach(card => {
             card.addEventListener('click', () => {
+                const deviceId = resolveBeginnnerDeviceId(farm);
                 showScreen('sensor-detail', {
                     key: card.getAttribute('data-key'),
                     name: card.getAttribute('data-label'),
-                    deviceId: farm?.deviceId || reading.deviceId || 'farm_001',
+                    deviceId,
+                    from: 'home',
                 });
             });
         });
     },
 
     createGridCard(item, sensorData) {
-        const valColor = sensorData.status === 'danger' ? '#DC2626' : sensorData.status === 'warning' ? '#D97706' : '#059669';
-        const currentBg = sensorData.status === 'danger' ? '#FEE2E2' : sensorData.status === 'warning' ? '#FFFBEB' : '#ECFDF5';
+        const isDanger  = sensorData.status === 'danger';
+        const isWarning = sensorData.status === 'warning';
+        const valColor  = isDanger ? '#DC2626' : isWarning ? '#D97706' : '#059669';
+        const currentBg = isDanger ? '#FEE2E2' : isWarning ? '#FFFBEB' : '#ECFDF5';
+        const statusLabel = isDanger ? 'Check Now' : isWarning ? 'Warning' : 'Normal';
+        const statusColor = isDanger ? '#DC2626' : isWarning ? '#D97706' : '#059669';
+        const statusBg    = isDanger ? '#FEE2E2' : isWarning ? '#FEF3C7' : '#D1FAE5';
 
         return `
             <div class="sensor-click-card" data-key="${item.key}" data-label="${item.label}" style="cursor:pointer;background:${currentBg};border-radius:12px;padding:12px;display:flex;flex-direction:column;min-height:90px;position:relative;overflow:hidden;transition:all .2s ease;">
@@ -125,19 +134,39 @@ export const SensorStrip = {
                         <span style="font-size:.55rem;color:#64748B;">${item.unit}</span>
                     </div>
                     <div style="font-size:.6rem;font-weight:700;color:#9AA5B8;margin-top:2px;">${item.label}</div>
+                    <div style="margin-top:5px;display:inline-flex;align-items:center;gap:3px;background:${statusBg};border-radius:999px;padding:2px 6px;">
+                        <span style="width:5px;height:5px;border-radius:50%;background:${statusColor};flex-shrink:0;display:inline-block;"></span>
+                        <span style="font-size:.55rem;font-weight:900;color:${statusColor};">${statusLabel}</span>
+                    </div>
                 </div>
             </div>
         `;
     },
 };
 
+const DEMO_BEGINNER_DEVICES = {
+    starter:          'beginner_starter',
+    beginner_starter: 'beginner_starter',
+    standard:         'beginner_standard',
+    beginner_standard:'beginner_standard',
+    pro:              'beginner_pro',
+    beginner_pro:     'beginner_pro',
+};
+
+function resolveBeginnnerDeviceId(farm) {
+    // If stored deviceId looks like a real demo device, use it
+    const stored = farm?.deviceId;
+    if (stored && stored !== 'farm_001' && !String(stored).startsWith('dev_')) return stored;
+    // Derive from packageLevel
+    const level = String(farm?.packageLevel || '').toLowerCase();
+    return DEMO_BEGINNER_DEVICES[level] || 'beginner_standard';
+}
+
 function buildSensorQuery() {
     const farm = getCurrentFarm();
     const query = new URLSearchParams();
-    if (farm?.deviceId) query.set('deviceId', farm.deviceId);
-    else if (farm?.zoneId) query.set('zoneId', farm.zoneId);
-    else if (farm?.id) query.set('fieldId', farm.id);
-    else query.set('deviceId', 'farm_001');
+    const deviceId = resolveBeginnnerDeviceId(farm);
+    query.set('deviceId', deviceId);
     return query;
 }
 
@@ -176,16 +205,26 @@ function statusRange(value, min, max) {
 }
 
 function thresholdSummaryHtml(sensors = {}) {
-    const alerts = Object.entries(sensors)
-        .filter(([, sensor]) => sensor.status === 'warning' || sensor.status === 'danger')
-        .map(([key, sensor]) => `${labelForKey(key)} ${sensor.status}`);
+    const dangers  = Object.entries(sensors).filter(([, s]) => s.status === 'danger');
+    const warnings = Object.entries(sensors).filter(([, s]) => s.status === 'warning');
+    const ok = dangers.length === 0 && warnings.length === 0;
 
-    const ok = alerts.length === 0;
+    if (ok) return `
+        <div style="margin-top:12px;padding:10px 14px;border-radius:14px;background:#ECFDF5;border:1px solid #A7F3D0;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:16px;">✅</span>
+            <span style="font-size:.72rem;font-weight:800;color:#047857;">All sensors normal — your farm is healthy.</span>
+        </div>`;
+
+    const dangerNames  = dangers.map(([k]) => labelForKey(k));
+    const warningNames = warnings.map(([k]) => labelForKey(k));
     return `
-        <div style="margin-top:12px;padding:10px 12px;border-radius:14px;background:${ok ? '#ECFDF5' : '#FFFBEB'};color:${ok ? '#047857' : '#B45309'};font-size:.72rem;font-weight:800;line-height:1.35;">
-            ${ok ? 'Threshold status: all readings are inside the current field recipe.' : `Threshold status: ${escapeHTML(alerts.join(' · '))}`}
-        </div>
-    `;
+        <div style="margin-top:12px;padding:10px 14px;border-radius:14px;background:${dangers.length ? '#FEE2E2' : '#FFFBEB'};border:1px solid ${dangers.length ? '#FCA5A5' : '#FDE68A'};display:flex;align-items:flex-start;gap:8px;">
+            <span style="font-size:16px;flex-shrink:0;">${dangers.length ? '🚨' : '⚠️'}</span>
+            <div>
+                ${dangerNames.length  ? `<div style="font-size:.72rem;font-weight:900;color:#DC2626;">Check now: ${escapeHTML(dangerNames.join(', '))}</div>` : ''}
+                ${warningNames.length ? `<div style="font-size:.72rem;font-weight:800;color:#B45309;margin-top:2px;">Out of range: ${escapeHTML(warningNames.join(', '))}</div>` : ''}
+            </div>
+        </div>`;
 }
 
 function labelForKey(key) {

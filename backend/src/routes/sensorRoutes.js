@@ -42,3 +42,38 @@ module.exports = router;
 
 
 
+
+// Zone discovery — returns unique zoneIds found in sensor readings for a deviceId
+// GET /api/sensors/zones?deviceId=...
+router.get('/zones', async (req, res) => {
+  try {
+    const { deviceId = 'farm_001' } = req.query;
+    const { getDb } = require('../config/db');
+    const db = getDb();
+
+    // Query sensorReadings for distinct zoneIds for this device
+    const snap = await db.collection('sensorReadings')
+      .where('deviceId', '==', deviceId)
+      .orderBy('createdAt', 'desc')
+      .limit(200)
+      .get();
+
+    const zoneSet = new Set();
+    snap.forEach(doc => {
+      const data = doc.data();
+      if (data.zoneId !== undefined && data.zoneId !== null) {
+        zoneSet.add(data.zoneId);
+      }
+    });
+
+    const zoneIds = Array.from(zoneSet).sort((a, b) => {
+      const na = Number(a), nb = Number(b);
+      return !isNaN(na) && !isNaN(nb) ? na - nb : String(a).localeCompare(String(b));
+    });
+
+    res.json({ ok: true, deviceId, zoneIds });
+  } catch (err) {
+    console.error('[zones endpoint]', err);
+    res.status(500).json({ ok: false, error: err.message, zoneIds: [] });
+  }
+});

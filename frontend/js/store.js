@@ -8,17 +8,22 @@ function savedMode() {
 
 export const AppState = {
     mode: savedMode(),
+    packageLevel: localStorage.getItem('seeddown_package') || 'pro',
     currentScreen: 'splash',
     farmName: 'My Farm',
     currentFarmId: null,
+    currentFarm: null,     
     tiles: [],
-    sensors: {
-        temp: { val: 34.2, unit: '°C', status: 'danger' },
-        humid: { val: 68, unit: '%', status: 'ok' },
-        light: { val: 82, unit: '%', status: 'ok' },
-        ph: { val: 6.2, unit: 'pH', status: 'ok' },
-        water: { val: 22, unit: '%', status: 'warning' },
-        nutrient: { val: 78, unit: '%', status: 'ok' }
+   sensors: {
+    temp:     { val: '--', unit: '°C',    status: 'normal' },
+    humid:    { val: '--', unit: '%',     status: 'normal' },
+    light:    { val: '--', unit: '',      status: 'normal' },
+    ph:       { val: '--', unit: 'pH',    status: 'normal' },
+    water:    { val: '--', unit: 'cm',    status: 'normal' },
+    nutrient: { val: '--', unit: '',      status: 'normal' },
+    ec:       { val: '--', unit: 'mS/cm', status: 'normal' },
+    co2:      { val: '--', unit: 'ppm',   status: 'normal' },
+
     },
     addPlant: { selectedCropIndex: null, selectedTileId: null },
     visitTarget: null,

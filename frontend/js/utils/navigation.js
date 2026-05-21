@@ -16,13 +16,23 @@ const fallbackPageModules = {
     return import("../pages/SensorDetailPage.js").then((m) => m.render(params));
 },
     profile: () => import("../pages/ProfilePage.js").then((m) => m.render()),
-    "alert-detail": (params) => import("../pages/AlertDetailPage.js").then((m) => {
-        m.render(params);
-        m.init?.();
-    }),
+    "alert-detail": async (params) => {
+    const m = await import("../pages/AlertDetailPage.js");
+    m.render(params);
+    await new Promise(r => setTimeout(r, 60));  // 等 DOM ready
+    m.init(params);
+},
     "whatif-pro": () => import("../pages/WhatIfPro.js").then((m) => m.renderScreen()),
     "zone-detail": (params) => import("../pages/ZoneDetailPage.js").then((m) => m.render(params)),
     "farm-master-detail": (params) => import("../pages/FarmMasterDetailPage.js").then((m) => m.render(params)),
+    "alert-beginner": (params) => import("../pages/AlertsListBeginner.js").then((m) => {
+    m.render(params);
+    m.init?.(params);
+}),
+"alert-commercial": (params) => import("../pages/AlertsListCommercial.js").then((m) => {
+    m.render(params);
+    m.init?.(params);
+}),
 };
 
 export function initNavigation(pages) {
