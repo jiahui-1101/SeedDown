@@ -10,6 +10,7 @@ const PACKAGE_SENSOR_KEYS = {
     standard: ['temp', 'humid', 'light', 'ph', 'water', 'nutrient'],
     pro: ['temp', 'humid', 'light', 'ph', 'water', 'nutrient', 'ec', 'co2'],
 };
+const BEGINNER_LIVE_CACHE_KEY = 'seeddown_beginner_live_cache';
 
 export const SensorStrip = {
     container: null,
@@ -39,17 +40,27 @@ export const SensorStrip = {
         const response = await fetch(`${API_BASE}/api/sensors/latest?${query.toString()}`);
         const data = await response.json();
         const reading = data?.readings?.[0] || data?.reading || null;
+        const cached = getCachedReading(query);
 
-        if (reading) {
-            this.lastReading = reading;
-            AppState.latestReading = reading;
-            AppState.sensors = mapReadingToSensors(reading, getCurrentFarm()?.thresholds || {});
-            AppState.notify();
+        if (isReliableReading(reading) && isNewerReading(reading, cached)) {
+            const stableReading = rememberReading(query, reading);
+            this.applyReading(stableReading);
+        } else if (cached && !this.lastReading) {
+            this.applyReading({ ...cached, _stale: true });
         }
     } catch (err) {
         console.error('Dashboard cannot fetch latest sensor data:', err);
+        const cached = getCachedReading(this.lastQuery || buildSensorQuery());
+        if (cached && !this.lastReading) this.applyReading({ ...cached, _stale: true });
     }
 },
+
+    applyReading(reading) {
+        this.lastReading = reading;
+        AppState.latestReading = reading;
+        AppState.sensors = mapReadingToSensors(reading, getCurrentFarm()?.thresholds || {});
+        AppState.notify();
+    },
 
     render() {
     if (!this.container) return;
@@ -58,12 +69,16 @@ export const SensorStrip = {
     if (!hasData && this.lastReading) return; // don't re-render blank over real data
     const farm = getCurrentFarm();
     const reading = this.lastReading || AppState.latestReading || {};
+        const updatedText = formatReadingTime(reading);
         const metadata = [
-            farm?.deviceId || reading.deviceId || 'farm_001',
+            reading.deviceId || resolveBeginnnerDeviceId(farm),
             reading.fieldId || farm?.id,
             reading.zoneId || farm?.zone,
             reading.packageLevel || farm?.packageLevel,
+            updatedText,
         ].filter(Boolean);
+        const stateLabel = reading.deviceId ? (reading._stale ? 'CACHED' : 'LIVE') : 'NO DATA';
+        const stateOk = reading.deviceId && !reading._stale;
 
         const allItems = [
             { icon: '🌡️', key: 'temp', label: 'Temp', unit: '°C' },
@@ -91,8 +106,8 @@ export const SensorStrip = {
                             </div>
                         </div>
                     </div>
-                    <span style="font-size:0.62rem;font-weight:900;color:${reading.deviceId ? '#059669' : '#D97706'};background:${reading.deviceId ? '#ECFDF5' : '#FFFBEB'};padding:6px 8px;border-radius:999px;white-space:nowrap;">
-                        ${reading.deviceId ? 'LIVE' : 'NO DATA'}
+                    <span style="font-size:0.62rem;font-weight:900;color:${stateOk ? '#059669' : '#D97706'};background:${stateOk ? '#ECFDF5' : '#FFFBEB'};padding:6px 8px;border-radius:999px;white-space:nowrap;">
+                        ${stateLabel}
                     </span>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(${columns},minmax(0,1fr));grid-auto-rows:1fr;gap:10px;">
@@ -202,6 +217,78 @@ function statusRange(value, min, max) {
     if (!Number.isFinite(numeric)) return 'normal';
     if (numeric < min || numeric > max) return 'warning';
     return 'normal';
+}
+
+function isReliableReading(reading) {
+    if (!reading || typeof reading !== 'object') return false;
+    return ['temperature', 'humidity', 'lightRaw', 'ph', 'waterDistanceCm', 'gasRaw', 'ec', 'co2Ppm']
+        .some(key => Number.isFinite(Number(reading[key])));
+}
+
+function isNewerReading(reading, cached) {
+    if (!cached) return true;
+    const incomingDate = parseReadingDate(reading);
+    const cachedDate = parseReadingDate(cached);
+    if (!incomingDate) return false;
+    if (!cachedDate) return true;
+    return incomingDate.getTime() > cachedDate.getTime();
+}
+
+function rememberReading(query, reading) {
+    const enriched = {
+        ...reading,
+        deviceId: reading.deviceId || query?.get?.('deviceId') || resolveBeginnnerDeviceId(getCurrentFarm()),
+        _fetchedAt: new Date().toISOString(),
+        _stale: false,
+    };
+    try {
+        const cache = readLiveCache();
+        cache[cacheScope(query)] = enriched;
+        localStorage.setItem(BEGINNER_LIVE_CACHE_KEY, JSON.stringify(cache));
+    } catch (error) {
+        console.warn('[SensorStrip] could not cache beginner reading:', error.message);
+    }
+    return enriched;
+}
+
+function getCachedReading(query) {
+    const cache = readLiveCache();
+    const reading = cache[cacheScope(query)];
+    return reading ? { ...reading, _stale: true } : null;
+}
+
+function readLiveCache() {
+    try {
+        return JSON.parse(localStorage.getItem(BEGINNER_LIVE_CACHE_KEY)) || {};
+    } catch {
+        return {};
+    }
+}
+
+function cacheScope(query) {
+    const farm = getCurrentFarm();
+    const deviceId = query?.get?.('deviceId') || resolveBeginnnerDeviceId(farm);
+    const level = String(farm?.packageLevel || 'standard').toLowerCase();
+    return `${farm?.id || AppState.currentFarmId || 'beginner_demo'}:${deviceId}:${level}`;
+}
+
+function parseReadingDate(reading) {
+    const raw = reading?._fetchedAt || reading?.createdAt || reading?.updatedAt || reading?.timestamp;
+    if (!raw) return null;
+    if (raw instanceof Date) return raw;
+    if (typeof raw === 'object') {
+        if (typeof raw.toDate === 'function') return raw.toDate();
+        if (raw._seconds) return new Date(raw._seconds * 1000);
+        if (raw.seconds) return new Date(raw.seconds * 1000);
+    }
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatReadingTime(reading) {
+    const date = parseReadingDate(reading);
+    if (!date) return reading?._stale ? 'Last updated cached' : '';
+    return `Last updated ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 function thresholdSummaryHtml(sensors = {}) {
