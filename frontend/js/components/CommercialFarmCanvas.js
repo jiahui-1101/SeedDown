@@ -1509,6 +1509,7 @@ export const CommercialFarmCanvas = {
         if (this.controls) this.controls.update();
         this.updateParticles();
         this.updateMascot();
+        this.positionMascotBubble();
         this.scene.traverse(obj => {
             if (obj.userData?.isFanBlade) obj.rotation.z += 4.8 * delta;
             if (obj.userData?.isDrip) {
@@ -1553,6 +1554,37 @@ export const CommercialFarmCanvas = {
         this.mascotGroup.rotation.x += (0 - this.mascotGroup.rotation.x) * 0.08;
         this.mascotGroup.rotation.z += (0 - this.mascotGroup.rotation.z) * 0.08;
         this.mascotGroup.rotation.y += (Math.sin(this.frame * 0.028) * 0.06 - this.mascotGroup.rotation.y) * 0.08;
+    },
+
+    positionMascotBubble() {
+        if (!this.mascotBubble || !this.mascotGroup || !this.camera || !this.canvas || !this.parent) return;
+        const world = new THREE.Vector3();
+        this.mascotGroup.getWorldPosition(world);
+        world.y += 0.58;
+        const projected = world.project(this.camera);
+        if (projected.z < -1 || projected.z > 1) {
+            this.mascotBubble.style.opacity = '0';
+            return;
+        }
+
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const parentRect = this.parent.getBoundingClientRect();
+        const bubbleWidth = this.mascotBubble.offsetWidth || 280;
+        const bubbleHeight = this.mascotBubble.offsetHeight || 112;
+        const mascotX = canvasRect.left - parentRect.left + (projected.x * 0.5 + 0.5) * canvasRect.width;
+        const mascotY = canvasRect.top - parentRect.top + (-projected.y * 0.5 + 0.5) * canvasRect.height;
+        const placeLeft = mascotX + bubbleWidth + 38 > parentRect.width;
+        const rawLeft = placeLeft ? mascotX - bubbleWidth - 24 : mascotX + 24;
+        const rawTop = mascotY - bubbleHeight * 0.72;
+        const left = THREE.MathUtils.clamp(rawLeft, 12, Math.max(12, parentRect.width - bubbleWidth - 12));
+        const top = THREE.MathUtils.clamp(rawTop, 112, Math.max(112, parentRect.height - bubbleHeight - 18));
+
+        this.mascotBubble.classList.toggle('from-left', placeLeft);
+        this.mascotBubble.style.setProperty('left', `${left}px`, 'important');
+        this.mascotBubble.style.setProperty('top', `${top}px`, 'important');
+        this.mascotBubble.style.setProperty('right', 'auto', 'important');
+        this.mascotBubble.style.setProperty('bottom', 'auto', 'important');
+        this.mascotBubble.style.setProperty('opacity', '1', 'important');
     },
 
     updateParticles() {
@@ -2316,6 +2348,28 @@ function ensureCommercialStyles() {
             box-shadow: 0 16px 42px rgba(15, 23, 42, .14);
             backdrop-filter: blur(14px);
             color: #134e4a;
+            transition: left .18s ease, top .18s ease, opacity .18s ease;
+        }
+        .cf-mascot-bubble:after {
+            content: "";
+            position: absolute;
+            left: -9px;
+            top: 58%;
+            width: 18px;
+            height: 18px;
+            background: rgba(255, 255, 255, .92);
+            border-left: 1px solid rgba(20, 184, 166, .34);
+            border-bottom: 1px solid rgba(20, 184, 166, .34);
+            transform: rotate(45deg);
+            border-radius: 4px;
+        }
+        .cf-mascot-bubble.from-left:after {
+            left: auto;
+            right: -9px;
+            border-left: none;
+            border-bottom: none;
+            border-right: 1px solid rgba(20, 184, 166, .34);
+            border-top: 1px solid rgba(20, 184, 166, .34);
         }
         .cf-mascot-kicker {
             color: #0f766e;

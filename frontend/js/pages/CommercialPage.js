@@ -583,11 +583,11 @@ async function fetchAIGlobalAdvice(currentData) {
     }
 }
 
-async function sendCommercialChat() {
+async function sendCommercialChat(forcedMessage = '') {
     const input = document.getElementById('commercialChatInput');
-    const message = input?.value.trim();
+    const message = String(forcedMessage || input?.value || '').trim();
     if (!message) return;
-    input.value = '';
+    if (input) input.value = '';
     appendChat('user', message);
     appendChat('ai', 'Thinking...');
 
@@ -616,10 +616,18 @@ async function sendCommercialChat() {
 function handleMascotAsk(event) {
     const input = document.getElementById('commercialChatInput');
     const context = event.detail || CommercialFarmCanvas.getSelectedContext?.();
-    if (!input) return;
     const label = context?.label || 'this commercial farm';
-    input.value = `SeedDown AI, explain ${label} using the current live data.`;
-    sendCommercialChat();
+    const prompt = `SeedDown AI, explain ${label} using the current live data.`;
+    const screen = document.getElementById('commercialScreen');
+    if (screen?.classList.contains('panel-hidden')) {
+        screen.classList.remove('panel-hidden');
+        const button = document.getElementById('panelToggleBtn');
+        if (button) button.textContent = 'Hide Panel';
+        setTimeout(forceCommercialCanvasFullScreen, 120);
+    }
+    if (input) input.value = prompt;
+    document.querySelector('.chat-section')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    sendCommercialChat(prompt);
 }
 
 function getCommercialAIContext() {
