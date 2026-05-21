@@ -18,7 +18,7 @@ const fallbackPageModules = {
     profile: () => import("../pages/ProfilePage.js").then((m) => m.render()),
     "alert-detail": (params) => import("../pages/AlertDetailPage.js").then((m) => {
         m.render(params);
-        m.init?.();
+        m.init?.(params);
     }),
     "whatif-pro": () => import("../pages/WhatIfPro.js").then((m) => m.renderScreen()),
     "zone-detail": (params) => import("../pages/ZoneDetailPage.js").then((m) => m.render(params)),

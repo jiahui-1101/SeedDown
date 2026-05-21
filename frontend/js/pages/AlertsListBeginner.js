@@ -3,6 +3,7 @@
 //  SeedDown — Beginner Predictive Alert Page
 //  Supports: starter | standard | pro package levels
 //  Calls: POST /api/alerts/predict-beginner
+//  Real sensor data from Firebase — no mock data
 // ─────────────────────────────────────────────────────────────────
 import { showScreen } from '../utils/navigation.js';
 import { showToast }  from '../utils/toast.js';
@@ -14,52 +15,22 @@ let isLoading      = false;
 
 // ── Severity config ───────────────────────────────────────────────
 const SEV = {
-    critical: { bg: '#FEF2F2', border: '#FECACA', badge: '#EF4444', badgeTxt: '#fff',  label: 'CRITICAL' },
-    warning:  { bg: '#FFFBEB', border: '#FDE68A', badge: '#F59E0B', badgeTxt: '#fff',  label: 'WARNING'  },
-    info:     { bg: '#EFF6FF', border: '#BFDBFE', badge: '#3B82F6', badgeTxt: '#fff',  label: 'INFO'      },
-    stable:   { bg: '#F0FDF4', border: '#BBF7D0', badge: '#22C55E', badgeTxt: '#fff',  label: 'STABLE'   },
+    critical: { bg: '#FEF2F2', border: '#FECACA', badge: '#EF4444', badgeTxt: '#fff', label: 'CRITICAL' },
+    warning:  { bg: '#FFFBEB', border: '#FDE68A', badge: '#F59E0B', badgeTxt: '#fff', label: 'WARNING'  },
+    info:     { bg: '#EFF6FF', border: '#BFDBFE', badge: '#3B82F6', badgeTxt: '#fff', label: 'INFO'     },
+    stable:   { bg: '#F0FDF4', border: '#BBF7D0', badge: '#22C55E', badgeTxt: '#fff', label: 'STABLE'   },
 };
 
 // ── Action button config per risk type ────────────────────────────
 const RISK_ACTIONS = {
-    heat_stress:        { btnText: '❄️ Pre-cool System',     color: '#EF4444' },
-    wilting:            { btnText: '💧 Boost Irrigation',      color: '#F59E0B' },
-    pump_cavitation:    { btnText: '🚰 Refill Water Tank',     color: '#F59E0B' },
-    nutrient_burn:      { btnText: '🧪 Dilute Nutrient Mix',   color: '#8B5CF6' },
-    nutrient_deficient: { btnText: '🌿 Boost Nutrient Mix',    color: '#8B5CF6' },
-    co2_crisis:         { btnText: '💨 Adjust Ventilation',    color: '#06B6D4' },
-    stable:             { btnText: '✅ All Good',               color: '#22C55E' },
-    default:            { btnText: '⚡ Take Action',            color: '#064E3B' },
-};
-
-// ── Demo fallback data ────────────────────────────────────────────
-const DEMO_ALERTS = {
-    starter: [
-        { risk: 'heat_stress', severity: 'critical', emoji: '🌡️', title: 'Heat Stress Risk (Demo)',
-          prediction: 'Temperature is trending upward and may reach 34°C within 45 minutes.',
-          action: 'Open side vents or activate cooling fans immediately.',
-          projectedValue: '34.0°C in 45 min', confidence: 0.82 },
-    ],
-    standard: [
-        { risk: 'heat_stress', severity: 'warning', emoji: '🌡️', title: 'Mild Heat Stress (Demo)',
-          prediction: 'Temperature rising at 0.4°C per reading; projected 31.2°C in 45 min.',
-          action: 'Lower grow-light intensity by 20% and monitor.',
-          projectedValue: '31.2°C in 45 min', confidence: 0.75 },
-        { risk: 'pump_cavitation', severity: 'critical', emoji: '💧', title: 'Water Tank Low (Demo)',
-          prediction: 'Tank distance increasing 0.3 cm per reading — tank empty in ~50 min.',
-          action: 'Refill reservoir immediately to prevent pump burnout.',
-          projectedValue: 'Tank empty ~50 min', confidence: 0.91 },
-    ],
-    pro: [
-        { risk: 'nutrient_burn', severity: 'warning', emoji: '🧪', title: 'EC Nutrient Drift (Demo)',
-          prediction: 'EC rising 0.08 mS/cm per step; projected 3.7 mS/cm in 45 min — root burn zone.',
-          action: 'Add 500 ml fresh water to reservoir to dilute EC concentration.',
-          projectedValue: 'EC 3.7 mS/cm in 45 min', confidence: 0.88 },
-        { risk: 'co2_crisis', severity: 'info', emoji: '💨', title: 'CO₂ Level Dropping (Demo)',
-          prediction: 'CO₂ consuming faster than replenishment; projected 420 ppm in 60 min.',
-          action: 'Increase ventilation or check CO₂ canister valve.',
-          projectedValue: '420 ppm in 60 min', confidence: 0.72 },
-    ],
+    heat_stress:        { btnText: '❄️ Pre-cool System',    color: '#EF4444' },
+    wilting:            { btnText: '💧 Boost Irrigation',    color: '#F59E0B' },
+    pump_cavitation:    { btnText: '🚰 Refill Water Tank',   color: '#F59E0B' },
+    nutrient_burn:      { btnText: '🧪 Dilute Nutrient Mix', color: '#8B5CF6' },
+    nutrient_deficient: { btnText: '🌿 Boost Nutrient Mix',  color: '#8B5CF6' },
+    co2_crisis:         { btnText: '💨 Adjust Ventilation',  color: '#06B6D4' },
+    stable:             { btnText: '✅ All Good',             color: '#22C55E' },
+    default:            { btnText: '⚡ Take Action',          color: '#064E3B' },
 };
 
 // ═════════════════════════════════════════════════════════════════
@@ -101,11 +72,14 @@ function _buildHTML(pkgLevel, pkgLabel) {
         </div>
 
         <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:14px; padding:10px 16px; margin-bottom:18px; font-size:0.8rem; color:#1E40AF; line-height:1.5;">
-            <b>🤖 How this works:</b> SeedDown AI reads your last 10 sensor readings from Firebase, calculates the trend slope, and predicts what will happen in the next <b id="pillMinutes">${predictMinutes} minutes</b> — so you can act before a crisis hits.
+            <b>🤖 How this works:</b> SeedDown AI reads your live sensor history from Firebase, calculates the trend slope, and predicts what will happen in the next <b id="pillMinutes">${predictMinutes} minutes</b> — so you can act before a crisis hits.
         </div>
 
         <div id="beginnerAlertsList">
             ${renderLoadingSkeleton()}
+        </div>
+
+        <div id="aiProvenancePanel" style="display:none; background:#fff; border:1px solid #EDF2F0; border-radius:16px; padding:14px 16px; margin-top:12px; box-shadow:0 1px 4px rgba(0,0,0,0.04);">
         </div>
     </div>`;
 }
@@ -144,23 +118,32 @@ async function loadBeginnerAlerts() {
     if (!container) { isLoading = false; return; }
     container.innerHTML = renderLoadingSkeleton();
 
-    try {
-        const deviceId   = AppState.currentFarmId || AppState.deviceId || 'farm_001';
-        const pkgLevel   = AppState.packageLevel || 'pro';
+    // Hide provenance panel while loading
+    const provPanel = document.getElementById('aiProvenancePanel');
+    if (provPanel) provPanel.style.display = 'none';
 
-        // 1. Fetch sensor data in parallel
+    try {
+        const deviceId  = AppState.currentFarmId || AppState.deviceId || 'farm_001';
+        const pkgLevel  = AppState.packageLevel || 'pro';
+
+        // 1. Fetch real Firebase sensor data in parallel
         const [latestRes, historyRes] = await Promise.all([
             fetch(`${API}/api/sensors/latest?deviceId=${deviceId}`),
             fetch(`${API}/api/sensors/history?deviceId=${deviceId}&limit=10`),
         ]);
 
-        const latestData  = await latestRes.json();
-        const historyData = await historyRes.json();
+        const latestData   = await latestRes.json();
+        const historyData  = await historyRes.json();
 
-        const latestReading  = latestData.reading  || {};
-        const historyReadings = historyData.readings || [];
+        const latestReading   = latestData.reading   || {};
+        const historyReadings = historyData.readings  || [];
 
-        // 2. Call our new AI endpoint
+        // Warn if no data came back
+        if (historyReadings.length === 0) {
+            console.warn(`[AlertsListBeginner] Firebase returned 0 readings for deviceId="${deviceId}". Sensor may be offline.`);
+        }
+
+        // 2. Call AI endpoint with real Firebase data
         const aiRes = await fetch(`${API}/api/alerts/predict-beginner`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -175,18 +158,26 @@ async function loadBeginnerAlerts() {
 
         const aiData = await aiRes.json();
         const alerts = Array.isArray(aiData.alerts) ? aiData.alerts : [];
+        const aiMeta = aiData.aiMeta || null;
 
-        if (alerts.length === 0) {
-            container.innerHTML = renderStableCard();
+        // Show AI provenance panel
+        if (aiMeta && provPanel) {
+            provPanel.style.display = 'block';
+            provPanel.innerHTML = renderAiProvenancePanel(aiMeta, pkgLevel);
+        }
+
+        // If Firebase returned no data, show offline card — don't trust AI output
+        if (aiMeta && !aiMeta.hasRealData) {
+            container.innerHTML = renderOfflineCard(deviceId);
+        } else if (alerts.length === 0) {
+            container.innerHTML = renderStableCard(historyReadings.length);
         } else {
             renderBeginnerAlerts(container, alerts, pkgLevel);
         }
 
     } catch (err) {
-        console.warn('[AlertsListBeginner] Falling back to demo data:', err.message);
-        const pkgLevel = AppState.packageLevel || 'pro';
-        const demoAlerts = DEMO_ALERTS[pkgLevel] || DEMO_ALERTS.pro;
-        renderBeginnerAlerts(container, demoAlerts, pkgLevel, /* isDemo */ true);
+        console.error('[AlertsListBeginner] Error:', err.message);
+        container.innerHTML = renderErrorCard(err.message);
     } finally {
         isLoading = false;
     }
@@ -204,34 +195,32 @@ function renderBeginnerAlerts(container, alerts, pkgLevel, isDemo = false) {
 
     container.innerHTML = demoTag + alerts.map((a, i) => renderAlertCard(a, i)).join('');
 
-    // Bind action buttons
     container.querySelectorAll('[data-action-btn]').forEach(btn => {
         btn.onclick = () => handleAction(btn);
     });
 
-    // Bind detail buttons
     container.querySelectorAll('[data-detail-btn]').forEach(btn => {
         btn.onclick = () => {
             showScreen('alert-detail', {
-                title: btn.dataset.title,
-                prediction: btn.dataset.prediction,
+                title:          btn.dataset.title,
+                prediction:     btn.dataset.prediction,
                 projectedValue: btn.dataset.projected,
-                confidence: btn.dataset.confidence,
-                risk: btn.dataset.risk,
-                mode: 'beginner',
+                confidence:     btn.dataset.confidence,
+                risk:           btn.dataset.risk,
+                mode:           'beginner',
             });
         };
     });
 }
 
 function renderAlertCard(a, index) {
-    const sev       = SEV[a.severity] || SEV.warning;
-    const riskConf  = RISK_ACTIONS[a.risk] || RISK_ACTIONS.default;
-    const confPct   = Math.round((a.confidence || 0.8) * 100);
+    const sev      = SEV[a.severity] || SEV.warning;
+    const riskConf = RISK_ACTIONS[a.risk] || RISK_ACTIONS.default;
+    const confPct  = Math.round((a.confidence || 0.8) * 100);
 
     return `
     <div style="background:${sev.bg}; border:1.5px solid ${sev.border}; border-radius:24px; padding:22px; margin-bottom:14px; animation: fadeSlide 0.3s ease both; animation-delay:${index * 0.08}s;">
-        
+
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;">
             <div style="display:flex; gap:12px; align-items:center;">
                 <div style="width:48px; height:48px; background:white; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.5rem; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
@@ -239,7 +228,7 @@ function renderAlertCard(a, index) {
                 </div>
                 <div>
                     <b style="color:#1E293B; font-size:1rem; display:block;">${a.title}</b>
-                    <span style="color:#6B7280; font-size:0.72rem;">SeedDown AI · ${predictMinutes}m window</span>
+                    <span style="color:#6B7280; font-size:0.72rem;">SeedDown AI · ${predictMinutes}m window · Live Firebase data</span>
                 </div>
             </div>
             <div style="background:${sev.badge}; color:${sev.badgeTxt}; padding:5px 10px; border-radius:10px; font-size:0.62rem; font-weight:800; white-space:nowrap;">
@@ -250,6 +239,11 @@ function renderAlertCard(a, index) {
         <p style="color:#374151; font-size:0.88rem; line-height:1.55; margin-bottom:14px; padding:12px 14px; background:rgba(255,255,255,0.6); border-radius:12px;">
             ${a.prediction}
         </p>
+
+        <div style="background:rgba(255,255,255,0.7); border-radius:12px; padding:10px 14px; margin-bottom:14px; border:1px solid ${sev.border};">
+            <div style="font-size:0.65rem; color:#6B7280; font-weight:700; margin-bottom:3px;">🔧 RECOMMENDED ACTION</div>
+            <div style="font-size:0.85rem; color:#374151;">${a.action}</div>
+        </div>
 
         <div style="display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
             <div style="background:white; border-radius:12px; padding:8px 14px; flex:1; min-width:120px; border:1px solid ${sev.border};">
@@ -285,18 +279,72 @@ function renderAlertCard(a, index) {
     </div>`;
 }
 
-function renderStableCard() {
+function renderAiProvenancePanel(meta, pkgLevel) {
+    const time = meta.generatedAt ? new Date(meta.generatedAt).toLocaleTimeString() : '–';
+    const slopes = meta.slopeSummary || {};
+    const dataStatus = meta.hasRealData
+        ? `<span style="color:#166534; font-weight:700;">✅ ${meta.readingCount} real readings from Firebase</span>`
+        : `<span style="color:#B45309; font-weight:700;">⚠️ No sensor data — device may be offline</span>`;
+
+    return `
+    <div style="font-size:0.75rem; color:#6B7280; line-height:1.7;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <div style="width:8px; height:8px; background:#22C55E; border-radius:50%; animation:pulse 2s infinite;"></div>
+            <b style="color:#064E3B; font-size:0.82rem;">🧠 AI Response — Live, Not Hardcoded</b>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
+            <div style="background:#F0FDF4; border-radius:8px; padding:7px 10px; border:1px solid #BBF7D0;">
+                <div style="color:#6B7280; font-size:0.62rem; font-weight:700; margin-bottom:2px;">⏰ Generated At</div>
+                <div style="color:#064E3B; font-weight:700;">${time}</div>
+            </div>
+            <div style="background:#F0FDF4; border-radius:8px; padding:7px 10px; border:1px solid #BBF7D0;">
+                <div style="color:#6B7280; font-size:0.62rem; font-weight:700; margin-bottom:2px;">🔑 Prompt Hash</div>
+                <div style="color:#064E3B; font-weight:700; font-family:monospace;">#${meta.promptHash || '–'}</div>
+            </div>
+        </div>
+        <div style="background:#F0FDF4; border-radius:8px; padding:7px 10px; border:1px solid #BBF7D0; margin-bottom:6px;">
+            <div style="color:#6B7280; font-size:0.62rem; font-weight:700; margin-bottom:2px;">📡 Firebase Data Source</div>
+            ${dataStatus}
+        </div>
+        <div style="background:#F0FDF4; border-radius:8px; padding:7px 10px; border:1px solid #BBF7D0;">
+            <div style="color:#6B7280; font-size:0.62rem; font-weight:700; margin-bottom:3px;">📊 Sensor Trends (slope per reading, sent to AI)</div>
+            <div style="color:#374151;">
+                Temp: <b>${slopes.temp ?? '–'}</b> · Soil: <b>${slopes.soil ?? '–'}</b>
+                ${pkgLevel !== 'starter' ? ` · Water: <b>${slopes.water ?? '–'}</b>` : ''}
+                ${pkgLevel === 'pro' ? ` · EC: <b>${slopes.ec ?? '–'}</b> · CO₂: <b>${slopes.co2 ?? '–'}</b>` : ''}
+            </div>
+        </div>
+        <div style="margin-top:6px; font-size:0.68rem; color:#9CA3AF; text-align:center;">
+            Every analysis is unique — compare the prompt hash across runs to confirm AI is re-generating
+        </div>
+    </div>`;
+}
+
+function renderStableCard(readingCount) {
     return `
     <div style="background:#F0FDF4; border:1.5px solid #BBF7D0; border-radius:24px; padding:36px 24px; text-align:center;">
         <div style="font-size:3rem; margin-bottom:12px;">✅</div>
         <b style="font-size:1.1rem; color:#064E3B; display:block; margin-bottom:8px;">All Systems Stable</b>
         <p style="color:#6B7280; font-size:0.88rem; line-height:1.5;">
-            AI analyzed your last 10 sensor readings for the next ${predictMinutes} minutes.<br>
+            AI analyzed ${readingCount > 0 ? `your last ${readingCount} real Firebase readings` : 'your sensor data'} for the next ${predictMinutes} minutes.<br>
             No risks detected. Keep monitoring!
         </p>
-        <button onclick="window._reloadBeginnerAlerts?.()" 
+        <button onclick="window._reloadBeginnerAlerts?.()"
             style="margin-top:16px; background:#064E3B; color:white; border:none; padding:12px 24px; border-radius:14px; font-weight:700; cursor:pointer;">
             🔄 Re-analyze
+        </button>
+    </div>`;
+}
+
+function renderErrorCard(msg) {
+    return `
+    <div style="background:#FEF2F2; border:1.5px solid #FECACA; border-radius:24px; padding:28px 24px; text-align:center;">
+        <div style="font-size:2.5rem; margin-bottom:12px;">❌</div>
+        <b style="font-size:1rem; color:#991B1B; display:block; margin-bottom:8px;">Connection Error</b>
+        <p style="color:#6B7280; font-size:0.82rem; line-height:1.5; margin-bottom:16px;">${msg}</p>
+        <button onclick="window._reloadBeginnerAlerts?.()"
+            style="background:#EF4444; color:#fff; border:none; padding:12px 24px; border-radius:14px; font-weight:700; cursor:pointer;">
+            🔄 Retry
         </button>
     </div>`;
 }
@@ -316,7 +364,7 @@ function renderLoadingSkeleton() {
         </div>`
     ).join('') + `
     <div style="text-align:center; padding:20px; color:#9CA3AF; font-size:0.82rem;">
-        🛰️ AI engine analyzing sensor trends…
+        🛰️ Fetching your Firebase sensor data…
     </div>`;
 }
 
@@ -329,7 +377,6 @@ function handleAction(btn) {
     btn.textContent   = '⏳ Sending…';
     btn.disabled      = true;
 
-    // Send IoT command to backend
     fetch(`${API}/api/sensors/command`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -339,13 +386,13 @@ function handleAction(btn) {
             source:   'predictive_alert',
             note:     `AI-triggered action: ${title}`,
         }),
-    }).catch(() => {}); // fire and forget
+    }).catch(() => {});
 
     setTimeout(() => {
-        btn.style.background  = '#064E3B';
-        btn.style.opacity     = '1';
-        btn.textContent       = '✅ Action Sent';
-        btn.disabled          = false;
+        btn.style.background = '#064E3B';
+        btn.style.opacity    = '1';
+        btn.textContent      = '✅ Action Sent';
+        btn.disabled         = false;
         showToast('success', `✅ ${title} — intervention triggered!`);
     }, 800);
 }
@@ -362,10 +409,29 @@ function riskToCommand(risk) {
     return map[risk] || 'ALERT_ACK';
 }
 
-// Expose reload function globally for the "Re-analyze" button
+
+function renderOfflineCard(deviceId) {
+    return `
+    <div style="background:#FFFBEB; border:1.5px solid #FDE68A; border-radius:24px; padding:32px 24px; text-align:center;">
+        <div style="font-size:3rem; margin-bottom:12px;">📡</div>
+        <b style="font-size:1.1rem; color:#92400E; display:block; margin-bottom:10px;">No Sensor Data from Firebase</b>
+        <p style="color:#6B7280; font-size:0.85rem; line-height:1.6; margin-bottom:16px;">
+            Your device <code style="background:#FEF3C7; padding:2px 6px; border-radius:4px; font-size:0.8rem;">${deviceId}</code>
+            hasn't sent any readings yet.<br><br>
+            This usually means:<br>
+            • The sensor device is offline or unpowered<br>
+            • The deviceId in your farm settings doesn't match the device<br>
+            • The device hasn't sent its first reading yet
+        </p>
+        <button onclick="window._reloadBeginnerAlerts?.()"
+            style="background:#D97706; color:#fff; border:none; padding:12px 24px; border-radius:14px; font-weight:700; cursor:pointer;">
+            🔄 Check Again
+        </button>
+    </div>`;
+}
+
 window._reloadBeginnerAlerts = loadBeginnerAlerts;
 
-// CSS animation
 if (!document.getElementById('alertAnimStyle')) {
     const style = document.createElement('style');
     style.id = 'alertAnimStyle';
@@ -373,6 +439,10 @@ if (!document.getElementById('alertAnimStyle')) {
         @keyframes fadeSlide {
             from { opacity:0; transform:translateY(12px); }
             to   { opacity:1; transform:translateY(0); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity:1; }
+            50% { opacity:0.4; }
         }`;
     document.head.appendChild(style);
 }
