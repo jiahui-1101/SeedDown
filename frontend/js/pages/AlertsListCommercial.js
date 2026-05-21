@@ -207,13 +207,32 @@ let _cachedMeta   = null;
 let _cachedZones  = [];
 let _cachedMasterHistory = [];
 
+function normalizeCommercialZoneId(zoneId) {
+    const raw = String(zoneId || '').trim();
+    if (!raw) return '';
+    if (raw.startsWith('zone_')) return raw;
+    if (/^[A-F]$/i.test(raw)) return `zone_${raw.toUpperCase()}`;
+    return raw;
+}
+
 function resolveZoneDeviceId(zoneId) {
+    const normalizedZone = normalizeCommercialZoneId(zoneId);
+    const farm = AppState.currentFarm || {};
+    const activeDevice = Array.isArray(farm.commercialDevices)
+        ? farm.commercialDevices.find(device =>
+            device.active !== false &&
+            device.status !== 'replaced' &&
+            normalizeCommercialZoneId(device.targetId || device.zoneId || device.zone) === normalizedZone
+        )
+        : null;
+    if (activeDevice?.deviceId) return activeDevice.deviceId;
+
     const map = {
         'zone_A': 'commercial-zone-node-1',
         'zone_B': 'commercial-zone-node-2',
         'zone_C': 'commercial-zone-node-3',
     };
-    return map[zoneId] || zoneId;
+    return map[normalizedZone] || normalizedZone;
 }
 
 async function loadCommercialAlerts() {
@@ -565,9 +584,11 @@ function renderCommercialSkeleton() {
 // ── Action handler ─────────────────────────────────────────────────
 function handleCommercialAction(btn) {
     const risk  = btn.dataset.risk;
-    const zone  = btn.dataset.zone;
+    const zone  = normalizeCommercialZoneId(btn.dataset.zone);
     const title = decodeURIComponent(btn.dataset.title || 'Alert');
     const masterDeviceId = 'commercial-farm-master-1';
+    const command = commercialRiskToCommand(risk);
+    const targetDeviceId = zone ? resolveZoneDeviceId(zone) : masterDeviceId;
 
     btn.style.opacity = '0.5';
     btn.textContent   = '⏳ Queuing…';
@@ -577,11 +598,11 @@ function handleCommercialAction(btn) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            deviceId: masterDeviceId,
+            deviceId: targetDeviceId,
             zoneId:   zone || null,
-            command:  commercialRiskToCommand(risk),
+            command,
             source:   'predictive_alert_commercial',
-            note:     `AI-triggered: ${title}${zone ? ` (Zone ${zone})` : ''}`,
+            reason:   `AI-triggered: ${title}${zone ? ` (${zone})` : ''}`,
         }),
     }).catch(() => {});
 
@@ -589,24 +610,24 @@ function handleCommercialAction(btn) {
         btn.style.background = '#064E3B';
         btn.style.color      = '#fff';
         btn.style.opacity    = '1';
-        btn.textContent      = '✅ Queued';
+        btn.textContent      = `✅ ${command}`;
         btn.disabled         = false;
-        showToast('success', `✅ ${title} — IoT command sent${zone ? ` to Zone ${zone}` : ''}`);
+        showToast('success', `✅ ${title} — ${command} queued${zone ? ` for ${zone}` : ''}`);
     }, 700);
 }
 
 function commercialRiskToCommand(risk) {
     const map = {
-        water_depletion:   'PUMP_HALT_REFILL_ALERT',
-        energy_overload:   'REDUCE_LIGHT_INTENSITY',
-        co2_crisis:        'VENTILATION_MAX',
-        zone_heat:         'ZONE_COOLING_ON',
-        zone_rot:          'ZONE_FAN_BOOST',
-        zone_ec_burn:      'ZONE_DILUTE_EC',
-        zone_ec_deficient: 'ZONE_BOOST_EC',
-        zone_clog:         'ZONE_FLUSH_CYCLE',
+        water_depletion:   'BUZZER_ON',
+        energy_overload:   'NO_ACTION',
+        co2_crisis:        'FAN_ON,CO2_LOW',
+        zone_heat:         'FAN_ON',
+        zone_rot:          'FAN_ON',
+        zone_ec_burn:      'FERT_ALERT',
+        zone_ec_deficient: 'FERT_ALERT',
+        zone_clog:         'WATER_ON',
     };
-    return map[risk] || 'COMMERCIAL_ALERT_ACK';
+    return map[risk] || 'BUZZER_ON';
 }
 
 window._reloadCommercialAlerts = loadCommercialAlerts;
