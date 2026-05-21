@@ -1,4 +1,4 @@
-import{s}from"./index-DdEhl5tx.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function o(){var a;const e=document.getElementById("screenContainer");e.innerHTML=`
+import{s}from"./index-CsAh1mPh.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function o(){var a;const e=document.getElementById("screenContainer");e.innerHTML=`
         <div class="screen active" id="splashScreen">
             <div class="splash-inner" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px;">
                 <div class="splash-badge" style="font-size:0.72rem; background:var(--accent-l); padding:8px 16px; border-radius:30px;">Smart Vertical Farm</div>
@@ -41,6 +41,11 @@ import{s}from"./index-DdEhl5tx.js";import"https://esm.sh/three@0.160.0";import"h
             background: #ffffff !important;
             color: #12312f;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+        #splashScreen *,
+        #splashScreen *::before,
+        #splashScreen *::after {
+            box-sizing: border-box;
         }
         #splashScreen .splash-inner {
             width: 100%;
@@ -192,6 +197,19 @@ import{s}from"./index-DdEhl5tx.js";import"https://esm.sh/three@0.160.0";import"h
         @media (max-width: 380px) {
             .package-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 430px) {
+            #splashScreen .splash-inner {
+                max-width: 100%;
+                padding-left: 18px !important;
+                padding-right: 18px !important;
+            }
+            .package-grid {
+                grid-template-columns: 1fr;
+            }
+            .splash-feature {
+                font-size: 14px;
             }
         }
     `,document.head.appendChild(e)}export{o as render};

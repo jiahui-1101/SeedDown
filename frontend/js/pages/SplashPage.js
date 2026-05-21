@@ -60,6 +60,11 @@ function ensureSplashStyles() {
             color: #12312f;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
+        #splashScreen *,
+        #splashScreen *::before,
+        #splashScreen *::after {
+            box-sizing: border-box;
+        }
         #splashScreen .splash-inner {
             width: 100%;
             max-width: 500px;
@@ -210,6 +215,19 @@ function ensureSplashStyles() {
         @media (max-width: 380px) {
             .package-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 430px) {
+            #splashScreen .splash-inner {
+                max-width: 100%;
+                padding-left: 18px !important;
+                padding-right: 18px !important;
+            }
+            .package-grid {
+                grid-template-columns: 1fr;
+            }
+            .splash-feature {
+                font-size: 14px;
             }
         }
     `;
