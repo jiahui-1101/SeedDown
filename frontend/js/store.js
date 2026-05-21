@@ -8,6 +8,7 @@ function savedMode() {
 
 export const AppState = {
     mode: savedMode(),
+    packageLevel: localStorage.getItem('seeddown_package') || 'pro',
     currentScreen: 'splash',
     farmName: 'My Farm',
     currentFarmId: null,

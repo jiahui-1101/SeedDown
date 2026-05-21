@@ -197,13 +197,14 @@ document.getElementById('farmMasterDetailBtn')?.addEventListener('click', () => 
             const feature = el.getAttribute('data-feature');
             clearInterval(AppState.proInterval);
             if (feature === 'whatif') showScreen('whatif-pro');
-            else if (feature === 'control') showScreen('control');
-            else if (feature === 'disease') showScreen('disease');
-            else if (feature === 'camera') {
-                initProDashboard();
-                openZoneCameraModal();
-            }
-            else showScreen('feature', { feature, from: 'dash-c' });
+else if (feature === 'control') showScreen('control');
+else if (feature === 'disease') showScreen('disease');
+else if (feature === 'camera') {
+    initProDashboard();
+    openZoneCameraModal();
+}
+else if (feature === 'alerts') showScreen('alert-commercial');  // ← 加这行
+else showScreen('feature', { feature, from: 'dash-c' });
         });
     });
 
