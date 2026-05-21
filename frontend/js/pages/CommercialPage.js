@@ -46,6 +46,7 @@ const DEMO_COMMERCIAL_FARM_MASTER = 'commercial-farm-master-1';
 export function render() {
     const container = document.getElementById('screenContainer');
     const farm = getCurrentFarm();
+    AppState.currentFarm = farm; 
     const rack = resolveRack(farm);
     const plantTotal = plantCount(farm);
     const occupancy = rack.total ? Math.min(100, Math.round((plantTotal / rack.total) * 100)) : 0;

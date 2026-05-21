@@ -74,11 +74,11 @@ exports.predictBeginner = async (req, res) => {
     // Extract trends from real Firebase history
     const temps   = extractField(historyReadings, 'temperature');
     const humids  = extractField(historyReadings, 'humidity');
-    const soils   = extractField(historyReadings, 'soilMoisture');
+    const soils = extractField(historyReadings, 'waterDistanceCm');
     const waters  = extractField(historyReadings, 'waterDistanceCm');
-    const ecs     = extractField(historyReadings, 'ec');
+    const ecs    = extractField(historyReadings, 'gasRaw'); 
     const phs     = extractField(historyReadings, 'ph');
-    const co2s    = extractField(historyReadings, 'co2Ppm');
+    const co2s   = extractField(historyReadings, 'gasRaw');
 
     const tempSlope  = slope(temps);
     const soilSlope  = slope(soils);
@@ -89,10 +89,10 @@ exports.predictBeginner = async (req, res) => {
 
     const steps = predictMinutes / 5;
     const projTemp  = (latestReading.temperature     || temps.at(-1)  || 25)  + tempSlope  * steps;
-    const projSoil  = (latestReading.soilMoisture    || soils.at(-1)  || 50)  + soilSlope  * steps;
+    const projSoil = (latestReading.waterDistanceCm || soils.at(-1) || 10) + soilSlope * steps;
     const projWater = (latestReading.waterDistanceCm || waters.at(-1) || 10)  + waterSlope * steps;
-    const projEc    = (latestReading.ec              || ecs.at(-1)    || 1.5) + ecSlope    * steps;
-    const projCo2   = (latestReading.co2Ppm          || co2s.at(-1)  || 800) + co2Slope   * steps;
+    const projEc    = (latestReading.gasRaw           || ecs.at(-1)    || 1.5) + ecSlope    * steps;
+    const projCo2   = (latestReading.gasRaw           || co2s.at(-1)  || 800) + co2Slope   * steps;
 
     const dataReadingCount = historyReadings.length;
     const hasRealData = dataReadingCount > 0;

@@ -59,7 +59,12 @@ export function render(params = {}) {
 
     // Build a simple illustrative trend line in SVG
     // Slope direction based on risk type
-    const trendSvg = buildTrendSvg(risk, projNum, meta.color);
+    let historyReadings = [];
+try {
+    historyReadings = JSON.parse(decodeURIComponent(params.history || '[]'));
+} catch { historyReadings = []; }
+
+const trendSvg = buildTrendSvg(risk, projNum, meta.color, historyReadings);
 
     // Scope tag for commercial
     const scopeTag = mode === 'commercial'
@@ -151,18 +156,18 @@ export function render(params = {}) {
 // ═════════════════════════════════════════════════════════════════
 export function init(params = {}) {
     setTimeout(() => {
+        console.log('[AlertDetail] params:', params);  // ← 加这行
         const mode = params?.mode || 'beginner';
-        const backTarget = mode === 'commercial' ? 'alert-commercial' : 'alert';
+        const backTarget = mode === 'commercial' ? 'alert-commercial' : 'alert-beginner';
 
         const backTop = document.getElementById('alertDetailBack');
         const backBot = document.getElementById('alertDetailBackBottom');
 
         const goBack = () => {
-            // Try to go back to the right alert list
             if (mode === 'commercial') {
-                showScreen('alert-commercial');
+                showScreen('alert-commercial', { returnScope: params.scope || 'all' });
             } else {
-                showScreen('alert');
+                showScreen('alert-beginner');
             }
         };
 
@@ -184,62 +189,84 @@ function safeDecodeURI(val) {
  * Since we don't have raw history points here, we draw a plausible
  * curve: stable → then trending toward the projected threshold.
  */
-function buildTrendSvg(risk, projNum, color) {
-    // Determine if trend goes up or down based on risk type
-    const goesUp = ['heat_stress', 'zone_heat', 'zone_rot', 'nutrient_burn', 'zone_ec_burn', 'energy_overload'].includes(risk);
-    const goesDown = ['wilting', 'pump_cavitation', 'water_depletion', 'nutrient_deficient', 'zone_ec_deficient', 'co2_crisis'].includes(risk);
-
-    // Build 12 points: first 8 relatively flat, last 4 trending
-    const points = [];
+function buildTrendSvg(risk, projNum, color, historyReadings = []) {
     const W = 300, H = 100;
-    for (let i = 0; i < 12; i++) {
-        const x = (i / 11) * W;
-        let y;
-        if (i < 7) {
-            // Stable zone with minor noise
-            y = H * 0.5 + (Math.sin(i * 1.3) * 6);
-        } else {
-            // Trending portion
-            const t = (i - 7) / 4;
-            if (goesUp)   y = H * 0.5 - t * H * 0.38;
-            else if (goesDown) y = H * 0.5 + t * H * 0.38;
-            else           y = H * 0.5 + (Math.sin(i * 1.3) * 6);
+
+    // 根据 risk 类型决定用哪个 field
+    const fieldMap = {
+        heat_stress:        'temperature',
+        zone_heat:          'temperature',
+        wilting:            'waterDistanceCm',   // soilRaw 是原始值，用水位更准确
+        pump_cavitation:    'waterDistanceCm',
+        water_depletion:    'waterDistanceCm',
+        nutrient_burn:      'ph',
+        nutrient_deficient: 'ph',
+        co2_crisis:         'gasRaw',
+        zone_rot:           'humidity',    // ← 加这行
+    zone_ec_burn:       'ec',          // ← 加这行
+    zone_ec_deficient:  'ec',          // ← 加这行
+    zone_clog:          'waterDistanceCm', // ← 
+    };
+    const field = fieldMap[risk] || 'temperature';
+
+    // 取真实数据点
+    const rawPoints = historyReadings
+        .map(r => parseFloat(r[field]))
+        .filter(v => !isNaN(v))
+        .slice(-10); // 最多用 10 个点
+
+    // 如果没有真实数据，fallback 到原来的假数据
+    const goesUp = ['heat_stress', 'zone_heat', 'nutrient_burn', 'energy_overload'].includes(risk);
+    const goesDown = ['wilting', 'pump_cavitation', 'water_depletion', 'nutrient_deficient', 'co2_crisis'].includes(risk);
+
+    let points = [];
+
+    if (rawPoints.length >= 2) {
+        // 用真实数据
+        const min = Math.min(...rawPoints) * 0.95;
+        const max = Math.max(...rawPoints) * 1.05;
+        const range = max - min || 1;
+
+        points = rawPoints.map((val, i) => {
+            const x = (i / (rawPoints.length - 1)) * W;
+            const y = H - ((val - min) / range) * H * 0.8 - H * 0.1;
+            return `${x.toFixed(1)},${y.toFixed(1)}`;
+        });
+    } else {
+        // Fallback 假数据
+        for (let i = 0; i < 12; i++) {
+            const x = (i / 11) * W;
+            let y;
+            if (i < 7) {
+                y = H * 0.5 + (Math.sin(i * 1.3) * 6);
+            } else {
+                const t = (i - 7) / 4;
+                if (goesUp)        y = H * 0.5 - t * H * 0.38;
+                else if (goesDown) y = H * 0.5 + t * H * 0.38;
+                else               y = H * 0.5 + (Math.sin(i * 1.3) * 6);
+            }
+            points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
         }
-        points.push(`${x.toFixed(1)},${y.toFixed(1)}`);
     }
+
     const polylinePoints = points.join(' ');
     const lastPt = points[points.length - 1].split(',');
-
-    // Threshold line (dashed) at 30% or 70% height
     const threshY = goesUp ? H * 0.12 : goesDown ? H * 0.88 : null;
 
     return `
     <svg viewBox="0 0 300 100" style="width:100%; height:130px; overflow:visible;">
-        <!-- Grid lines -->
         <line x1="0" y1="25" x2="300" y2="25" stroke="#F1F5F9" stroke-width="1"/>
         <line x1="0" y1="50" x2="300" y2="50" stroke="#F1F5F9" stroke-width="1"/>
         <line x1="0" y1="75" x2="300" y2="75" stroke="#F1F5F9" stroke-width="1"/>
-
-        <!-- Threshold danger line -->
         ${threshY != null ? `
         <line x1="0" y1="${threshY}" x2="300" y2="${threshY}"
               stroke="${color}" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.5"/>
         <text x="302" y="${threshY + 4}" font-size="9" fill="${color}" opacity="0.8">threshold</text>
         ` : ''}
-
-        <!-- Stable zone shading -->
-        <rect x="0" y="35" width="${(7/11)*300}" height="30" fill="${color}" opacity="0.04" rx="4"/>
-
-        <!-- Trend line -->
         <polyline points="${polylinePoints}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-
-        <!-- Current point -->
         <circle cx="${lastPt[0]}" cy="${lastPt[1]}" r="5" fill="${color}" opacity="0.9"/>
         <circle cx="${lastPt[0]}" cy="${lastPt[1]}" r="9" fill="${color}" opacity="0.15"/>
-
-        <!-- "NOW" label -->
-        <line x1="${(7/11)*300}" y1="0" x2="${(7/11)*300}" y2="100" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="${(7/11)*300 + 4}" y="12" font-size="9" fill="#94A3B8">NOW</text>
-        <text x="${(7/11)*300 - 28}" y="12" font-size="9" fill="#94A3B8">HISTORY</text>
+        <text x="4" y="12" font-size="9" fill="#94A3B8">HISTORY (${rawPoints.length > 0 ? 'live' : 'demo'})</text>
+        <text x="${parseFloat(lastPt[0]) - 10}" y="12" font-size="9" fill="${color}">NOW</text>
     </svg>`;
 }

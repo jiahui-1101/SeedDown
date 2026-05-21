@@ -43,25 +43,23 @@ const pages = {
     
     // 💡 警报详情页：渲染 HTML 后触发事件挂载
     "alert-detail": (params) => import("./pages/AlertDetailPage.js").then((m) => { 
-        const html = m.render(params); 
-        m.init?.(); 
-        return html;
-    }),
+    const html = m.render(params); 
+    m.init?.(params);  // ← 加 params
+    return html;
+}),
 
     // 💡 策略模拟优化版 Pro Feature 页面
     "whatif-pro": () => import("./pages/WhatIfPro.js").then((m) => m.renderScreen()),
 
     // 🛰️ Predictive Alert 预测性警报页面（拆分初学者版与商业专业版）
-    "alert-beginner": () => import("./pages/AlertsListBeginner.js").then((m) => {
-        const html = m.render();
-        m.init?.();
-        return html;
-    }),
-    "alert-commercial": () => import("./pages/AlertsListCommercial.js").then((m) => {
-        const html = m.render();
-        m.init?.();
-        return html;
-    }),
+    "alert-beginner": (params) => import("./pages/AlertsListBeginner.js").then((m) => {
+    m.render(params);
+    m.init?.(params);
+}),
+"alert-commercial": (params) => import("./pages/AlertsListCommercial.js").then((m) => {
+    m.render(params);
+    m.init?.(params);
+}),
 };
 
 // 监听 DOM 加载完毕，初始化主系统组件与后台物联网模拟服务

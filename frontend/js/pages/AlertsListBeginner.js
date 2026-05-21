@@ -110,6 +110,16 @@ export async function init() {
 // ═════════════════════════════════════════════════════════════════
 //  Core data + AI logic
 // ═════════════════════════════════════════════════════════════════
+function resolveBeginnerDeviceId(farm) {
+    const pkg = farm?.packageLevel || AppState.packageLevel || 'standard';
+    const map = {
+        'starter':  'beginner_starter',
+        'standard': 'beginner_standard',
+        'pro':      'beginner_pro',
+    };
+    return map[pkg] || 'beginner_standard';
+}
+
 async function loadBeginnerAlerts() {
     if (isLoading) return;
     isLoading = true;
@@ -123,7 +133,7 @@ async function loadBeginnerAlerts() {
     if (provPanel) provPanel.style.display = 'none';
 
     try {
-        const deviceId  = AppState.currentFarmId || AppState.deviceId || 'farm_001';
+        const deviceId = resolveBeginnerDeviceId(AppState.currentFarm);  // ← 这里用
         const pkgLevel  = AppState.packageLevel || 'pro';
 
         // 1. Fetch real Firebase sensor data in parallel
@@ -134,7 +144,13 @@ async function loadBeginnerAlerts() {
 
         const latestData   = await latestRes.json();
         const historyData  = await historyRes.json();
-
+        console.log('[Debug] deviceId used:', deviceId);
+        console.log('[Debug] latestReading:', latestData.reading);
+        console.log('[Debug] historyReadings count:', historyData.readings?.length);
+        console.log('[Debug] historyReadings[0]:', historyData.readings?.[0]);
+        console.log('[Debug] currentFarm:', AppState.currentFarm);
+        console.log('[Debug] currentFarm.deviceId:', AppState.currentFarm?.deviceId);  // ← 加这行
+        console.log('[Debug] deviceId used:', deviceId);
         const latestReading   = latestData.reading   || {};
         const historyReadings = historyData.readings  || [];
 
@@ -172,7 +188,7 @@ async function loadBeginnerAlerts() {
         } else if (alerts.length === 0) {
             container.innerHTML = renderStableCard(historyReadings.length);
         } else {
-            renderBeginnerAlerts(container, alerts, pkgLevel);
+            renderBeginnerAlerts(container, alerts, pkgLevel, false, historyReadings);
         }
 
     } catch (err) {
@@ -186,14 +202,14 @@ async function loadBeginnerAlerts() {
 // ═════════════════════════════════════════════════════════════════
 //  UI Renderers
 // ═════════════════════════════════════════════════════════════════
-function renderBeginnerAlerts(container, alerts, pkgLevel, isDemo = false) {
+function renderBeginnerAlerts(container, alerts, pkgLevel, isDemo = false, historyReadings = []) {
     const demoTag = isDemo
         ? `<div style="background:#FEF9C3; border:1px solid #FDE047; border-radius:12px; padding:10px 14px; margin-bottom:14px; font-size:0.78rem; color:#854D0E;">
                ⚠️ <b>Demo mode</b> — backend offline. Showing example predictions.
            </div>`
         : '';
 
-    container.innerHTML = demoTag + alerts.map((a, i) => renderAlertCard(a, i)).join('');
+        container.innerHTML = demoTag + alerts.map((a, i) => renderAlertCard(a, i, historyReadings)).join('');
 
     container.querySelectorAll('[data-action-btn]').forEach(btn => {
         btn.onclick = () => handleAction(btn);
@@ -208,12 +224,13 @@ function renderBeginnerAlerts(container, alerts, pkgLevel, isDemo = false) {
                 confidence:     btn.dataset.confidence,
                 risk:           btn.dataset.risk,
                 mode:           'beginner',
+                history:        btn.dataset.history,   // ← 加这行
             });
         };
     });
 }
 
-function renderAlertCard(a, index) {
+function renderAlertCard(a, index, historyReadings = []) {
     const sev      = SEV[a.severity] || SEV.warning;
     const riskConf = RISK_ACTIONS[a.risk] || RISK_ACTIONS.default;
     const confPct  = Math.round((a.confidence || 0.8) * 100);
@@ -272,6 +289,7 @@ function renderAlertCard(a, index) {
                 data-projected="${encodeURIComponent(a.projectedValue || '')}"
                 data-confidence="${a.confidence || 0.8}"
                 data-risk="${a.risk}"
+                data-history="${encodeURIComponent(JSON.stringify(historyReadings))}"
                 style="background:white; color:#374151; border:1.5px solid ${sev.border}; padding:14px 16px; border-radius:16px; font-weight:700; cursor:pointer; font-size:0.85rem;">
                 📈 Detail
             </button>

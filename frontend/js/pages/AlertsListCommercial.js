@@ -105,7 +105,7 @@ function _buildCommercialHTML() {
 // ═════════════════════════════════════════════════════════════════
 //  init()
 // ═════════════════════════════════════════════════════════════════
-export async function init() {
+export async function init(params = {}) {
     setTimeout(() => {
         const backBtn = document.getElementById('alertCommercialBack');
         if (backBtn) backBtn.onclick = () => showScreen('dash-c');
@@ -138,7 +138,23 @@ export async function init() {
             };
         });
 
-        loadCommercialAlerts();
+        if (_cachedAlerts.length > 0) {
+            // 有缓存，直接渲染，不重新 fetch
+            const container = document.getElementById('commercialAlertsList');
+            const provPanel = document.getElementById('aiProvenancePanel');
+            if (container) renderCommercialAlerts(container, _cachedAlerts, _cachedZones, _cachedMasterHistory);
+            if (provPanel && _cachedMeta) {
+                provPanel.style.display = 'block';
+                provPanel.innerHTML = renderAiProvenancePanel(_cachedMeta, _cachedZones.length);
+            }
+            const returnScope = params?.returnScope || 'all';
+    if (returnScope !== 'all') {
+        const tab = document.querySelector(`.scope-tab[data-scope="${returnScope}"]`);
+        if (tab) tab.click();
+    }
+        } else {
+            loadCommercialAlerts();
+        }
     }, 50);
 }
 
@@ -146,65 +162,38 @@ export async function init() {
 //  Zone discovery — reads your actual zones from Firebase farm doc
 // ═════════════════════════════════════════════════════════════════
 async function discoverZoneIds(masterDeviceId) {
-    // 1. Try AppState first (already loaded during session)
-    if (Array.isArray(AppState.zoneIds) && AppState.zoneIds.length > 0) {
-        return AppState.zoneIds;
+    const farm = AppState.currentFarm;
+    console.log('[discoverZoneIds] currentFarm:', farm);  // ← 加这行
+
+    if (!Array.isArray(farm?.zones) || farm.zones.length === 0) {
+        console.warn('[discoverZoneIds] No zones found, using hardcode fallback');
+        return ['zone_A', 'zone_B', 'zone_C'];  // ← 临时 hardcode
     }
-
-    // 2. Try fetching the farm doc from backend (which reads Firebase)
-    const farmId = AppState.currentFarmId || masterDeviceId;
-    try {
-        const farmRes = await fetch(`${API}/api/farms/${farmId}`);
-        if (farmRes.ok) {
-            const farmData = await farmRes.json();
-            const farm = farmData.farm || farmData;
-
-            // zones array: [{zoneId, ...}] or [{id,...}]
-            if (Array.isArray(farm.zones) && farm.zones.length > 0) {
-                const ids = farm.zones.map(z => z.zoneId || z.id || z.fieldId).filter(Boolean);
-                if (ids.length > 0) {
-                    AppState.zoneIds = ids;
-                    return ids;
-                }
-            }
-
-            // commercialDevices array
-            if (Array.isArray(farm.commercialDevices) && farm.commercialDevices.length > 0) {
-                const ids = farm.commercialDevices.map(d => d.zoneId || d.id).filter(Boolean);
-                if (ids.length > 0) {
-                    AppState.zoneIds = ids;
-                    return ids;
-                }
-            }
-
-            // farmMaster with zone list
-            if (farm.farmMaster?.zones) {
-                const ids = farm.farmMaster.zones.map(z => z.zoneId || z.id).filter(Boolean);
-                if (ids.length > 0) {
-                    AppState.zoneIds = ids;
-                    return ids;
-                }
-            }
+    
+    // 从 currentFarm.zones 取 zone_id
+    if (Array.isArray(farm?.zones) && farm.zones.length > 0) {
+        const ids = farm.zones
+            .map(z => z.zone_id || z.zoneId)
+            .filter(Boolean);
+        if (ids.length > 0) {
+            console.log('[discoverZoneIds] from currentFarm.zones:', ids);
+            return ids;
         }
-    } catch (e) {
-        console.warn('[discoverZoneIds] Farm doc fetch failed:', e.message);
     }
 
-    // 3. Probe Firebase sensor collection for all zoneIds with this deviceId
-    try {
-        const probeRes = await fetch(`${API}/api/sensors/zones?deviceId=${masterDeviceId}`);
-        if (probeRes.ok) {
-            const probeData = await probeRes.json();
-            if (Array.isArray(probeData.zoneIds) && probeData.zoneIds.length > 0) {
-                AppState.zoneIds = probeData.zoneIds;
-                return probeData.zoneIds;
-            }
+    // Fallback — 从 commercialDevices 取 zone_node
+    if (Array.isArray(farm?.commercialDevices) && farm.commercialDevices.length > 0) {
+        const ids = farm.commercialDevices
+            .filter(d => d.nodeType === 'zone_node' && d.zoneId)
+            .map(d => d.zoneId)
+            .filter(Boolean);
+        if (ids.length > 0) {
+            console.log('[discoverZoneIds] from commercialDevices:', ids);
+            return ids;
         }
-    } catch (e) {
-        console.warn('[discoverZoneIds] Zone probe failed:', e.message);
     }
 
-    // 4. Fallback: return null so the UI can show a config warning
+    console.warn('[discoverZoneIds] Could not find zones in currentFarm');
     return null;
 }
 
@@ -213,6 +202,17 @@ async function discoverZoneIds(masterDeviceId) {
 // ═════════════════════════════════════════════════════════════════
 let _cachedAlerts = [];
 let _cachedMeta   = null;
+let _cachedZones  = [];
+let _cachedMasterHistory = [];
+
+function resolveZoneDeviceId(zoneId) {
+    const map = {
+        'zone_A': 'commercial-zone-node-1',
+        'zone_B': 'commercial-zone-node-2',
+        'zone_C': 'commercial-zone-node-3',
+    };
+    return map[zoneId] || zoneId;
+}
 
 async function loadCommercialAlerts() {
     if (isLoading) return;
@@ -227,10 +227,11 @@ async function loadCommercialAlerts() {
     if (provPanel) provPanel.style.display = 'none';
 
     try {
-        const masterDeviceId = AppState.currentFarmId || 'commercial-farm-master-1';
+        const masterDeviceId = 'commercial-farm-master-1';
 
         // 1. Discover actual zone IDs from Firebase/farm doc
         const zoneIds = await discoverZoneIds(masterDeviceId);
+        console.log('[Debug] discovered zoneIds:', zoneIds);
 
         if (!zoneIds) {
             container.innerHTML = renderZoneConfigWarning(masterDeviceId);
@@ -246,23 +247,31 @@ async function loadCommercialAlerts() {
 
         const masterLatest  = (await masterLatestRes.json()).reading  || {};
         const masterHistory = (await masterHistRes.json()).readings   || [];
+        _cachedMasterHistory = masterHistory;
 
         // 3. Fetch ALL zones in parallel — your real zones, however many
         const zoneResults = await Promise.allSettled(
             zoneIds.map(async zoneId => {
+                const zoneDeviceId = resolveZoneDeviceId(zoneId);  // ← 直接调用
                 const [latestR, histR] = await Promise.all([
-                    fetch(`${API}/api/sensors/latest?deviceId=${masterDeviceId}&zoneId=${zoneId}`),
-                    fetch(`${API}/api/sensors/history?deviceId=${masterDeviceId}&zoneId=${zoneId}&limit=10`),
+                    fetch(`${API}/api/sensors/latest?deviceId=${zoneDeviceId}&zoneId=${zoneId}`),
+                    fetch(`${API}/api/sensors/history?deviceId=${zoneDeviceId}&zoneId=${zoneId}&limit=10`),
                 ]);
                 const latestReading   = (await latestR.json()).reading   || {};
                 const historyReadings = (await histR.json()).readings    || [];
                 return { zoneId, latestReading, historyReadings };
             })
         );
-
         const zones = zoneResults
             .filter(r => r.status === 'fulfilled')
             .map(r => r.value);
+            console.log('[Debug] zones fetched:', zones.map(z => ({
+                zoneId: z.zoneId,
+                historyCount: z.historyReadings.length,
+                latestReading: z.latestReading
+            })));
+
+            _cachedZones = zones;
 
         // 4. Call AI prediction endpoint with real Firebase data
         const aiRes = await fetch(`${API}/api/alerts/predict-commercial`, {
@@ -290,7 +299,7 @@ async function loadCommercialAlerts() {
         if (_cachedAlerts.length === 0) {
             container.innerHTML = renderCommercialStableCard(zoneIds.length);
         } else {
-            renderCommercialAlerts(container, _cachedAlerts);
+            renderCommercialAlerts(container, _cachedAlerts, _cachedZones, _cachedMasterHistory);
         }
 
     } catch (err) {
@@ -308,14 +317,14 @@ function filterAlerts(scope) {
     if (filtered.length === 0) {
         container.innerHTML = `<div style="text-align:center; padding:40px; color:#94A3B8; font-size:0.88rem;">No ${scope}-level alerts detected.</div>`;
     } else {
-        renderCommercialAlerts(container, filtered);
+        renderCommercialAlerts(container, filtered, _cachedZones, _cachedMasterHistory);
     }
 }
 
 // ═════════════════════════════════════════════════════════════════
 //  UI Renderers
 // ═════════════════════════════════════════════════════════════════
-function renderCommercialAlerts(container, alerts) {
+function renderCommercialAlerts(container, alerts, zones = [], masterHistory = []) {
     const critCount = alerts.filter(a => a.severity === 'critical').length;
     const warnCount = alerts.filter(a => a.severity === 'warning').length;
 
@@ -337,7 +346,7 @@ function renderCommercialAlerts(container, alerts) {
             </div>
         </div>`;
 
-    container.innerHTML = summaryBar + alerts.map((a, i) => renderCommercialCard(a, i)).join('');
+        container.innerHTML = summaryBar + alerts.map((a, i) => renderCommercialCard(a, i, zones, masterHistory)).join('');
 
     container.querySelectorAll('[data-comm-action]').forEach(btn => {
         btn.onclick = () => handleCommercialAction(btn);
@@ -345,7 +354,7 @@ function renderCommercialAlerts(container, alerts) {
 
     container.querySelectorAll('[data-comm-detail]').forEach(btn => {
         btn.onclick = () => {
-            showScreen('alert-detail', {
+            const p = {
                 title:          btn.dataset.title,
                 prediction:     btn.dataset.prediction,
                 projectedValue: btn.dataset.projected,
@@ -354,15 +363,26 @@ function renderCommercialAlerts(container, alerts) {
                 scope:          btn.dataset.scope,
                 zoneId:         btn.dataset.zone,
                 mode:           'commercial',
-            });
+                history:        btn.dataset.history,
+            };
+            console.log('[Commercial] showScreen params:', p);  // ← 加这行
+            showScreen('alert-detail', p);
         };
     });
 }
 
-function renderCommercialCard(a, index) {
+function renderCommercialCard(a, index, zones = [], masterHistory = []) {
     const sev      = SEV[a.severity] || SEV.warning;
     const riskConf = RISK_ACTIONS[a.risk] || RISK_ACTIONS.default;
     const confPct  = Math.round((a.confidence || 0.8) * 100);
+    const normalizedZoneId = a.zoneId 
+    ? (a.zoneId.startsWith('zone_') ? a.zoneId : `zone_${a.zoneId}`)
+    : null;
+const matchedZone = zones.find(z => z.zoneId === normalizedZoneId);
+console.log('[Card] a.zoneId:', a.zoneId, '→ normalized:', normalizedZoneId, '| matched:', matchedZone?.zoneId);
+    console.log('[Card] a.zoneId:', a.zoneId, '| zones:', zones.map(z => z.zoneId), '| matched:', matchedZone?.zoneId);
+    const historyData = a.scope === 'farm' ? masterHistory : (matchedZone?.historyReadings || []);
+    const encodedHistory = encodeURIComponent(JSON.stringify(historyData));
     const scopeTag = a.scope === 'farm'
         ? `<span style="background:#EFF6FF; color:#1D4ED8; padding:3px 8px; border-radius:6px; font-size:0.62rem; font-weight:800; border:1px solid #BFDBFE;">🏭 FARM</span>`
         : `<span style="background:#F0FDF4; color:#166534; padding:3px 8px; border-radius:6px; font-size:0.62rem; font-weight:800; border:1px solid #BBF7D0;">🗺️ ZONE ${a.zoneId ?? ''}</span>`;
@@ -427,6 +447,7 @@ function renderCommercialCard(a, index) {
                 data-risk="${a.risk}"
                 data-scope="${a.scope || 'farm'}"
                 data-zone="${a.zoneId || ''}"
+                data-history="${encodedHistory}"
                 style="flex:1; background:#fff; color:#475569; border:1.5px solid ${sev.border}; padding:12px; border-radius:14px; font-weight:700; cursor:pointer; font-size:0.82rem;">
                 📈 Detail
             </button>
@@ -544,7 +565,7 @@ function handleCommercialAction(btn) {
     const risk  = btn.dataset.risk;
     const zone  = btn.dataset.zone;
     const title = decodeURIComponent(btn.dataset.title || 'Alert');
-    const masterDeviceId = AppState.currentFarmId || 'commercial-farm-master-1';
+    const masterDeviceId = 'commercial-farm-master-1';
 
     btn.style.opacity = '0.5';
     btn.textContent   = '⏳ Queuing…';
