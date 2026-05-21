@@ -331,7 +331,7 @@ export async function init() {
    Works for both beginner and commercial.
    Returns: { farmId, farmName, accountMode, queryParams, plants[], farmLabel }
 ============================================================ */
-function _resolveFarmContext() {
+/*function _resolveFarmContext() {
   const farm = AppState.currentFarm;
   const mode = AppState.mode || 'beginner';
   // 先确认当前到底是哪一个 mode
@@ -365,6 +365,47 @@ function _resolveFarmContext() {
     farmLabel = `📍 ${farm?.name || 'Commercial Farm'} · ${zoneCount} zones · Overall Analysis (DEMO)`;
   } else {
     farmLabel = `📍 ${farm?.name || 'My Farm'} · Beginner Mode (DEMO)`;
+  }
+
+  return { farmId, farmName: farm?.name || 'Demo Farm', accountMode, queryParams, plants, farmLabel };
+}*/
+/* ============================================================
+   RESOLVE FARM CONTEXT
+============================================================ */
+function _resolveFarmContext() {
+  const farm = AppState.currentFarm;
+  
+  // 1. 三重保險判斷 Mode：
+  // 優先順序：農場本身設定 > AppState 快取 > localStorage 強制讀取 > 預設 beginner
+  const fallbackMode = localStorage.getItem('seeddown_mode') || 'beginner';
+  const mode = AppState.mode || fallbackMode;
+  const accountMode = farm?.accountMode || mode; 
+
+  let farmId = farm ? (farm.id || farm.farmId) : AppState.currentFarmId;
+
+  // 2. Localhost 開發強制切換 Demo ID
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    farmId = accountMode === 'commercial' 
+      ? 'farm_commercial_demo_001' 
+      : 'farm_beginner_demo_001';
+      
+    console.log(`[DEBUG] Auto-switched to Demo Farm ID: ${farmId} (${accountMode} mode)`);
+  }
+
+  // ── Query params ─────────────────────
+  const queryParams = farmId
+    ? { farmId, limit: 48 }
+    : { deviceId: 'farm_001', limit: 24 };
+
+  const plants = _extractPlants(farm || {}, accountMode);
+
+  // ── Human-readable badge ───────────────────────────────────
+  let farmLabel;
+  if (accountMode === 'commercial') {
+    const zoneCount = farm && Array.isArray(farm.zones) ? farm.zones.length : 0;
+    farmLabel = `📍 ${farm?.name || 'Commercial Farm'} · ${zoneCount} zones · Overall Analysis`;
+  } else {
+    farmLabel = `📍 ${farm?.name || 'My Farm'} · Beginner Mode`;
   }
 
   return { farmId, farmName: farm?.name || 'Demo Farm', accountMode, queryParams, plants, farmLabel };

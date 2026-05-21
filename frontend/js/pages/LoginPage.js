@@ -335,7 +335,7 @@ function _bindEvents() {
             localStorage.setItem('token', data.token);
             
             const mockFirebaseUser = { uid: data.user.email, email: data.user.email };
-            await _onLoginSuccess(data.user.mode, mockFirebaseUser, true);
+            await _onLoginSuccess(selectedMode, mockFirebaseUser, true);
             
         } catch (err) {
             showToast('error', 'Demo mode unavailable. Please sign in or register.');
