@@ -1,6 +1,7 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
+import { conciseAIText } from '../utils/aiFormat.js';
 
 const PROFILE_KEY = 'farm_profile';
 const FARMS_KEY = 'user_farms';
@@ -483,20 +484,20 @@ function updateControlRecommendations() {
     title.style.color = style.color;
 
     if (!findings.length) {
-        summary.textContent = 'Settings look safe for commercial automation.';
+        summary.textContent = conciseAIText('Settings look safe for commercial automation.', 130);
         list.style.display = 'none';
         list.innerHTML = '';
         return { level, findings };
     }
 
-    summary.textContent = level === 'danger'
+    summary.textContent = conciseAIText(level === 'danger'
         ? 'Some settings can delay emergency actions or make automation unstable.'
-        : 'AI found settings that may cause false alarms or inefficient device response.';
+        : 'AI found settings that may cause false alarms or inefficient device response.', 130);
     list.style.display = 'flex';
     list.innerHTML = findings.slice(0, 4).map(item => `
         <div style="display:flex;gap:7px;align-items:flex-start;font-size:11px;line-height:1.35;color:${item.level === 'danger' ? 'var(--danger)' : '#92400E'};font-weight:800;">
             <span>${item.level === 'danger' ? '!' : '-'}</span>
-            <span>${escapeHTML(item.message)}</span>
+            <span>${escapeHTML(conciseAIText(item.message, 110))}</span>
         </div>
     `).join('');
     return { level, findings };

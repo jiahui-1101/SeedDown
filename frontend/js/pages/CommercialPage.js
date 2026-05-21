@@ -2,6 +2,7 @@ import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
 import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=radish-ai-1';
 import { openAddPlantModal } from '../components/AddPlantModal.js';
+import { aiAdvisorHTML, aiChatHTML } from '../utils/aiFormat.js';
 import jsQR from 'https://esm.sh/jsqr@1.4.0';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -344,7 +345,7 @@ const syncData = async () => {
         }
     } catch (e) {
         console.error('Dashboard Sync Failed:', e);
-        setText('ai-overview-text', 'Live backend offline. Showing saved farm layout.');
+        setAiOverview('Live backend offline. Showing saved farm layout.');
     }
 };
 
@@ -504,7 +505,7 @@ async function syncSelectedZoneData() {
             fetchAIGlobalAdvice(data.reading);
         }
     } catch (error) {
-        setText('ai-overview-text', `${zoneLabel(selectedZoneId)} is waiting for live data.`);
+        setAiOverview(`${zoneLabel(selectedZoneId)} is waiting for live data.`);
     }
 }
 
@@ -577,9 +578,9 @@ async function fetchAIGlobalAdvice(currentData) {
             }),
         });
         const result = await res.json();
-        setText('ai-overview-text', result.reply || result.response || 'Farm is operating normally.');
+        setAiOverview(result.reply || result.response || 'Farm is operating normally.');
     } catch (e) {
-        setText('ai-overview-text', 'AI Advisor offline. Sensor dashboard still available.');
+        setAiOverview('AI Advisor offline. Sensor dashboard still available.');
     }
 }
 
@@ -683,9 +684,14 @@ function renderChat() {
     const log = document.getElementById('commercialChatLog');
     if (!log) return;
     log.innerHTML = chatMessages.length
-        ? chatMessages.map(item => `<div class="chat-bubble ${item.role}">${escapeHTML(item.text)}</div>`).join('')
+        ? chatMessages.map(item => `<div class="chat-bubble ${item.role}">${item.role === 'ai' ? aiChatHTML(item.text) : escapeHTML(item.text)}</div>`).join('')
         : '<div class="chat-bubble ai">Ask about yield, disease risk, energy, crop planning, or sensor readings.</div>';
     log.scrollTop = log.scrollHeight;
+}
+
+function setAiOverview(text) {
+    const el = document.getElementById('ai-overview-text');
+    if (el) el.innerHTML = aiAdvisorHTML(text);
 }
 
 function openAssignDeviceModal() {
@@ -1584,6 +1590,26 @@ function ensureCommercialCommandStyles() {
 }
 
         .advisor-text { color: #334155; font-size: 13px; line-height: 1.45; }
+        .ai-frame-mini {
+            border: 1px solid #ccfbf1;
+            background: #f8fffd;
+            border-radius: 14px;
+            padding: 10px 11px;
+        }
+        .ai-frame-mini-title {
+            color: #0f766e;
+            font-size: 10px;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+        .ai-frame-mini-body {
+            margin-top: 4px;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 750;
+            line-height: 1.35;
+        }
         .zone-overview-grid {
             display: grid;
             grid-template-columns: 1fr;
@@ -1743,6 +1769,70 @@ function ensureCommercialCommandStyles() {
         }
         .chat-bubble.ai { background:#ecfdf5; color:#14532d; align-self:flex-start; }
         .chat-bubble.user { background:#166534; color:white; align-self:flex-end; }
+        .chat-bubble.ai .ai-frame {
+            min-width: min(270px, 100%);
+        }
+        .ai-frame-head {
+            display:flex;
+            align-items:flex-start;
+            justify-content:space-between;
+            gap:8px;
+            margin-bottom:8px;
+        }
+        .ai-frame-head strong {
+            color:#0f172a;
+            font-size:12px;
+            line-height:1.2;
+        }
+        .ai-frame-head span {
+            flex-shrink:0;
+            border-radius:999px;
+            background:#ccfbf1;
+            color:#0f766e;
+            padding:3px 7px;
+            font-size:9px;
+            font-weight:950;
+            text-transform:uppercase;
+        }
+        .ai-frame-metrics {
+            display:grid;
+            grid-template-columns:repeat(2,minmax(0,1fr));
+            gap:6px;
+            margin-bottom:8px;
+        }
+        .ai-frame-metrics div {
+            border:1px solid #d7f7ef;
+            border-radius:10px;
+            background:#fff;
+            padding:6px 7px;
+        }
+        .ai-frame-metrics b {
+            display:block;
+            color:#64748b;
+            font-size:8px;
+            font-weight:950;
+            text-transform:uppercase;
+        }
+        .ai-frame-metrics span {
+            display:block;
+            margin-top:2px;
+            color:#0f766e;
+            font-size:11px;
+            font-weight:900;
+            word-break:break-word;
+        }
+        .ai-frame ul {
+            margin:0;
+            padding-left:16px;
+            display:flex;
+            flex-direction:column;
+            gap:4px;
+        }
+        .ai-frame li {
+            color:#334155;
+            font-size:11px;
+            line-height:1.32;
+        }
         .commercial-chat-input-row { display:flex; gap:8px; margin-top:10px; }
         .commercial-chat-input-row input {
             flex:1;

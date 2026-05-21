@@ -1,4 +1,5 @@
 import { AppState } from '../store.js';
+import { conciseAIText } from '../utils/aiFormat.js';
 
 const messages = {
     idle: [
@@ -82,7 +83,7 @@ export const NpcAdvisor = {
         const avatarEl = document.getElementById('npcAvatar');
         const meta = advisorMeta[this.currentType] || advisorMeta.idle;
 
-        if (textEl) textEl.textContent = this.currentMsg || messages.idle[0];
+        if (textEl) textEl.textContent = conciseAIText(this.currentMsg || messages.idle[0], 135);
         if (nameEl) {
             nameEl.textContent = meta.name;
             nameEl.style.color = meta.color;
