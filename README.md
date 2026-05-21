@@ -243,7 +243,7 @@ GEMINI_API_KEY_2
 GEMINI_API_KEY
 ```
 
-If AI quota, key, or network fails, SeedDown uses deterministic fallback thresholds so the app still works.
+If AI quota, key, or network fails, SeedDown uses deterministic fallback thresholds so the app still works. Pages that depend on AI analysis, such as What-If and ESG, should label these results as benchmark estimates instead of pretending they came from live AI.
 
 Safety thresholds are not relaxed by AI:
 
@@ -284,11 +284,12 @@ Commercial farms use a separate larger digital twin:
 - Sensor and output markers inside the 3D scene.
 - Camera tool for zone snapshot / live-view style inspection.
 - Right-side operations panel with sensors, advisor, tools, and chat.
-- Sensor data fallback to demo devices when a newly created farm has no readings yet.
+- Active device assignment is the canonical zone routing rule. Firmware `zoneId` is used only as fallback.
+- Live sensor cards cache the last successful reading per farm/zone and show the last updated time instead of jumping to unrelated demo values.
 
 ### 9. Disease Analysis
 
-SeedDown includes a dedicated disease and plant health analysis page for commercial workflows. The idea is that each commercial zone can have a camera or uploaded image, and the operator can run analysis when a plant looks abnormal.
+SeedDown includes a dedicated disease and plant health analysis page for commercial workflows. The idea is that each commercial zone can have a camera or uploaded image, and the operator can run diagnosis when a plant looks abnormal.
 
 ```http
 POST /api/ai/disease-analysis
@@ -302,6 +303,8 @@ The disease flow is designed to reduce risky one-shot AI guesses. It can:
 - Explain why the confidence level is high or low.
 - Recommend practical recovery steps such as isolation, pruning, airflow changes, pH check, nutrient adjustment, or watering correction.
 - Ask follow-up questions when the image is unclear or the model cannot decide safely.
+
+Disease is advisory in the current demo. It explains confidence, likely causes, and recovery steps, but it does not automatically send `WATER_ON`, `FAN_ON`, or other IoT commands.
 
 This feature is useful for commercial farms because a disease issue in one zone can spread quickly. By connecting disease analysis with zone-level data, SeedDown can help the operator decide whether the problem is visual disease, nutrient imbalance, humidity stress, or sensor-triggered environmental stress.
 
@@ -325,6 +328,8 @@ For commercial users, What-If Pro is more business-focused:
 - Check how adding a new plant affects zone capacity and resource demand.
 - Use market price and crop data to support planting decisions.
 - Support commercial planning before expanding zones or changing crop mix.
+
+What-If can use backend AI endpoints such as `/api/whatif/newplant`, `/api/whatif/costsaving`, and market/resource analysis flows. If AI is unavailable, SeedDown should keep the page usable with clearly labelled benchmark estimates.
 
 The goal is to move the user from passive monitoring to active decision-making. Instead of only showing "what is happening now", SeedDown helps answer "what should I do next?"
 
@@ -357,6 +362,8 @@ For Beginner mode, control stays simple and focuses mainly on safe interval and 
 - Separate farm-level and zone-level thinking for commercial use.
 
 This page matters because commercial farms need override ability. The system can automate routine action, but the operator still needs manual control when testing hardware, handling emergencies, or tuning a zone.
+
+For Wokwi demo stability, alert actions and manual commands should stay within the supported command set: `WATER_ON`, `LIGHT_ON`, `FAN_ON`, `BUZZER_ON`, `PH_WARNING`, `FERT_ALERT`, `CO2_LOW`, `GAS_ALERT`, and `NO_ACTION`.
 
 ### 13. Farm Advisor and AI Chat
 
@@ -634,7 +641,22 @@ The current demo uses fixed IDs so Wokwi, Firestore, and dashboard can match eac
 | `beginner_standard` | `sd_demo_beginner_standard` | `SD-BGN-STD-00456` | Beginner Standard |
 | `beginner_pro` | `sd_demo_beginner_pro` | `SD-BGN-PRO-00789` | Beginner Pro |
 
-For the commercial Wokwi zone demo, the firmware owns the zone routing. The `commercial_zone_node_1` sketch sends `zoneId: "zone_A"` and uses `sd_demo_commercial_zone_node_1`, so it appears as Zone A even if the dashboard Assign Device modal was not used. Assign/reassign is for real device replacement and ownership mapping; Wokwi demo readings still show through the `zoneId` fallback. If a firmware payload has no `zoneId` and no known device token mapping, the reading is stored but it will not reliably appear inside a commercial zone view.
+For the smooth commercial Wokwi demo, scan either of these QR values into the selected zone:
+
+```text
+SD-COM-ZON-01001
+sd_demo_commercial_zone_node_1
+```
+
+The frontend normalizes the demo token QR to serial `SD-COM-ZON-01001`. Assigning that QR to Zone A, Zone B, or Zone C makes that selected zone the active owner of new readings for the device. In other words, dashboard assignment overrides the firmware `ZONE_ID` for new readings after reassignment. The firmware `zoneId` is still useful as a fallback when no active assignment exists.
+
+Important routing rules:
+
+- Active device assignment is canonical for commercial zones.
+- Firmware `zoneId` is fallback only.
+- If a reading has no `zoneId` and no registered/assigned device context, it is stored but will not reliably appear inside a commercial zone view.
+- Reassigning a replacement device marks the old target device as replaced/inactive; historical readings remain stored.
+- Live sensor cards and Facility Overview keep the last successful reading per farm/zone/device and show `Last updated HH:MM` if the latest backend request fails.
 
 Seed demo data:
 
@@ -650,7 +672,7 @@ This writes demo data to:
 - `sensorReadings`
 - `deviceCommands`
 
-Commercial dashboard also has fallback lookup for the fixed demo IDs above. This prevents a newly created farm with no readings from looking empty during demo.
+Commercial dashboard lookup is scoped to the selected zone/device and avoids falling back to unrelated `farm_001` readings. This prevents live sensor cards from suddenly showing random demo values.
 
 ---
 
@@ -701,6 +723,38 @@ Actuators are simulated with labelled LEDs:
 - Fertilizer alert
 - CO2 low
 - Gas alert
+
+Commercial alert action buttons map to Wokwi-supported commands only:
+
+| Commercial risk | Command sent |
+|---|---|
+| Water depletion | `BUZZER_ON` |
+| Energy overload | `NO_ACTION` |
+| CO2 crisis | `FAN_ON,CO2_LOW` |
+| Zone heat | `FAN_ON` |
+| Zone rot / airflow risk | `FAN_ON` |
+| EC burn / EC deficient | `FERT_ALERT` |
+| Zone clog | `WATER_ON` |
+| Unknown alert | `BUZZER_ON` |
+
+This keeps the demo aligned with the ESP32/Wokwi sketch outputs.
+
+---
+
+## Camera Demo Mode
+
+Commercial Camera supports browser camera capture for demos:
+
+```text
+Open Camera
+-> select zone
+-> Start camera
+-> grant browser permission
+-> Capture frame
+-> save latest zone snapshot
+```
+
+This does not require ESP32-CAM. The captured frame is stored as the latest farm/zone camera snapshot and can be reused as context for disease diagnosis where supported. If camera permission is denied, SeedDown keeps the existing placeholder/photo fallback. ESP32-CAM live stream can be added later if a stream URL is provided.
 
 ---
 
@@ -865,6 +919,22 @@ Suggested hackathon demo sequence:
 10. Show Commercial Digital Twin with zone cards, camera tool, Control, Disease, and What-If.
 11. Run Wokwi / ESP32 simulation and show sensor reading -> backend -> command -> LED/actuator.
 12. Close with SeedDown as an affordable bridge between learning, automation, and commercial farm operations.
+
+### Current Feature Flow Notes
+
+| Feature | Current demo logic |
+|---|---|
+| Launch page | White intro screen with animated plant, IoT package summary, and feature cards. |
+| Register terms | Register checkbox links open SeedDown-specific Terms and Privacy modals. |
+| Commercial assignment | QR scan/manual serial can assign or replace Farm Master / Zone Node. Active assignment controls new reading routing. |
+| Live sensor cards | Fetch latest zone/device reading; if unavailable, show cached last successful value with timestamp. |
+| Facility Overview | Uses current AppState/live reading snapshot and displays live status metrics with update time. |
+| Alerts | Predictive alerts are advisory plus optional supported Wokwi command actions. |
+| Control | Operator can view latest pending command, tune thresholds, sync preferences, and send manual supported commands. |
+| Disease | Diagnosis/advice only. It does not auto-control devices. |
+| Camera | Browser `getUserMedia` capture saves a zone snapshot; ESP32-CAM stream is future scope. |
+| What-If | Uses backend AI/resource endpoints when available; benchmark fallback keeps output visible when AI is unavailable. |
+| ESG / Consumption | Estimates water/energy impact from readings/history or benchmark fallback when live analysis is unavailable. |
 
 ---
 
