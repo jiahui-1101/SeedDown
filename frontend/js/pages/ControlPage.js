@@ -9,6 +9,15 @@ const API_BASE = window.location.hostname === 'localhost' || window.location.hos
     ? 'http://localhost:3000'
     : window.location.origin;
 const MASCOT_VISIBILITY_KEY = 'seeddown_ai_mascot_enabled';
+const DEMO_COMMERCIAL_ZONE_DEVICES = {
+    zone_A: 'commercial-zone-node-1',
+    zone_B: 'commercial-zone-node-2',
+    zone_C: 'commercial-zone-node-3',
+    zone_D: 'commercial-zone-node-4',
+    zone_E: 'commercial-zone-node-5',
+    zone_F: 'commercial-zone-node-6',
+};
+const SUPPORTED_MANUAL_COMMANDS = ['WATER_ON', 'FAN_ON', 'BUZZER_ON', 'GAS_ALERT', 'PH_WARNING', 'FERT_ALERT', 'CO2_LOW', 'NO_ACTION'];
 
 function farmProfileKey(farmId) {
     return `farm_profile_${farmId}`;
@@ -119,15 +128,7 @@ export function render() {
                     thresholds: zone.thresholds || {},
                 })).join('')}
 
-                <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
-                    <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;margin-bottom:12px;">MANUAL OVERRIDE</div>
-                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
-                        ${manualButton('WATER_ON', '💦', 'Pump')}
-                        ${manualButton('LIGHT_ON', '💡', 'Light')}
-                        ${manualButton('BUZZER_ON', '🔔', 'Buzzer')}
-                    </div>
-                    <button id="emergencyStopBtn" style="width:100%;padding:13px;border:none;border-radius:var(--radius);background:var(--danger);color:white;font-weight:900;cursor:pointer;">Emergency Stop</button>
-                </div>
+                ${manualOverridePanelHtml(zones, farm, profile)}
 
                 <button id="controlSyncBtn" style="width:100%;padding:14px;border:none;border-radius:var(--radius);background:var(--accent);color:white;flex-shrink:0;font-weight:800;font-size:0.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
                     <span id="controlSyncIcon">☁️</span> Sync Thresholds to IoT
@@ -228,6 +229,34 @@ function ensureControlStyles() {
             color: #0f766e !important;
             border-radius: 14px !important;
         }
+        #controlScreen .manual-field {
+            display:flex;
+            flex-direction:column;
+            gap:6px;
+            background:#f8fffd;
+            border:1px solid var(--border);
+            border-radius:14px;
+            padding:10px;
+        }
+        #controlScreen .manual-field span {
+            color:var(--muted);
+            font-size:10px;
+            font-weight:950;
+            text-transform:uppercase;
+            letter-spacing:.06em;
+        }
+        #controlScreen .manual-field input,
+        #controlScreen .manual-field select {
+            width:100%;
+            border:1px solid #99f6e4;
+            border-radius:12px;
+            background:#fff;
+            color:var(--text);
+            padding:9px 10px;
+            font-weight:850;
+            outline:none;
+            min-width:0;
+        }
         #controlScreen #controlSyncBtn,
         #controlScreen #controlSaveBtn {
             background: #0f766e !important;
@@ -254,9 +283,17 @@ function bindEvents() {
     document.getElementById('controlLoadBtn')?.addEventListener('click', () => fetchCurrentPreferences(true));
     document.getElementById('refreshCommandBtn')?.addEventListener('click', () => fetchLatestCommand(true));
     document.getElementById('emergencyStopBtn')?.addEventListener('click', () => sendManualCommand('NO_ACTION', 'Emergency stop from dashboard'));
+    document.getElementById('manualSendBtn')?.addEventListener('click', () => sendManualCommand());
+    document.getElementById('manualScope')?.addEventListener('change', syncManualOverrideTarget);
+    document.getElementById('manualZone')?.addEventListener('change', syncManualOverrideTarget);
+    syncManualOverrideTarget();
 
     document.querySelectorAll('.manual-command-btn').forEach(button => {
-        button.addEventListener('click', () => sendManualCommand(button.dataset.command, `${button.dataset.label} manual override from dashboard`));
+        button.addEventListener('click', () => {
+            const commandInput = document.getElementById('manualCommand');
+            if (commandInput) commandInput.value = button.dataset.command;
+            sendManualCommand(button.dataset.command, `${button.dataset.label} manual override from dashboard`);
+        });
     });
 
     document.querySelectorAll('.control-threshold-input').forEach(input => {
@@ -273,7 +310,7 @@ function bindEvents() {
 }
 
 async function fetchLatestCommand(showResult) {
-    const deviceId = value('controlDeviceId') || 'farm_001';
+    const deviceId = value('manualDeviceId') || value('controlDeviceId') || 'farm_001';
     try {
         const res = await fetch(`${API_BASE}/api/sensors/command?deviceId=${encodeURIComponent(deviceId)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -298,22 +335,92 @@ function setCommandStatus(command) {
     setText('latestCommandReason', command.reason || 'No reason provided.');
 }
 
-async function sendManualCommand(command, reason) {
-    const deviceId = value('controlDeviceId') || 'farm_001';
-    const isStop = command === 'NO_ACTION';
+async function sendManualCommand(command = '', reason = '') {
+    const target = resolveManualTarget();
+    const selectedCommand = command || value('manualCommand') || 'NO_ACTION';
+    const selectedReason = reason || value('manualReason') || `${selectedCommand} manual override from Control page`;
+    const durationSeconds = Math.max(0, Number(value('manualDuration')) || 0);
+    const deviceId = target.deviceId || value('controlDeviceId') || 'farm_001';
+    const isStop = selectedCommand === 'NO_ACTION';
     try {
         const res = await fetch(`${API_BASE}/api/sensors/command`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId, command, reason, durationSeconds: 0 }),
+            body: JSON.stringify({
+                deviceId,
+                command: selectedCommand,
+                reason: selectedReason,
+                durationSeconds,
+                scope: target.scope,
+                zoneId: target.zoneId || undefined,
+                targetId: target.zoneId || target.scope,
+            }),
         });
         const data = await res.json();
         if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
         setCommandStatus(data.command);
-        showToast('success', isStop ? 'Emergency stop queued for ESP32' : `${command} queued for ESP32`);
+        showToast('success', isStop ? 'Emergency stop queued for ESP32' : `${selectedCommand} queued for ${target.label}`);
     } catch (err) {
         showToast('error', `Manual command failed: ${err.message}`);
     }
+}
+
+function syncManualOverrideTarget() {
+    const scope = value('manualScope') || 'farm';
+    const farm = getCurrentFarm();
+    const profile = { ...defaultControls(), ...(loadProfile(AppState.currentFarmId) || {}) };
+    const zoneWrap = document.getElementById('manualZoneWrap');
+    const deviceInput = document.getElementById('manualDeviceId');
+    if (zoneWrap) zoneWrap.style.display = scope === 'zone' ? 'flex' : 'none';
+    if (deviceInput) {
+        deviceInput.value = scope === 'zone'
+            ? resolveZoneDeviceId(farm, value('manualZone') || 'zone_A')
+            : resolveFarmMasterDeviceId(farm, profile);
+    }
+}
+
+function resolveManualTarget() {
+    const farm = getCurrentFarm();
+    const profile = { ...defaultControls(), ...(loadProfile(AppState.currentFarmId) || {}) };
+    const scope = value('manualScope') || 'farm';
+    if (scope === 'zone') {
+        const zoneId = normalizeControlZoneId(value('manualZone') || 'zone_A');
+        return {
+            scope: 'zone',
+            zoneId,
+            label: zoneId.replace('_', ' '),
+            deviceId: value('manualDeviceId') || resolveZoneDeviceId(farm, zoneId),
+        };
+    }
+    return {
+        scope: 'farm',
+        zoneId: '',
+        label: 'Farm Level',
+        deviceId: value('manualDeviceId') || resolveFarmMasterDeviceId(farm, profile),
+    };
+}
+
+function resolveFarmMasterDeviceId(farm, profile = {}) {
+    return farm?.farmMaster?.deviceId || farm?.deviceId || profile.deviceId || 'farm_001';
+}
+
+function resolveZoneDeviceId(farm, zoneId) {
+    const normalized = normalizeControlZoneId(zoneId);
+    const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
+    const active = devices.find(device =>
+        device?.active !== false
+        && device?.status !== 'replaced'
+        && normalizeControlZoneId(device.targetId || device.zoneId || device.zone) === normalized
+    );
+    return active?.deviceId || DEMO_COMMERCIAL_ZONE_DEVICES[normalized] || normalized || 'farm_001';
+}
+
+function normalizeControlZoneId(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    const match = raw.match(/^zone[_ ]?([a-z])$/) || raw.match(/^([a-z])$/);
+    if (match) return `zone_${match[1].toUpperCase()}`;
+    return raw.startsWith('zone_') ? `zone_${raw.slice(5).toUpperCase()}` : raw;
 }
 
 function applyPreset(name) {
@@ -571,6 +678,40 @@ function manualButton(command, icon, label) {
             <div style="font-size:24px;line-height:1;">${icon}</div>
             <div style="font-size:11px;margin-top:6px;">${label}</div>
         </button>`;
+}
+
+function manualOverridePanelHtml(zones, farm, profile) {
+    const firstZone = zones[0]?.id || 'zone_A';
+    const farmDevice = resolveFarmMasterDeviceId(farm, profile);
+    return `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow-sm);">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:12px;">
+                <div>
+                    <div style="font-size:0.6rem;font-weight:900;color:var(--muted);letter-spacing:0.08em;">MANUAL OVERRIDE</div>
+                    <div style="font-size:12px;color:var(--sub);font-weight:750;margin-top:3px;">Choose farm-level or zone-level control before sending a command.</div>
+                </div>
+                <button id="emergencyStopBtn" style="padding:9px 11px;border:none;border-radius:12px;background:var(--danger);color:white;font-weight:900;cursor:pointer;">Stop</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:10px;">
+                <label class="manual-field"><span>Target scope</span><select id="manualScope"><option value="farm">Farm Level</option><option value="zone">Zone</option></select></label>
+                <label class="manual-field" id="manualZoneWrap"><span>Zone</span><select id="manualZone">${zones.map(zone => `<option value="${escapeAttr(zone.id)}">${escapeHTML(zone.label)}</option>`).join('') || `<option value="${escapeAttr(firstZone)}">Zone A</option>`}</select></label>
+                <label class="manual-field"><span>Device ID</span><input id="manualDeviceId" value="${escapeAttr(farmDevice)}"></label>
+                <label class="manual-field"><span>Command</span><select id="manualCommand">${SUPPORTED_MANUAL_COMMANDS.map(command => `<option value="${command}">${command}</option>`).join('')}</select></label>
+                <label class="manual-field"><span>Duration seconds</span><input id="manualDuration" type="number" min="0" max="600" step="1" value="10"></label>
+                <label class="manual-field"><span>Reason</span><input id="manualReason" value="Operator manual override from Control page"></label>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px;">
+                ${manualButton('WATER_ON', '💦', 'Water')}
+                ${manualButton('FAN_ON', '🌀', 'Fan')}
+                ${manualButton('BUZZER_ON', '🔔', 'Buzzer')}
+                ${manualButton('PH_WARNING', 'pH', 'pH Warn')}
+                ${manualButton('FERT_ALERT', 'NPK', 'Fert')}
+                ${manualButton('CO2_LOW', 'CO2', 'CO2')}
+                ${manualButton('GAS_ALERT', 'MQ', 'Gas')}
+                ${manualButton('NO_ACTION', '×', 'Clear')}
+            </div>
+            <button id="manualSendBtn" style="width:100%;padding:13px;border:none;border-radius:var(--radius);background:var(--accent);color:white;font-weight:900;cursor:pointer;">Send Override</button>
+        </div>`;
 }
 
 function controlThresholdCardHtml({ id, title, subtitle, scope, thresholds }) {
