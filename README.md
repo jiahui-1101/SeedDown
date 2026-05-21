@@ -741,6 +741,18 @@ This keeps the demo aligned with the ESP32/Wokwi sketch outputs.
 
 ---
 
+## UI Demo Polish Notes
+
+- Splash uses a white centered launch screen with deeper teal borders and the IoT Package summary below the feature cards.
+- Login branding reads `Powered by next level utm`.
+- Commercial AI Chat frames AI replies into short status, metric rows, and up to three readable points instead of long raw markdown.
+- SeedDown AI mascot can be hidden from its speech bubble or from Control -> `SeedDown AI mascot`; AI Chat remains available when the mascot is hidden.
+- Control Manual Override supports Farm Level or Zone targets, active device resolution, manual device fallback, command duration, and operator reason. Supported demo commands are `WATER_ON`, `FAN_ON`, `BUZZER_ON`, `GAS_ALERT`, `PH_WARNING`, `FERT_ALERT`, `CO2_LOW`, and `NO_ACTION`.
+- Disease and QR image flows expose both camera capture and file upload choices so demos work on laptop or phone browsers.
+- Beginner Live Data caches the last successful reading per beginner device/package and shows cached values with `Last updated HH:MM` instead of jumping to unrelated demo readings.
+
+---
+
 ## Camera Demo Mode
 
 Commercial Camera supports browser camera capture for demos:
@@ -924,14 +936,16 @@ Suggested hackathon demo sequence:
 
 | Feature | Current demo logic |
 |---|---|
-| Launch page | White intro screen with animated plant, IoT package summary, and feature cards. |
+| Launch page | White intro screen with animated plant, feature cards, and bottom IoT package summary. |
 | Register terms | Register checkbox links open SeedDown-specific Terms and Privacy modals. |
-| Commercial assignment | QR scan/manual serial can assign or replace Farm Master / Zone Node. Active assignment controls new reading routing. |
-| Live sensor cards | Fetch latest zone/device reading; if unavailable, show cached last successful value with timestamp. |
+| Commercial assignment | Take/upload QR image or enter serial to assign/replace Farm Master / Zone Node. Active assignment controls new reading routing. |
+| Live sensor cards | Fetch latest zone/device reading; if unavailable, show cached last successful value with timestamp. Beginner cards also cache per package/device. |
 | Facility Overview | Uses current AppState/live reading snapshot and displays live status metrics with update time. |
 | Alerts | Predictive alerts are advisory plus optional supported Wokwi command actions. |
-| Control | Operator can view latest pending command, tune thresholds, sync preferences, and send manual supported commands. |
-| Disease | Diagnosis/advice only. It does not auto-control devices. |
+| AI Chat / Advisor | AI replies are framed into short readable summaries, status, metrics, and limited action points. |
+| SeedDown AI mascot | Commercial 3D guide can be hidden from the bubble or Control page without disabling AI Chat. |
+| Control | Operator can view latest pending command, tune thresholds, sync preferences, and send scoped farm/zone manual supported commands. |
+| Disease | Diagnosis/advice only. It supports take-photo or upload-photo input and does not auto-control devices. |
 | Camera | Browser `getUserMedia` capture saves a zone snapshot; ESP32-CAM stream is future scope. |
 | What-If | Uses backend AI/resource endpoints when available; benchmark fallback keeps output visible when AI is unavailable. |
 | ESG / Consumption | Estimates water/energy impact from readings/history or benchmark fallback when live analysis is unavailable. |
