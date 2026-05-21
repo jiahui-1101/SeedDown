@@ -114,7 +114,7 @@ export function render() {
                         <div style="display:flex; align-items:flex-start; gap:8px; margin-top:14px; padding:8px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0;">
                             <input type="checkbox" id="tncCheckbox" style="margin-top:2px; accent-color:#0f766e; cursor:pointer;">
                             <label for="tncCheckbox" style="font-size:0.7rem; color:#475569; line-height:1.4; cursor:pointer;">
-                                I agree to the <span style="color:#0f766e; font-weight:600; text-decoration:underline;">Terms & Conditions</span> and <span style="color:#0f766e; font-weight:600; text-decoration:underline;">Privacy Policy</span>. I consent to the collection and use of my farm data for AI analysis.
+                                I agree to the <span id="termsLink" role="button" tabindex="0" style="color:#0f766e; font-weight:600; text-decoration:underline;">Terms & Conditions</span> and <span id="privacyLink" role="button" tabindex="0" style="color:#0f766e; font-weight:600; text-decoration:underline;">Privacy Policy</span>. I consent to the collection and use of my farm data for AI analysis.
                             </label>
                         </div>
                     </div>
@@ -212,6 +212,9 @@ function _bindEvents() {
         const pw = document.getElementById('loginPassword');
         pw.type = pw.type === 'password' ? 'text' : 'password';
     });
+
+    bindPolicyLink('termsLink', 'terms');
+    bindPolicyLink('privacyLink', 'privacy');
 
     // 忘记密码逻辑 -> 改为对接自建后端
     document.getElementById('forgotBtn').addEventListener('click', async () => {
@@ -400,4 +403,70 @@ function _showError(msg) {
 function _clearError() {
     const el = document.getElementById('loginError');
     if (el) el.style.display = 'none';
+}
+
+function bindPolicyLink(id, type) {
+    const link = document.getElementById(id);
+    if (!link) return;
+    const open = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openPolicyModal(type);
+    };
+    link.addEventListener('click', open);
+    link.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') open(event);
+    });
+}
+
+function openPolicyModal(type) {
+    document.getElementById('policyOverlay')?.remove();
+    const isTerms = type === 'terms';
+    const title = isTerms ? 'SeedDown Terms & Conditions' : 'SeedDown Privacy Policy';
+    const items = isTerms ? [
+        'SeedDown is a learning and farm-management demo tool for monitoring crops, sensors, alerts and AI recommendations.',
+        'IoT commands such as WATER_ON, FAN_ON and BUZZER_ON should be reviewed by the user before relying on them for real equipment.',
+        'Disease and What-If results are advisory diagnosis/planning outputs, not professional agronomy, medical, legal or safety advice.',
+        'You are responsible for keeping your account, device QR codes, WiFi details and farm hardware safe.',
+    ] : [
+        'SeedDown may store your email, selected mode, farm layouts, device assignments, sensor readings, threshold settings and camera snapshots.',
+        'Farm and sensor data may be used to generate AI analysis, alerts, ESG estimates and disease diagnosis within the app.',
+        'If AI is unavailable, SeedDown may show labelled benchmark estimates so the feature does not become blank.',
+        'Demo data is intended for presentation/testing. You can clear local demo data from the browser storage or delete saved farms in the app.',
+    ];
+
+    const overlay = document.createElement('div');
+    overlay.id = 'policyOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:120;background:rgba(15,23,42,.42);display:flex;align-items:center;justify-content:center;padding:18px;';
+    overlay.innerHTML = `
+        <div style="width:min(460px,100%);background:#fff;border:1px solid #ccfbf1;border-radius:20px;box-shadow:0 24px 70px rgba(15,23,42,.22);padding:18px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+                <div>
+                    <div style="font-size:10px;font-weight:900;color:#0f766e;text-transform:uppercase;letter-spacing:.08em;">SeedDown account</div>
+                    <strong style="display:block;margin-top:3px;font-size:18px;color:#12312f;">${title}</strong>
+                </div>
+                <button id="policyClose" type="button" style="width:34px;height:34px;border:none;border-radius:12px;background:#f1f5f9;color:#12312f;font-size:18px;font-weight:900;cursor:pointer;">×</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+                ${items.map(item => `<div style="background:#f8fffd;border:1px solid #ccfbf1;border-radius:12px;padding:10px 12px;color:#475569;font-size:12px;line-height:1.45;">${escapeHTML(item)}</div>`).join('')}
+            </div>
+            <button id="policyOk" type="button" style="width:100%;margin-top:14px;padding:12px;border:none;border-radius:14px;background:#0f766e;color:white;font-weight:850;cursor:pointer;">I understand</button>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    document.getElementById('policyClose')?.addEventListener('click', close);
+    document.getElementById('policyOk')?.addEventListener('click', close);
+    overlay.addEventListener('click', event => {
+        if (event.target === overlay) close();
+    });
+}
+
+function escapeHTML(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
