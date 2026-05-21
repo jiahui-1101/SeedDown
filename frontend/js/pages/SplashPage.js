@@ -1,5 +1,4 @@
 import { showScreen } from '../utils/navigation.js';
-import { showToast } from '../utils/toast.js';
 
 export function render() {
     const container = document.getElementById('screenContainer');
@@ -9,7 +8,7 @@ export function render() {
                 <div class="splash-badge" style="font-size:0.72rem; background:var(--accent-l); padding:8px 16px; border-radius:30px;">Smart Vertical Farm</div>
 
                 <div class="splash-visual" style="margin:24px 0 18px;">
-                    <div class="splash-plant-icon">🌱</div>
+                    <div class="splash-plant-icon">🌿</div>
                     <span class="water-drop d1"></span>
                     <span class="water-drop d2"></span>
                     <span class="water-drop d3"></span>
@@ -30,9 +29,9 @@ export function render() {
 
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; width:100%; margin-top:30px;">
                     <div class="splash-feature" style="background:var(--surface); padding:16px; border-radius:18px;"><span>📡</span> Live IoT</div>
-                    <div class="splash-feature" style="background:var(--surface); padding:16px; border-radius:18px;"><span>🤖</span> AI Predict</div>
                     <div class="splash-feature" style="background:var(--surface); padding:16px; border-radius:18px;"><span>🌱</span> Smart Alerts</div>
                     <div class="splash-feature" style="background:var(--surface); padding:16px; border-radius:18px;"><span>🏘️</span> Community</div>
+                    <div class="splash-feature" style="background:var(--surface); padding:16px; border-radius:18px;"><span>📦</span> Package Guide</div>
                 </div>
             </div>
         </div>
@@ -72,7 +71,7 @@ function ensureSplashStyles() {
         }
         #splashScreen .splash-badge {
             color: #0f766e;
-            border: 1px solid #99f6e4;
+            border: 1.5px solid #14b8a6;
             font-weight: 800;
             letter-spacing: .04em;
         }
@@ -96,8 +95,8 @@ function ensureSplashStyles() {
             place-items: center;
             border-radius: 30px;
             background: rgba(255, 255, 255, .84);
-            border: 1px solid #ccfbf1;
-            box-shadow: 0 14px 34px rgba(15, 118, 110, .12);
+            border: 1.5px solid #5eead4;
+            box-shadow: 0 14px 34px rgba(15, 118, 110, .14);
             overflow: hidden;
         }
         .splash-plant-icon {
@@ -137,7 +136,7 @@ function ensureSplashStyles() {
             padding: 16px;
             border-radius: 20px;
             background: rgba(255, 255, 255, .86);
-            border: 1px solid #ccfbf1;
+            border: 1.5px solid #5eead4;
             box-shadow: 0 10px 26px rgba(15, 118, 110, .08);
         }
         .package-title {
@@ -158,7 +157,7 @@ function ensureSplashStyles() {
             border-radius: 16px;
             padding: 15px;
             background: #f7fffd;
-            border: 1px solid #d7f7ef;
+            border: 1.5px solid #5eead4;
             animation: packageFloat 3s ease-in-out infinite;
         }
         .package-item:nth-child(2) { animation-delay: .18s; }
@@ -178,7 +177,7 @@ function ensureSplashStyles() {
             font-weight: 600;
         }
         .splash-feature {
-            border: 1px solid #ccfbf1;
+            border: 1.5px solid #5eead4;
             box-shadow: 0 8px 22px rgba(15, 118, 110, .07);
             color: #12312f;
             min-height: 58px;
