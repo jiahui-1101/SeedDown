@@ -1629,6 +1629,24 @@ function getSensorSnapshot() {
     };
 }
 
+function formatSensorUpdatedAt() {
+    const meta = AppState.latestReadingMeta || {};
+    const reading = AppState.latestReading || AppState.currentReading || {};
+    const raw = meta.fetchedAt || reading._fetchedAt || reading.createdAt || reading.updatedAt || reading.timestamp;
+    let date = null;
+    if (raw instanceof Date) date = raw;
+    else if (raw && typeof raw === 'object') {
+        if (typeof raw.toDate === 'function') date = raw.toDate();
+        else if (raw._seconds) date = new Date(raw._seconds * 1000);
+        else if (raw.seconds) date = new Date(raw.seconds * 1000);
+    } else if (raw) {
+        date = new Date(raw);
+    }
+    if (!date || Number.isNaN(date.getTime())) return '--';
+    const suffix = meta.stale || reading._stale ? ' cached' : '';
+    return `${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${suffix}`;
+}
+
 function zoneDeviceValue(key, sensors) {
     const map = {
         dht11: `${Number(sensors.temperature || 0).toFixed(1)}C / ${Number(sensors.humidity || 0)}%`,
@@ -1724,6 +1742,7 @@ function infoPanelHTML({ title, subtitle, status, mode }) {
             ${miniMetric('Status', status)}
             ${miniMetric('Light', `${Math.round(Number(getSensorSnapshot().lightRaw || 0))}`)}
             ${miniMetric('pH', `${Number(getSensorSnapshot().ph || 0).toFixed(1)}`)}
+            ${miniMetric('Updated', formatSensorUpdatedAt())}
         </div>
     `;
 }
@@ -1934,7 +1953,7 @@ function ensureCommercialStyles() {
         }
         .cf-mini-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
             gap: 8px;
             margin-top: 12px;
         }

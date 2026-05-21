@@ -85,11 +85,14 @@ function normalizeGoalPriority(value) {
 }
 
 function normalizeReading(body = {}, deviceContext = {}) {
+  const assignedZone = deviceContext.active === false || deviceContext.status === 'replaced'
+    ? null
+    : (deviceContext.targetId && deviceContext.targetId !== 'farm_master' ? deviceContext.targetId : deviceContext.zoneId);
   return {
     deviceId: body.deviceId || deviceContext.deviceId || 'farm_001',
-    farmId: body.farmId || deviceContext.farmId || null,
-    fieldId: body.fieldId || deviceContext.fieldId || null,
-    zoneId: body.zoneId || deviceContext.zoneId || null,
+    farmId: deviceContext.farmId || body.farmId || null,
+    fieldId: deviceContext.fieldId || body.fieldId || null,
+    zoneId: assignedZone || body.zoneId || null,
     packageLevel: body.packageLevel || deviceContext.packageLevel || null,
     temperature: numberOrUndefined(body.temperature),
     humidity: numberOrUndefined(body.humidity),

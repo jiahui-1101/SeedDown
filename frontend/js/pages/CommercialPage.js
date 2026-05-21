@@ -22,6 +22,7 @@ const RACK_OPTIONS = {
 let chatMessages = [];
 let selectedZoneId = null;
 let zoneSnapshots = {};
+const LIVE_READING_CACHE_KEY = 'seeddown_commercial_live_cache';
 
 const DEFAULT_COMMERCIAL_ZONES = [
     { id: 'zone_A', label: 'Zone A', crop: 'Leafy Greens' },
@@ -43,6 +44,12 @@ const DEMO_COMMERCIAL_ZONE_DEVICES = {
 };
 
 const DEMO_COMMERCIAL_FARM_MASTER = 'commercial-farm-master-1';
+const DEMO_QR_TOKEN_SERIALS = {
+    sd_demo_commercial_zone_node_1: 'SD-COM-ZON-01001',
+    sd_demo_commercial_zone_node_2: 'SD-COM-ZON-01002',
+    sd_demo_commercial_zone_node_3: 'SD-COM-ZON-01003',
+    sd_demo_commercial_farm_master_1: 'SD-COM-FRM-03001',
+};
 
 export function render() {
     const container = document.getElementById('screenContainer');
@@ -290,13 +297,16 @@ function initProDashboard() {
 const syncData = async () => {
     try {
         // ── Farm Master ──────────────────────────────────────
-        const fmRes = await fetchWithTimeout(
-            `${API_BASE}/api/sensors/latest?deviceId=${DEMO_COMMERCIAL_FARM_MASTER}`, {}, 4500
-        ).catch(() => null);
+        const fmRes = await fetchWithTimeout(`${API_BASE}/api/sensors/latest?deviceId=${DEMO_COMMERCIAL_FARM_MASTER}`, {}, 4500).catch(() => null);
+        let fmReading = getCachedCommercialReading('farm_master')?.reading || null;
         if (fmRes) {
             const fmData = await fmRes.json().catch(() => null);
             const r = fmData?.reading;
             if (r) {
+    fmReading = rememberCommercialReading('farm_master', r, 'deviceId=' + DEMO_COMMERCIAL_FARM_MASTER).reading;
+}
+        }
+        if (fmReading) {
     const setFmTile = (id, text, isNormal) => {
         const el = document.getElementById(id);
         if (el) {
@@ -304,16 +314,16 @@ const syncData = async () => {
             el.style.color = isNormal ? '#14532d' : '#dc2626';
         }
     };
-    const water = r.waterDistanceCm != null ? Number(r.waterDistanceCm) : null;
-    const gas   = r.gasRaw != null ? Number(r.gasRaw) : null;
-    const co2   = r.co2Ppm != null ? Number(r.co2Ppm) : null;
-    const energy = r.energyKwh != null ? Number(r.energyKwh) : null;
+    const water = fmReading.waterDistanceCm != null ? Number(fmReading.waterDistanceCm) : null;
+    const gas   = fmReading.gasRaw != null ? Number(fmReading.gasRaw) : null;
+    const co2   = fmReading.co2Ppm != null ? Number(fmReading.co2Ppm) : null;
+    const energy = fmReading.energyKwh != null ? Number(fmReading.energyKwh) : null;
 
     setFmTile('fm-water',  water  != null ? `${water.toFixed(1)} cm`  : '--', water  == null || (water >= 3 && water <= 30));
     setFmTile('fm-gas',    gas    != null ? String(Math.round(gas))   : '--', gas    == null || gas < 3000);
     setFmTile('fm-co2',    co2    != null ? `${co2} ppm`              : '--', co2    == null || co2 < 1500);
     setFmTile('fm-energy', energy != null ? `${energy.toFixed(2)} kWh`: '--', energy == null || energy >= 0);
-}
+    setText('fm-status-text', `Farm master ${formatReadingTime(fmReading)}${fmReading._stale ? ' · cached' : ''}`);
         }
 
         // ── Zone overview ─────────────────────────────────────
@@ -347,7 +357,6 @@ function buildSensorQuery() {
     else if (farm?.deviceId) query.set('deviceId', farm.deviceId);
     else if (farm?.zoneId) query.set('zoneId', farm.zoneId);
     else if (farm?.id) query.set('fieldId', farm.id);
-    else query.set('deviceId', 'farm_001');
     return query;
 }
 
@@ -355,29 +364,30 @@ function commercialSensorQueryCandidates(zoneId = selectedZoneId) {
     const farm = getCurrentFarm();
     const normalizedZone = normalizeZoneId(zoneId);
     const candidates = [];
-    const push = (key, value) => {
-        if (!value) return;
+    const pushParams = pairs => {
         const query = new URLSearchParams();
-        query.set(key, value);
+        pairs.forEach(([key, value]) => {
+            if (value) query.set(key, value);
+        });
+        if (!query.toString()) return;
         const signature = query.toString();
         if (!candidates.some(item => item.toString() === signature)) candidates.push(query);
     };
 
     const zoneDevice = findDeviceForZone(farm, normalizedZone);
-    push('deviceId', zoneDevice?.deviceId);
-    push('zoneId', normalizedZone);
-    push('deviceId', DEMO_COMMERCIAL_ZONE_DEVICES[normalizedZone]);
-
     if (normalizedZone === 'farm_master') {
-        push('deviceId', farm?.farmMaster?.deviceId);
-        push('deviceId', farm?.deviceId);
-        push('deviceId', DEMO_COMMERCIAL_FARM_MASTER);
+        pushParams([['deviceId', farm?.farmMaster?.deviceId || farm?.deviceId || DEMO_COMMERCIAL_FARM_MASTER]]);
+        return candidates;
     }
 
-    push('farmId', farm?.id);
-    push('farmId', farm?.backendFarmId);
-    push('farmId', 'farm_commercial_demo_001');
-    push('deviceId', 'farm_001');
+    if (zoneDevice?.deviceId) {
+        pushParams([['deviceId', zoneDevice.deviceId], ['zoneId', normalizedZone]]);
+        pushParams([['zoneId', normalizedZone]]);
+        return candidates;
+    }
+
+    pushParams([['zoneId', normalizedZone]]);
+    pushParams([['deviceId', DEMO_COMMERCIAL_ZONE_DEVICES[normalizedZone]], ['zoneId', normalizedZone]]);
     return candidates;
 }
 
@@ -387,12 +397,15 @@ async function fetchLatestCommercialReading(zoneId = selectedZoneId) {
         try {
             const res = await fetchWithTimeout(`${API_BASE}/api/sensors/latest?${query.toString()}`, {}, 4500);
             const data = await res.json();
-            if (data?.reading) return { ...data, sourceQuery: query.toString() };
+            if (data?.reading) {
+                const cached = rememberCommercialReading(zoneId, data.reading, query.toString());
+                return { ...data, reading: cached.reading, sourceQuery: query.toString() };
+            }
         } catch (error) {
             console.warn('[CommercialPage] sensor query failed:', query.toString(), error.message);
         }
     }
-    return { reading: null };
+    return getCachedCommercialReading(zoneId) || { reading: null };
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 4500) {
@@ -403,6 +416,64 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 4500) {
     } finally {
         clearTimeout(timer);
     }
+}
+
+function commercialCacheScope(zoneId) {
+    const farm = getCurrentFarm();
+    const farmKey = farm?.id || farm?.backendFarmId || AppState.currentFarmId || 'commercial_demo';
+    return `${farmKey}:${normalizeZoneId(zoneId) || zoneId || 'farm_master'}`;
+}
+
+function readCommercialReadingCache() {
+    try {
+        return JSON.parse(localStorage.getItem(LIVE_READING_CACHE_KEY)) || {};
+    } catch (error) {
+        return {};
+    }
+}
+
+function writeCommercialReadingCache(cache) {
+    try {
+        localStorage.setItem(LIVE_READING_CACHE_KEY, JSON.stringify(cache));
+    } catch (error) {
+        console.warn('[CommercialPage] could not save live reading cache:', error.message);
+    }
+}
+
+function rememberCommercialReading(zoneId, reading, sourceQuery = '') {
+    const enriched = {
+        ...reading,
+        _sourceQuery: sourceQuery,
+        _fetchedAt: new Date().toISOString(),
+        _stale: false,
+    };
+    const cache = readCommercialReadingCache();
+    cache[commercialCacheScope(zoneId)] = enriched;
+    writeCommercialReadingCache(cache);
+    return { reading: enriched };
+}
+
+function getCachedCommercialReading(zoneId) {
+    const reading = readCommercialReadingCache()[commercialCacheScope(zoneId)];
+    return reading ? { reading: { ...reading, _stale: true } } : null;
+}
+
+function parseReadingDate(raw) {
+    if (!raw) return null;
+    if (raw instanceof Date) return raw;
+    if (typeof raw === 'object') {
+        if (typeof raw.toDate === 'function') return raw.toDate();
+        if (raw._seconds) return new Date(raw._seconds * 1000);
+        if (raw.seconds) return new Date(raw.seconds * 1000);
+    }
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatReadingTime(reading) {
+    const date = parseReadingDate(reading?._fetchedAt || reading?.createdAt || reading?.updatedAt || reading?.timestamp);
+    if (!date) return 'Last updated --';
+    return `Last updated ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 async function updateZoneOverview() {
@@ -442,8 +513,38 @@ function applySensorReading(r) {
     const gas = Number(r.gasRaw || 0);
     const ec = Number(r.ec || 0);
     const co2 = Number(r.co2Ppm || 0);
-    const plantTotal = plantCount(getCurrentFarm());
-    
+    const liveReading = {
+        ...r,
+        temperature: temp,
+        humidity: humid,
+        lightRaw: light,
+        ph,
+        waterDistanceCm: water,
+        gasRaw: gas,
+        ec,
+        co2Ppm: co2,
+    };
+
+    AppState.latestReading = liveReading;
+    AppState.currentReading = liveReading;
+    AppState.latestReadingMeta = {
+        fetchedAt: r._fetchedAt || r.createdAt || r.updatedAt || r.timestamp || new Date().toISOString(),
+        sourceQuery: r._sourceQuery || '',
+        stale: Boolean(r._stale),
+    };
+    AppState.sensors = {
+        ...(AppState.sensors || {}),
+        temp: { val: temp },
+        humid: { val: humid },
+        light: { val: light },
+        ph: { val: ph },
+        water: { val: water },
+        nutrient: { val: gas },
+        ec: { val: ec },
+        co2: { val: co2 },
+        flow: { val: Number(r.waterFlowLpm || 0) },
+        energy: { val: Number(r.energyKwh || 0) },
+    };
 
     setText('pro-temp', `${temp.toFixed(1)}°C`);
     setText('pro-humid', `${humid}%`);
@@ -453,6 +554,10 @@ function applySensorReading(r) {
     setText('pro-gas', gas);
     setText('pro-ec', ec ? ec.toFixed(2) + ' mS' : '--');
     setText('pro-co2', co2 ? co2 + ' ppm' : '--');
+    if (CommercialFarmCanvas?.showOverview && !CommercialFarmCanvas.selectedRoot) {
+        CommercialFarmCanvas.sensorSnapshot = { ...(CommercialFarmCanvas.sensorSnapshot || {}), ...liveReading };
+        CommercialFarmCanvas.showOverview();
+    }
 }
 async function fetchAIGlobalAdvice(currentData) {
     const prompt = `Current sensor data: ${JSON.stringify(currentData)}. Give one concise operations insight about risk, yield, energy, or automation.`;
@@ -727,18 +832,24 @@ function inferAssignTarget(serial = '') {
     return normalized.includes('FRM') || normalized.includes('MST') ? 'farm_master' : 'zone_A';
 }
 
+function serialFromQrValue(value) {
+    const raw = String(value || '').trim();
+    const mapped = DEMO_QR_TOKEN_SERIALS[raw.toLowerCase()];
+    return String(mapped || raw).trim().toUpperCase();
+}
+
 function normalizeQrSerial(payload) {
     if (typeof payload === 'string') {
         try {
             const parsed = JSON.parse(payload);
             return normalizeQrSerial(parsed);
         } catch {
-            return payload.trim().toUpperCase();
+            return serialFromQrValue(payload);
         }
     }
-    const serial = payload?.serial || payload?.deviceSerial || payload?.qrSerial || payload?.id;
+    const serial = payload?.serial || payload?.deviceSerial || payload?.qrSerial || payload?.token || payload?.deviceToken || payload?.id;
     if (!serial) throw new Error('QR does not contain a SeedDown serial');
-    return String(serial).trim().toUpperCase();
+    return serialFromQrValue(serial);
 }
 
 function decodeAssignQrFile(file) {
@@ -819,7 +930,7 @@ function zoneCardHtml(zone) {
     const health = zoneHealth(reading, getCurrentFarm()?.thresholds || {});
     const deviceLabel = zone.deviceId ? zone.deviceId.replace(/^dev_/, '') : 'unassigned';
     const latest = reading
-        ? `${formatSensorMini(reading.temperature, '°C')} · ${formatSensorMini(reading.humidity, '%')} · pH ${reading.ph != null ? Number(reading.ph).toFixed(1) : '--'}`
+        ? `${formatSensorMini(reading.temperature, '°C')} · ${formatSensorMini(reading.humidity, '%')} · pH ${reading.ph != null ? Number(reading.ph).toFixed(1) : '--'} · ${formatReadingTime(reading)}${reading._stale ? ' · cached' : ''}`
         : 'waiting for first reading';
 
     return `
