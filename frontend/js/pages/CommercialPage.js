@@ -1,6 +1,6 @@
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
-import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=commercial-polish-1';
+import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=radish-ai-1';
 import { openAddPlantModal } from '../components/AddPlantModal.js';
 import jsQR from 'https://esm.sh/jsqr@1.4.0';
 
@@ -186,6 +186,8 @@ function bindEvents() {
     document.getElementById('commercialChatInput')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') sendCommercialChat();
     });
+    window.removeEventListener('seeddown:mascotAsk', handleMascotAsk);
+    window.addEventListener('seeddown:mascotAsk', handleMascotAsk);
 
     // Farm master tiles → detail page
 document.querySelectorAll('.fm-drill').forEach(tile => {
@@ -564,10 +566,15 @@ function applySensorReading(r) {
 async function fetchAIGlobalAdvice(currentData) {
     const prompt = `Current sensor data: ${JSON.stringify(currentData)}. Give one concise operations insight about risk, yield, energy, or automation.`;
     try {
+        const aiContext = getCommercialAIContext();
         const res = await fetch(`${API_BASE}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: prompt, mode: 'commercial' }),
+            body: JSON.stringify({
+                message: prompt,
+                mode: 'commercial',
+                gardenState: { ...aiContext, latestReading: currentData || aiContext.latestReading },
+            }),
         });
         const result = await res.json();
         setText('ai-overview-text', result.reply || result.response || 'Farm is operating normally.');
@@ -585,7 +592,7 @@ async function sendCommercialChat() {
     appendChat('ai', 'Thinking...');
 
     try {
-        const farm = getCurrentFarm();
+        const aiContext = getCommercialAIContext();
         const res = await fetch(`${API_BASE}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -596,7 +603,7 @@ async function sendCommercialChat() {
                     .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }))
                     .slice(-10),
                 mode: 'commercial',
-                gardenState: { farm, sensors: AppState.sensors },
+                gardenState: aiContext,
             }),
         });
         const result = await res.json();
@@ -604,6 +611,52 @@ async function sendCommercialChat() {
     } catch (error) {
         replaceLastAi('AI chat is offline, but sensor monitoring and tools still work.');
     }
+}
+
+function handleMascotAsk(event) {
+    const input = document.getElementById('commercialChatInput');
+    const context = event.detail || CommercialFarmCanvas.getSelectedContext?.();
+    if (!input) return;
+    const label = context?.label || 'this commercial farm';
+    input.value = `Explain ${label} using the current live data.`;
+    sendCommercialChat();
+}
+
+function getCommercialAIContext() {
+    const farm = getCurrentFarm();
+    const selected3DObject = CommercialFarmCanvas.getSelectedContext?.() || null;
+    const selectedObjectZoneId = normalizeZoneId(selected3DObject?.zoneId || selected3DObject?.zone || '');
+    const activeZoneId = selectedObjectZoneId || selectedZoneId || resolveDefaultZone(farm);
+    const latestReading =
+        (activeZoneId && zoneSnapshots[activeZoneId])
+        || AppState.latestReading
+        || AppState.currentReading
+        || null;
+    const zoneDevice = activeZoneId ? findDeviceForZone(farm, activeZoneId) : null;
+
+    return {
+        farm,
+        mode: 'commercial',
+        selectedZoneId: activeZoneId,
+        selectedZoneLabel: zoneLabel(activeZoneId),
+        selected3DObject,
+        latestReading,
+        latestReadingMeta: AppState.latestReadingMeta || null,
+        thresholds: farm?.thresholds || farm?.commercialThresholds || farm?.preferences?.thresholds || null,
+        sensors: AppState.sensors || {},
+        deviceAssignment: zoneDevice ? {
+            serial: zoneDevice.serial || zoneDevice.deviceSerial || '',
+            deviceId: zoneDevice.deviceId || '',
+            targetId: zoneDevice.targetId || zoneDevice.zoneId || zoneDevice.zone || '',
+            status: zoneDevice.status || 'active',
+            active: zoneDevice.active !== false,
+        } : null,
+        commercialDevices: Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [],
+        recentChatHistory: chatMessages
+            .filter(m => m.role !== 'ai' || m.text !== 'Thinking...')
+            .slice(-8),
+        responseInstruction: 'Answer based on the selected 3D object, selected zone, latestReading, thresholds, and device assignment. If live data is missing, say you are waiting for live data instead of guessing.',
+    };
 }
 
 function appendChat(role, text) {
@@ -1747,6 +1800,14 @@ function ensureCommercialCommandStyles() {
             border: 1px solid rgba(22,101,52,.12) !important;
             box-shadow: 0 12px 34px rgba(15,23,42,.1) !important;
         }
+        .commercial-command-screen .cf-mascot-bubble {
+            z-index: 14 !important;
+            left: 18px !important;
+            right: auto !important;
+            bottom: 82px !important;
+            width: min(330px, calc(100vw - 470px)) !important;
+            min-width: 260px !important;
+        }
         @media (max-width: 760px) {
             .commercial-top-shell { left: 12px; top: 12px; }
             .commercial-title-card { min-width: 0; width: calc(100vw - 120px); }
@@ -1757,6 +1818,13 @@ function ensureCommercialCommandStyles() {
                 width: calc(100vw - 24px) !important;
                 min-width: 0 !important;
                 max-width: 360px !important;
+            }
+            .commercial-command-screen .cf-mascot-bubble {
+                left: 12px !important;
+                right: 12px !important;
+                bottom: 76px !important;
+                width: auto !important;
+                min-width: 0 !important;
             }
             .commercial-panel-toggle { top: auto; bottom: 16px; right: 16px; }
             .commercial-ops-panel { top: 94px; left: 12px; right: 12px; bottom: 70px; width: auto; }

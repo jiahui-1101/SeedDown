@@ -23,10 +23,10 @@ const messages = {
 };
 
 const advisorMeta = {
-    idle: { name: 'FARM ADVISOR', avatar: '🧑‍🌾', color: 'var(--accent)' },
-    warning: { name: 'FARM ADVISOR', avatar: '⚠️', color: 'var(--warn)' },
-    danger: { name: 'FARM ALERT', avatar: '🚨', color: 'var(--danger)' },
-    ready: { name: 'HARVEST TIP', avatar: '🌿', color: 'var(--ok)' },
+    idle: { name: 'SEEDDOWN AI ADVISOR', avatar: '🌿', color: 'var(--accent)' },
+    warning: { name: 'SEEDDOWN AI ADVISOR', avatar: '⚠️', color: 'var(--warn)' },
+    danger: { name: 'SEEDDOWN AI ALERT', avatar: '🚨', color: 'var(--danger)' },
+    ready: { name: 'SEEDDOWN AI TIP', avatar: '🌿', color: 'var(--ok)' },
 };
 
 export const NpcAdvisor = {

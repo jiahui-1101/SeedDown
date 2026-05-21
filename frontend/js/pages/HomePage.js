@@ -30,10 +30,10 @@ export function render() {
                 <div id="dashStrip" class="sensor-strip"></div>
                 <div class="advisor-wrap" style="margin:12px 16px;">
                     <div class="advisor-card" style="background:var(--surface); border-radius:20px; padding:14px; display:flex; gap:12px;">
-                        <div id="npcAvatar" style="font-size:36px;">🧑‍🌾</div>
+                        <div id="npcAvatar" style="font-size:36px;">🌿</div>
                         <div style="flex:1;">
-                            <div id="npcName" style="font-weight:700; color:var(--accent);">FARM ADVISOR</div>
-                            <div id="npcText" style="font-size:0.8rem; color:var(--sub);">Loading insights...</div>
+                            <div id="npcName" style="font-weight:700; color:var(--accent);">SEEDDOWN AI ADVISOR</div>
+                            <div id="npcText" style="font-size:0.8rem; color:var(--sub);">Loading farm context...</div>
                             <div style="display:flex; gap:8px; margin-top:8px;">
                                 <button id="npcNext" class="advisor-btn primary">Next →</button>
                                 <button id="npcDismiss" class="advisor-btn">Dismiss</button>

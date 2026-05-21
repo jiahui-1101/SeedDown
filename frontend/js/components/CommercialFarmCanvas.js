@@ -49,6 +49,11 @@ export const CommercialFarmCanvas = {
     tooltip: null,
     fullscreenButton: null,
     zoomControls: null,
+    mascotGroup: null,
+    mascotTarget: null,
+    mascotHome: null,
+    mascotBubble: null,
+    mascotSelectedContext: null,
     originalParent: null,
     originalNextSibling: null,
     resizeHandler: null,
@@ -167,6 +172,7 @@ export const CommercialFarmCanvas = {
         this.addDigitalTwinDevices(towers);
         this.addNutrientStation();
         this.addControlPanel();
+        this.addAIMascot();
         this.addVentilationFans();
         this.addWaterDrips(towers);
         this.addParticles();
@@ -905,6 +911,89 @@ export const CommercialFarmCanvas = {
         this.scene.add(label);
     },
 
+    addAIMascot() {
+        const group = new THREE.Group();
+        this.mascotHome = new THREE.Vector3(4.35, 0.58, 4.7);
+        this.mascotTarget = this.mascotHome.clone();
+        group.position.copy(this.mascotHome);
+        group.userData.isMascot = true;
+
+        const shadow = new THREE.Mesh(
+            new THREE.CircleGeometry(0.38, 32),
+            new THREE.MeshBasicMaterial({ color: 0x0f172a, transparent: true, opacity: 0.16, depthWrite: false })
+        );
+        shadow.rotation.x = -Math.PI / 2;
+        shadow.position.y = -0.31;
+        group.add(shadow);
+
+        const bodyMat = new THREE.MeshStandardMaterial({
+            color: 0xf43f5e,
+            roughness: 0.38,
+            metalness: 0.02,
+            emissive: 0x7f1d1d,
+            emissiveIntensity: 0.08,
+        });
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.31, 42, 32), bodyMat);
+        body.scale.set(1.08, 0.95, 1.02);
+        body.castShadow = true;
+        group.add(body);
+
+        const belly = new THREE.Mesh(
+            new THREE.SphereGeometry(0.2, 28, 18),
+            new THREE.MeshStandardMaterial({ color: 0xffb38a, roughness: 0.48, metalness: 0 })
+        );
+        belly.scale.set(1.1, 0.55, 0.16);
+        belly.position.set(0, -0.12, 0.27);
+        group.add(belly);
+
+        const leafMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.44, metalness: 0.02 });
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x84cc16, roughness: 0.5 });
+        [-0.18, 0, 0.18].forEach((x, index) => {
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.024, 0.23, 10), stemMat);
+            stem.position.set(x * 0.42, 0.29, 0);
+            stem.rotation.z = (index - 1) * 0.36;
+            group.add(stem);
+
+            const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.105, 20, 14), leafMat);
+            leaf.scale.set(1.7, 0.42, 0.78);
+            leaf.position.set(x, 0.45 + Math.abs(index - 1) * 0.02, index === 1 ? 0.01 : 0.035);
+            leaf.rotation.z = (index - 1) * 0.5;
+            leaf.rotation.x = 0.22;
+            leaf.castShadow = true;
+            group.add(leaf);
+        });
+
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0x281013, roughness: 0.28 });
+        [-0.1, 0.1].forEach(x => {
+            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.034, 16, 12), eyeMat);
+            eye.position.set(x, 0.05, 0.295);
+            group.add(eye);
+        });
+
+        const cheekMat = new THREE.MeshStandardMaterial({ color: 0xff8aa5, roughness: 0.45, transparent: true, opacity: 0.92 });
+        [-0.17, 0.17].forEach(x => {
+            const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.038, 16, 10), cheekMat);
+            cheek.scale.set(1.3, 0.72, 0.22);
+            cheek.position.set(x, -0.03, 0.302);
+            group.add(cheek);
+        });
+
+        const smilePoints = [
+            new THREE.Vector3(-0.055, -0.01, 0.318),
+            new THREE.Vector3(-0.018, -0.035, 0.322),
+            new THREE.Vector3(0.018, -0.035, 0.322),
+            new THREE.Vector3(0.055, -0.01, 0.318),
+        ];
+        const smile = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints(smilePoints),
+            new THREE.LineBasicMaterial({ color: 0x2b1014, linewidth: 2 })
+        );
+        group.add(smile);
+
+        this.mascotGroup = group;
+        this.scene.add(group);
+    },
+
     addVentilationFans() {
         const fanMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.36, metalness: 0.55 });
         [-7.3, 7.3].forEach(x => {
@@ -985,6 +1074,20 @@ export const CommercialFarmCanvas = {
         this.tooltip.className = 'cf-tooltip';
         this.tooltip.innerHTML = '<span class="cf-tooltip-dot"></span><div><strong>Hover a tower</strong><small>Click to inspect rack details</small></div>';
         this.parent.appendChild(this.tooltip);
+
+        this.mascotBubble = document.createElement('div');
+        this.mascotBubble.className = 'cf-overlay cf-mascot-bubble';
+        this.mascotBubble.addEventListener('click', event => {
+            const button = event.target.closest('[data-mascot-ask]');
+            if (!button) return;
+            event.preventDefault();
+            event.stopPropagation();
+            window.dispatchEvent(new CustomEvent('seeddown:mascotAsk', {
+                detail: this.getSelectedContext(),
+            }));
+        });
+        this.parent.appendChild(this.mascotBubble);
+        this.updateMascotBubble();
 
         const legend = document.createElement('div');
         legend.className = 'cf-overlay cf-legend';
@@ -1069,12 +1172,14 @@ export const CommercialFarmCanvas = {
             if (this.selectedRoot) this.setHighlight(this.selectedRoot, false);
             this.selectedRoot = null;
             this.showOverview();
+            this.moveMascotToRoot(null);
             return;
         }
         if (this.selectedRoot && this.selectedRoot !== hit) this.setHighlight(this.selectedRoot, false);
         this.selectedRoot = hit;
         this.setHighlight(hit, true, true);
         this.showRootDetail(hit);
+        this.moveMascotToRoot(hit);
     },
 
     handleWheel(event) {
@@ -1183,6 +1288,8 @@ export const CommercialFarmCanvas = {
             status: facilityStatus(this.slotPlants, this.sensorSnapshot),
             mode: 'Facility overview',
         });
+        this.mascotSelectedContext = null;
+        this.updateMascotBubble();
     },
 
     showRootDetail(root) {
@@ -1197,6 +1304,100 @@ export const CommercialFarmCanvas = {
         }
         const plants = Array.isArray(data.plants) ? data.plants : [];
         this.detailPanel.innerHTML = rackPanelHTML(data, plants, this.sensorSnapshot);
+    },
+
+    moveMascotToRoot(root) {
+        if (!this.mascotGroup || !this.mascotTarget) return;
+        if (!root) {
+            this.mascotTarget.copy(this.mascotHome || new THREE.Vector3(4.35, 0.58, 4.7));
+            this.mascotSelectedContext = null;
+            this.updateMascotBubble();
+            return;
+        }
+
+        const box = new THREE.Box3().setFromObject(root);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const xSide = center.x >= 0 ? 1 : -1;
+        const zSide = center.z >= 0 ? 1 : -1;
+        this.mascotTarget.set(
+            THREE.MathUtils.clamp(center.x + xSide * Math.max(0.7, size.x * 0.36), -7.2, 7.2),
+            THREE.MathUtils.clamp(center.y + Math.max(0.55, size.y * 0.18), 0.58, 3.2),
+            THREE.MathUtils.clamp(center.z + zSide * Math.max(0.5, size.z * 0.26), -5.9, 5.9)
+        );
+        this.mascotSelectedContext = this.contextFromRoot(root);
+        this.updateMascotBubble();
+    },
+
+    contextFromRoot(root) {
+        const data = root?.userData || {};
+        const sensors = { ...(this.sensorSnapshot || {}) };
+        if (data.isDevice) {
+            return {
+                objectType: data.type === 'output' ? 'output' : 'sensor',
+                label: data.label || 'Device',
+                key: data.key || '',
+                scope: data.scope || 'farm',
+                zoneId: data.zoneId || '',
+                zoneLabel: data.zoneLabel || '',
+                status: data.status || 'healthy',
+                value: data.value || '',
+                purpose: devicePurpose(data.key),
+                latestReading: sensors,
+                prompt: `Ask about ${data.zoneLabel || data.scope || 'farm'} ${data.label || 'device'}`,
+            };
+        }
+        if (data.isTank) {
+            return {
+                objectType: 'tank',
+                label: `${data.label || 'Nutrient'} tank`,
+                status: data.status || 'healthy',
+                latestReading: sensors,
+                prompt: `Ask about ${data.label || 'nutrient'} tank`,
+            };
+        }
+        if (data.isTower) {
+            return {
+                objectType: 'zone',
+                label: data.label || 'Zone',
+                zoneId: data.id || '',
+                crop: data.crop || '',
+                status: data.status || 'empty',
+                plantCount: Array.isArray(data.plants) ? data.plants.length : 0,
+                latestReading: sensors,
+                prompt: `Ask about ${data.label || 'this zone'}`,
+            };
+        }
+        return null;
+    },
+
+    getSelectedContext() {
+        return this.mascotSelectedContext || this.contextFromRoot(this.selectedRoot) || {
+            objectType: 'facility',
+            label: this.farm?.name || AppState.farmName || 'Commercial Farm',
+            status: facilityStatus(this.slotPlants, this.sensorSnapshot),
+            latestReading: { ...(this.sensorSnapshot || {}) },
+            prompt: 'Ask about the full commercial farm',
+        };
+    },
+
+    updateMascotBubble() {
+        if (!this.mascotBubble) return;
+        const context = this.mascotSelectedContext;
+        const status = String(context?.status || '').toLowerCase();
+        const isRisk = status.includes('warning') || status.includes('danger') || status.includes('critical');
+        const title = context?.prompt || 'Ask SeedDown AI';
+        const message = context
+            ? isRisk
+                ? `${context.label} needs attention. Ask me to explain the live reading.`
+                : `I can explain ${context.label} using the current farm data.`
+            : 'Click a zone, sensor, tank, or output to ask about that exact object.';
+        this.mascotBubble.innerHTML = `
+            <div class="cf-mascot-kicker">Radish AI</div>
+            <strong>${escapeHTML(title)}</strong>
+            <span>${escapeHTML(message)}</span>
+            <button type="button" data-mascot-ask>Ask now</button>
+        `;
     },
 
     async toggleFullscreen() {
@@ -1289,6 +1490,7 @@ export const CommercialFarmCanvas = {
 
         if (this.controls) this.controls.update();
         this.updateParticles();
+        this.updateMascot();
         this.scene.traverse(obj => {
             if (obj.userData?.isFanBlade) obj.rotation.z += 4.8 * delta;
             if (obj.userData?.isDrip) {
@@ -1299,6 +1501,15 @@ export const CommercialFarmCanvas = {
 
         if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera);
         this.rafId = requestAnimationFrame(() => this.animate());
+    },
+
+    updateMascot() {
+        if (!this.mascotGroup || !this.mascotTarget) return;
+        const bob = Math.sin(this.frame * 0.045) * 0.055;
+        const target = this.mascotTarget.clone();
+        target.y += bob;
+        this.mascotGroup.position.lerp(target, 0.055);
+        this.mascotGroup.rotation.y = Math.sin(this.frame * 0.028) * 0.08;
     },
 
     updateParticles() {
@@ -1392,6 +1603,11 @@ export const CommercialFarmCanvas = {
         this.tooltip = null;
         this.fullscreenButton = null;
         this.zoomControls = null;
+        this.mascotGroup = null;
+        this.mascotTarget = null;
+        this.mascotHome = null;
+        this.mascotBubble = null;
+        this.mascotSelectedContext = null;
         this.originalParent = null;
         this.originalNextSibling = null;
         this.resizeHandler = null;
@@ -2043,6 +2259,51 @@ function ensureCommercialStyles() {
         .cf-tooltip-dot.warning { background:#f59e0b; box-shadow:0 0 16px rgba(245,158,11,.55); }
         .cf-tooltip-dot.danger { background:#ef4444; box-shadow:0 0 16px rgba(239,68,68,.55); }
         .cf-tooltip-dot.empty { background:#64748b; box-shadow:none; }
+        .cf-mascot-bubble {
+            right: 14px;
+            bottom: 74px;
+            width: min(260px, calc(100% - 28px));
+            padding: 12px 13px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, .92);
+            border: 1px solid rgba(20, 184, 166, .34);
+            box-shadow: 0 16px 42px rgba(15, 23, 42, .14);
+            backdrop-filter: blur(14px);
+            color: #134e4a;
+        }
+        .cf-mascot-kicker {
+            color: #0f766e;
+            font-size: 9px;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: .12em;
+            margin-bottom: 4px;
+        }
+        .cf-mascot-bubble strong {
+            display: block;
+            color: #0f172a;
+            font-size: 13px;
+            line-height: 1.18;
+        }
+        .cf-mascot-bubble span {
+            display: block;
+            margin-top: 5px;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 750;
+            line-height: 1.35;
+        }
+        .cf-mascot-bubble button {
+            margin-top: 9px;
+            border: 1px solid rgba(20, 184, 166, .38);
+            border-radius: 999px;
+            background: #ccfbf1;
+            color: #0f766e;
+            padding: 7px 10px;
+            font-size: 10px;
+            font-weight: 950;
+            cursor: pointer;
+        }
         .cf-legend {
             right: 14px;
             bottom: 14px;
@@ -2198,6 +2459,7 @@ function ensureCommercialStyles() {
             .cf-legend-help { display:none !important; }
             .cf-legend { left:14px; right:14px; justify-content:center; }
             .cf-tooltip { display:none; }
+            .cf-mascot-bubble { left:14px; right:14px; bottom:64px; width:auto; }
             .commercial-farm-canvas { height: 390px !important; }
         }
     `;
