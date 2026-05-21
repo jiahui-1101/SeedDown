@@ -8,7 +8,7 @@ import { AppState } from '../store.js';
 import { saveFarmsToFirestore } from '../utils/firebase.js'; 
 import { showToast } from '../utils/toast.js';
 import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=commercial-polish-1';
-import jsQR from 'jsqr';
+import jsQR from 'https://esm.sh/jsqr@1.4.0';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 

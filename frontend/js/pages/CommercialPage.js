@@ -81,8 +81,8 @@ export function render() {
                  <div class="ops-scroll">
 
     <!-- FARM MASTER OVERVIEW -->
-    <section class="ops-section" id="farmMasterSection" style="border-left:4px solid #0369a1;">
-        <div class="ops-section-title" style="color:#0369a1;">🏭 Farm Master · Overall</div>
+    <section class="ops-section" id="farmMasterSection" style="border-left:4px solid #22c55e;">
+        <div class="ops-section-title" style="color:#15803d;">🏭 Farm Master · Overall</div>
        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
     <button class="fm-tile fm-drill" data-key="water" type="button">
         <span>Water Level</span>
@@ -102,8 +102,8 @@ export function render() {
     </button>
 </div>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
-    <div style="font-size:11px;color:#0369a1;font-weight:750;line-height:1.45;" id="fm-status-text">Syncing farm master...</div>
-    <button id="farmMasterDetailBtn" type="button" style="font-size:10px;font-weight:950;color:#0369a1;background:#e0f2fe;border:1px solid #bae6fd;border-radius:999px;padding:5px 10px;cursor:pointer;">View All →</button>
+    <div style="font-size:11px;color:#047857;font-weight:750;line-height:1.45;" id="fm-status-text">Syncing farm master...</div>
+    <button id="farmMasterDetailBtn" type="button" style="font-size:10px;font-weight:950;color:#166534;background:#dcfce7;border:1px solid #bbf7d0;border-radius:999px;padding:5px 10px;cursor:pointer;">View All →</button>
 </div>
     </section>
    
@@ -294,12 +294,23 @@ const syncData = async () => {
             const fmData = await fmRes.json().catch(() => null);
             const r = fmData?.reading;
             if (r) {
-                setText('fm-water',  r.waterDistanceCm != null ? `${Number(r.waterDistanceCm).toFixed(1)} cm` : '--');
-                setText('fm-gas',    r.gasRaw != null ? String(Math.round(Number(r.gasRaw))) : '--');
-                setText('fm-co2',    r.co2Ppm != null ? `${r.co2Ppm} ppm` : '--');
-                setText('fm-energy', r.energyKwh != null ? `${Number(r.energyKwh).toFixed(2)} kWh` : '--');
-                setText('fm-status-text', `Last sync: ${new Date().toLocaleTimeString()} · Device: ${DEMO_COMMERCIAL_FARM_MASTER}`);
-            }
+    const setFmTile = (id, text, isNormal) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.innerText = text;
+            el.style.color = isNormal ? '#14532d' : '#dc2626';
+        }
+    };
+    const water = r.waterDistanceCm != null ? Number(r.waterDistanceCm) : null;
+    const gas   = r.gasRaw != null ? Number(r.gasRaw) : null;
+    const co2   = r.co2Ppm != null ? Number(r.co2Ppm) : null;
+    const energy = r.energyKwh != null ? Number(r.energyKwh) : null;
+
+    setFmTile('fm-water',  water  != null ? `${water.toFixed(1)} cm`  : '--', water  == null || (water >= 3 && water <= 30));
+    setFmTile('fm-gas',    gas    != null ? String(Math.round(gas))   : '--', gas    == null || gas < 3000);
+    setFmTile('fm-co2',    co2    != null ? `${co2} ppm`              : '--', co2    == null || co2 < 1500);
+    setFmTile('fm-energy', energy != null ? `${energy.toFixed(2)} kWh`: '--', energy == null || energy >= 0);
+}
         }
 
         // ── Zone overview ─────────────────────────────────────
@@ -1097,8 +1108,8 @@ function ensureCommercialCommandStyles() {
         }
         .advisor-section { border-left: 4px solid #22c55e; }
 .fm-tile {
-    background: #f0f9ff;
-    border: 1px solid #bae6fd;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
     border-radius: 14px;
     padding: 10px 12px;
     text-align: left;
@@ -1106,16 +1117,15 @@ function ensureCommercialCommandStyles() {
     transition: background .15s, border-color .15s, transform .15s;
 }
 .fm-tile:hover {
-    background: #e0f2fe;
-    border-color: #7dd3fc;
+    background: #dcfce7;
+    border-color: #86efac;
     transform: translateY(-1px);
 }
-    
 .fm-tile span {
     display: block;
     font-size: 9px;
     font-weight: 950;
-    color: #0369a1;
+    color: #15803d;
     text-transform: uppercase;
     letter-spacing: .08em;
     margin-bottom: 6px;
@@ -1124,8 +1134,9 @@ function ensureCommercialCommandStyles() {
     display: block;
     font-size: 16px;
     font-weight: 950;
-    color: #0c4a6e;
+    color: #14532d;
 }
+
         .advisor-text { color: #334155; font-size: 13px; line-height: 1.45; }
         .zone-overview-grid {
             display: grid;
