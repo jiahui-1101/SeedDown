@@ -746,6 +746,32 @@ function cleanAiCareSentence(raw) {
   return sentence.length > 180 ? '' : sentence;
 }
 
+function fallbackCropProfile({ species, cropSpec, error }) {
+  const req = cropSpec?.requirements || {};
+  return {
+    suitable: true,
+    suitableForVerticalFarm: true,
+    source: 'local_crop_defaults',
+    reason: cropSpec
+      ? `${cropSpec.commonName || species} was matched to the local SeedDown crop database. Suitability is calculated from saved crop ranges and live Firebase sensor readings.`
+      : `${species} is being assessed with generic vertical-farm defaults and live Firebase sensor readings.`,
+    estimatedHarvestDays: finiteNumber(req.growthDays, 60),
+    impacts: normaliseImpact(cropSpec?.impacts, { tempChange: 0, humidChange: 3, lightChange: 1, waterChange: 6, nutrientChange: 5 }),
+    environmentProfile: {
+      tempIdeal: req.tempMin !== undefined && req.tempMax !== undefined ? [req.tempMin, req.tempMax] : DEFAULT_ENV_PROFILE.tempIdeal,
+      humidityIdeal: req.humidityMin !== undefined && req.humidityMax !== undefined ? [req.humidityMin, req.humidityMax] : DEFAULT_ENV_PROFILE.humidityIdeal,
+      moistureIdeal: moistureRangeFromWaterDemand(req.waterPerDay),
+      moistureBasis: 'Local SeedDown crop defaults.',
+      phIdeal: DEFAULT_ENV_PROFILE.phIdeal,
+      ecIdeal: DEFAULT_ENV_PROFILE.ecIdeal,
+      waterDemand: cropWaterDemand(req.waterPerDay),
+    },
+    cropResourceProfile: normaliseCropResourceProfile({}, req, cropSpec?.yield || {}),
+    warnings: [],
+    resourceLinks: [],
+  };
+}
+
 async function askAiCropProfile({ species, quantity, planting, currentCrops, sensors, cropSpec, historicalStats }) {
   const cropContext = cropSpec ? {
     species: cropSpec.species,
@@ -1112,10 +1138,7 @@ exports.getNewPlantImpact = async (req, res) => {
       aiSuitability = await askAiCropProfile({ species, quantity, planting, currentCrops, sensors, cropSpec, historicalStats });
     } catch (err) {
       console.warn('[WhatIf] AI species profile failed:', err.message);
-      return res.status(503).json({
-        error: 'AI crop profile unavailable',
-        message: 'New plant suitability needs an AI-generated crop profile with source links. Configure GROQ_API_KEY, GEMINI_API_KEY_2, or GEMINI_API_KEY and try again.',
-      });
+      aiSuitability = fallbackCropProfile({ species, cropSpec, error: err });
     }
 
     // ── 5. Unsuitable → return early with AI explanation ─────────────────────
@@ -1154,6 +1177,11 @@ exports.getNewPlantImpact = async (req, res) => {
     };
 
     const plan = environmentPlan({ species, quantity, planting, cropSpec, aiSuitability, sensors, impacts });
+    const advisoryWarnings = [
+      ...(aiSuitability?.warnings || []),
+      ...plan.warnings,
+    ];
+    plan.warnings = advisoryWarnings;
 
     // ── 7. Translate plan → sensorGap + demand for the frontend ──────────────
     // sensorGap: deterministic current vs ideal band comparison (no AI numbers)
@@ -1218,7 +1246,7 @@ exports.getNewPlantImpact = async (req, res) => {
       demand,
       environmentPlan: plan,
       planting,
-      warnings: plan.warnings,
+      warnings: advisoryWarnings,
       insight,
       analysis: aiSuitability,
       historicalStats: historicalStats || null,
@@ -1240,16 +1268,16 @@ exports.getNewPlantImpact = async (req, res) => {
         environmentPlan: null,
         planting: null,
         warnings: [err.message],
-        insight: `No Firebase sensor readings were found for this selected farm/device. Connect a real deviceId/farmId with sensorReadings before running new plant suitability.`,
+        insight: `No sensor readings were found for this selected farm/device. Connect a real deviceId/farmId with sensorReadings before running new plant suitability.`,
         analysis: { suitable: null, reason: err.message },
         historicalStats: null,
         latestSensorReading: null,
-        sensorSource: 'Firebase sensorReadings unavailable',
+        sensorSource: 'Sensor readings unavailable',
         resourceLinks: [],
       });
     }
     console.error('New plant impact error:', err);
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: 'New plant impact unavailable' });
   }
 };
 

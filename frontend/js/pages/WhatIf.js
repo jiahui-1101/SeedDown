@@ -9,14 +9,20 @@ import { AppState } from '../store.js';
 // ── Shared constants ──────────────────────────────────────────────────────────
 // Centralise all magic numbers so they are named, documented, and easy to update.
 
-// Device identifier — read from AppState when available, fall back to this default.
-const DEFAULT_DEVICE_ID = 'farm_001';
+// Device identifier — read from AppState when available, fall back to the beginner demo.
+const DEFAULT_DEVICE_ID = 'beginner_starter';
+const LEGACY_DEVICE_ID = 'farm_001';
+const BEGINNER_DEMO_FARM_ID = 'farm_beginner_demo_001';
+const BEGINNER_DEMO_FIELD_ID = 'field_beginner_starter';
 
 // Water tariff (RM per litre) — Malaysian avg domestic rate
 const WATER_RATE_RM_PER_LITRE = 0.042;
 
 // Electricity tariff (RM per kWh) — TNB domestic Block 1 rate
 const ELECTRICITY_RATE_RM_PER_KWH = 1.10;
+
+// Hydroponic A+B nutrient estimate from live retail checks, RM per ml.
+const FERTILIZER_RATE_RM_PER_ML = 0.009;
 
 // Panel draw (kW) for a single grow-light strip — used in energy cost calc
 const LIGHT_KW_PER_STRIP = 0.04;
@@ -49,23 +55,229 @@ const DEFAULT_SENSORS = { temp: 28, humid: 68, light: 82, water: 45, nutrient: 7
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000' : window.location.origin;
 
-function getPlantedCrops() {
-  // Read from current farm in localStorage
+function wifEscapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[ch]);
+}
+
+function wifNumber(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || value === '') continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function wifClamp(value, min = 0, max = 100) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(min, Math.min(max, n));
+}
+
+function wifReadSavedFarms() {
   try {
     const farms = JSON.parse(localStorage.getItem('user_farms') || '[]');
-    // Prefer AppState.currentFarm (set by FarmListPage), then match by ID,
-    // then last-in-array as last resort. Log a warning so silent wrong-farm
-    // reads are visible during development.
-    const currentFarm = AppState.currentFarm
-      || farms.find(f => f.id === AppState.currentFarmId)
-      || (() => {
-           if (farms.length > 1) console.warn('[WhatIf] currentFarmId not set — falling back to last farm:', farms[farms.length - 1]?.id);
-           return farms[farms.length - 1];
-         })();
+    return Array.isArray(farms) ? farms : [];
+  } catch {
+    return [];
+  }
+}
 
-    if (!currentFarm?.plants?.length) return null;
-    return currentFarm.plants; // [{name, emoji, species, slots}]
-  } catch { return null; }
+function wifGetCurrentFarm() {
+  const farms = wifReadSavedFarms();
+  const currentFarm = AppState.currentFarm
+    || farms.find(f => f.id === AppState.currentFarmId)
+    || farms.find(f => f.farmId === AppState.currentFarmId || f.backendFarmId === AppState.currentFarmId)
+    || (() => {
+         if (farms.length > 1) console.warn('[WhatIf] currentFarmId not set - falling back to last farm:', farms[farms.length - 1]?.id);
+         return farms[farms.length - 1] || null;
+       })();
+  return currentFarm || null;
+}
+
+function getPlantedCrops() {
+  const currentFarm = wifGetCurrentFarm();
+  if (!currentFarm?.plants?.length) return null;
+  return currentFarm.plants; // [{name, emoji, species, slots}]
+}
+
+function wifPushSensorCandidate(candidates, seen, key, value) {
+  if (value === undefined || value === null || value === '') return;
+  const clean = String(value).trim();
+  if (!clean) return;
+  const id = `${key}:${clean}`;
+  if (seen.has(id)) return;
+  seen.add(id);
+  candidates.push({ [key]: clean });
+}
+
+function wifSensorQueryCandidates(farm = wifGetCurrentFarm()) {
+  const candidates = [];
+  const seen = new Set();
+
+  const zoneDeviceId = farm?.deviceId || farm?.sensorDeviceId || farm?.zoneDeviceId || farm?.iotDeviceId;
+  const masterDeviceId = farm?.farmMaster?.deviceId || farm?.masterDeviceId || farm?.farmDeviceId;
+
+  wifPushSensorCandidate(candidates, seen, 'deviceId', zoneDeviceId);
+  wifPushSensorCandidate(candidates, seen, 'zoneId', farm?.zoneId || farm?.currentZoneId);
+  wifPushSensorCandidate(candidates, seen, 'farmId', farm?.backendFarmId || farm?.farmId || farm?.id || AppState.currentFarmId);
+  wifPushSensorCandidate(candidates, seen, 'fieldId', farm?.fieldId);
+  wifPushSensorCandidate(candidates, seen, 'deviceId', masterDeviceId);
+  wifPushSensorCandidate(candidates, seen, 'deviceId', DEFAULT_DEVICE_ID);
+  wifPushSensorCandidate(candidates, seen, 'farmId', BEGINNER_DEMO_FARM_ID);
+  wifPushSensorCandidate(candidates, seen, 'fieldId', BEGINNER_DEMO_FIELD_ID);
+  wifPushSensorCandidate(candidates, seen, 'deviceId', LEGACY_DEVICE_ID);
+
+  return candidates;
+}
+
+function wifQueryString(filters = {}) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') params.set(key, value);
+  });
+  return params.toString();
+}
+
+async function wifFetchJsonWithTimeout(url, ms = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    return res.ok ? res.json() : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function wifPostJsonWithTimeout(url, body, ms = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || `Server error ${res.status}`);
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function wifNormalizeSensorPayload(payload, sourceQuery = null) {
+  const reading = payload?.reading || payload;
+  if (!reading || typeof reading !== 'object') return null;
+
+  const lightRaw = wifNumber(reading.lightRaw);
+  const soilRaw = wifNumber(reading.soilRaw);
+  const ec = wifNumber(reading.ec, reading.nutrientEc);
+  const ecRaw = wifNumber(reading.ecRaw);
+
+  const normalized = {
+    temp: wifNumber(reading.temp, reading.temperature),
+    humid: wifNumber(reading.humid, reading.humidity),
+    light: wifNumber(reading.light, reading.lux, lightRaw !== null ? wifClamp((lightRaw / 4095) * 100) : null),
+    water: wifNumber(
+      reading.water,
+      reading.moisture,
+      reading.soilMoisture,
+      soilRaw !== null ? wifClamp(((4095 - soilRaw) / 4095) * 100) : null
+    ),
+    nutrient: wifNumber(
+      reading.nutrient,
+      ec !== null ? wifClamp((ec / 2.4) * 100) : null,
+      ecRaw !== null ? wifClamp((ecRaw / 4095) * 100) : null
+    ),
+    ph: wifNumber(reading.ph),
+    ec,
+    soilRaw,
+    lightRaw,
+    ecRaw,
+    waterDistanceCm: wifNumber(reading.waterDistanceCm),
+    waterFlowLpm: wifNumber(reading.waterFlowLpm),
+    energyKwh: wifNumber(reading.energyKwh, reading.powerKwh),
+    intervalSeconds: wifNumber(reading.intervalSeconds),
+    fertilizerML: wifNumber(reading.fertilizerML, reading.fertilizerMl, reading.nutrientDoseMl, reading.dosingMl),
+    harvestKg: wifNumber(reading.harvestKg, reading.yieldKg),
+    marketPricePerKg: wifNumber(reading.marketPricePerKg, reading.pricePerKg),
+    createdAt: reading.createdAt || reading.timestamp || null,
+    source: sourceQuery ? `Firebase sensorReadings ${wifQueryString(sourceQuery)}` : (reading.source || 'Firebase sensorReadings'),
+    deviceId: payload?.deviceId || reading.deviceId || sourceQuery?.deviceId || null,
+    farmId: payload?.farmId || reading.farmId || sourceQuery?.farmId || null,
+    fieldId: payload?.fieldId || reading.fieldId || sourceQuery?.fieldId || null,
+    zoneId: payload?.zoneId || reading.zoneId || sourceQuery?.zoneId || null,
+  };
+
+  return Object.values({
+    temp: normalized.temp,
+    humid: normalized.humid,
+    light: normalized.light,
+    water: normalized.water,
+    nutrient: normalized.nutrient,
+    ph: normalized.ph,
+    ec: normalized.ec,
+    waterDistanceCm: normalized.waterDistanceCm,
+    waterFlowLpm: normalized.waterFlowLpm,
+    energyKwh: normalized.energyKwh,
+    intervalSeconds: normalized.intervalSeconds,
+    fertilizerML: normalized.fertilizerML,
+    harvestKg: normalized.harvestKg,
+    marketPricePerKg: normalized.marketPricePerKg,
+  }).some(value => value !== null)
+    ? normalized
+    : null;
+}
+
+function wifAverageSensors(readings, sourceQuery) {
+  const normalized = readings
+    .map(reading => wifNormalizeSensorPayload(reading, sourceQuery))
+    .filter(Boolean);
+  if (!normalized.length) return null;
+
+  const avg = key => {
+    const values = normalized.map(r => r[key]).filter(value => value !== null);
+    if (!values.length) return null;
+    return parseFloat((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
+  };
+
+  return {
+    ...normalized[0],
+    temp: avg('temp'),
+    humid: avg('humid'),
+    light: avg('light'),
+    water: avg('water'),
+    nutrient: avg('nutrient'),
+    ph: avg('ph'),
+    ec: avg('ec'),
+    waterFlowLpm: avg('waterFlowLpm'),
+    energyKwh: avg('energyKwh'),
+    fertilizerML: avg('fertilizerML'),
+    harvestKg: avg('harvestKg'),
+    marketPricePerKg: avg('marketPricePerKg'),
+    waterUsedLiters: (() => {
+      const values = normalized
+        .map(r => (r.waterFlowLpm !== null && r.intervalSeconds !== null) ? r.waterFlowLpm * (r.intervalSeconds / 60) : null)
+        .filter(value => value !== null);
+      return values.length ? parseFloat(values.reduce((sum, value) => sum + value, 0).toFixed(2)) : null;
+    })(),
+    energyUsedKwh: (() => {
+      const values = normalized.map(r => r.energyKwh).filter(value => value !== null);
+      if (values.length >= 2) return parseFloat(Math.max(0, values[0] - values[values.length - 1]).toFixed(3));
+      return values.length === 1 ? parseFloat(values[0].toFixed(3)) : null;
+    })(),
+    fertilizerUsedML: (() => {
+      const values = normalized.map(r => r.fertilizerML).filter(value => value !== null);
+      return values.length ? parseFloat(values.reduce((sum, value) => sum + value, 0).toFixed(1)) : null;
+    })(),
+    days: normalized.length,
+    source: `Firebase sensorReadings ${wifQueryString(sourceQuery)} (${normalized.length} readings avg)`,
+  };
 }
 
 function plantedToWifCrops(plantedCrops) {
@@ -87,6 +299,11 @@ function plantedToWifCrops(plantedCrops) {
     cucumber:    { kg: 0.35, units: 3, readyIn: 55, color: '#33691E' },
     banana:      { kg: 1.20, units: 1, readyIn: 270, color: '#F9A825' },
     mango:       { kg: 0.80, units: 1, readyIn: 180, color: '#FF8F00' },
+    kangkung:    { kg: 0.12, units: 6, readyIn: 21,  color: '#2E7D32' },
+    pandan:      { kg: 0.05, units: 4, readyIn: 90,  color: '#1B5E20' },
+    ulam_raja:   { kg: 0.10, units: 5, readyIn: 45,  color: '#388E3C' },
+    curry_leaf:  { kg: 0.06, units: 4, readyIn: 60,  color: '#558B2F' },
+    cili_padi:   { kg: 0.08, units: 6, readyIn: 90,  color: '#C62828' },
   };
 
   // ✅ FIX: deduplicate by species — merge slots/units from duplicate entries
@@ -124,46 +341,100 @@ function plantedToWifCrops(plantedCrops) {
 }
 
 async function fetchSensorData() {
-  // Use the current farm's ID if available; fall back to the module default
-  const deviceId = AppState.currentFarmId || DEFAULT_DEVICE_ID;
-  try {
-    const res = await fetch(`${API_BASE}/api/sensors/latest?deviceId=${deviceId}`);
-    if (!res.ok) throw new Error('sensor HTTP ' + res.status);
-    const data = await res.json();
-    // Normalize field names — sensorService.js stores as temperature/humidity/soilRaw etc.
-    return {
-      temp:     data.temperature  ?? data.temp     ?? null,
-      humid:    data.humidity     ?? data.humid     ?? null,
-      light:    data.light        ?? data.lux       ?? null,
-      water:    data.soilMoisture ?? data.moisture  ?? data.water ?? null,
-      nutrient: data.nutrient     ?? data.ec        ?? null,
-    };
-  } catch (err) {
-    console.warn('[WhatIf] Firebase latest sensor unavailable:', err.message);
-    return null;
+  const candidates = wifSensorQueryCandidates();
+  let lastError = null;
+
+  for (const filters of candidates) {
+    const qs = wifQueryString(filters);
+    if (!qs) continue;
+
+    try {
+      const data = await wifFetchJsonWithTimeout(`${API_BASE}/api/sensors/latest?${qs}`, 5000);
+      if (!data) throw new Error('sensor timeout or empty response');
+      const sensors = wifNormalizeSensorPayload(data, filters);
+      if (sensors) return sensors;
+    } catch (err) {
+      lastError = err;
+    }
   }
+
+  if (lastError) console.warn('[WhatIf] Firebase latest sensor unavailable:', lastError.message);
+  return null;
 }
 
 async function fetchWeeklyAvgSensors() {
-  const deviceId = AppState.currentFarmId || DEFAULT_DEVICE_ID;
-  try {
-    const res = await fetch(`${API_BASE}/api/sensors/weekly-avg?deviceId=${deviceId}`);
-    if (!res.ok) throw new Error('weekly avg HTTP ' + res.status);
-    const data = await res.json();
-    const avg = data.avg || {};
-    return {
-      temp:     avg.temperature  ?? null,
-      humid:    avg.humidity     ?? null,
-      light:    avg.light        ?? null,
-      water:    avg.soilMoisture ?? avg.moisture ?? avg.water ?? null,
-      nutrient: avg.nutrient     ?? avg.ec ?? null,
-      days:     data.days,
-      source:   data.source,
-    };
-  } catch (err) {
-    console.warn('[WhatIf] Firebase weekly sensor average unavailable:', err.message);
-    return fetchSensorData(); // fallback to latest reading
+  const candidates = wifSensorQueryCandidates();
+  let lastError = null;
+
+  for (const filters of candidates) {
+    const qs = wifQueryString({ ...filters, limit: 200 });
+    if (!qs) continue;
+
+    try {
+      const data = await wifFetchJsonWithTimeout(`${API_BASE}/api/sensors/history?${qs}`, 7000);
+      if (!data) throw new Error('history timeout or empty response');
+      const readings = Array.isArray(data.readings) ? data.readings : [];
+      const avg = wifAverageSensors(readings, filters);
+      if (avg) return avg;
+    } catch (err) {
+      lastError = err;
+    }
   }
+
+  if (lastError) console.warn('[WhatIf] Firebase history average unavailable:', lastError.message);
+  return fetchSensorData(); // fallback to latest reading
+}
+
+async function fetchFarmLevelSensorData() {
+  const farm = wifGetCurrentFarm();
+  const masterDeviceId = farm?.farmMaster?.deviceId || farm?.masterDeviceId || farm?.farmDeviceId;
+  const farmId = farm?.backendFarmId || farm?.farmId || farm?.id || AppState.currentFarmId;
+  const candidates = [];
+  const seen = new Set();
+  wifPushSensorCandidate(candidates, seen, 'deviceId', masterDeviceId);
+  wifPushSensorCandidate(candidates, seen, 'farmId', farmId);
+
+  for (const filters of candidates) {
+    const qs = wifQueryString(filters);
+    if (!qs) continue;
+
+    try {
+      const data = await wifFetchJsonWithTimeout(`${API_BASE}/api/sensors/latest?${qs}`, 5000);
+      if (!data) continue;
+      const sensors = wifNormalizeSensorPayload(data, filters);
+      if (sensors) return sensors;
+    } catch {
+      // Best-effort context for the AI endpoint.
+    }
+  }
+
+  return null;
+}
+
+function wifBuildAiSensorContext(zoneSensors, farmLevelSensors = null) {
+  const farm = wifGetCurrentFarm();
+  const context = {
+    sensors: zoneSensors || null,
+    zoneSensors: zoneSensors || null,
+    farmLevelSensors: farmLevelSensors || null,
+    calibration: farm?.sensorCalibration || farm?.calibration || {},
+  };
+
+  const pushId = (key, ...values) => {
+    for (const value of values) {
+      if (value !== undefined && value !== null && value !== '') {
+        context[key] = value;
+        return;
+      }
+    }
+  };
+
+  pushId('deviceId', zoneSensors?.deviceId, farm?.deviceId, farm?.sensorDeviceId, DEFAULT_DEVICE_ID);
+  pushId('zoneId', zoneSensors?.zoneId, farm?.zoneId, farm?.currentZoneId);
+  pushId('farmId', zoneSensors?.farmId, farm?.backendFarmId, farm?.farmId, farm?.id, AppState.currentFarmId);
+  pushId('fieldId', zoneSensors?.fieldId, farm?.fieldId);
+
+  return context;
 }
 
 /* ---------- DATA ---------- */
@@ -185,14 +456,148 @@ const WIF_RECIPES = [
   { name: 'Spring Green Salad', emoji: '🥗', ingr: ['green_onion', 'basil', 'cabbage'] },
 ];
 
-// perRowKgWk = realistic weekly yield per plant row, crop-specific (not a shared 0.28 for all)
-const WIF_COST_DATA = {
-  lettuce:  { mktPrice: 4.8,  perRowKgWk: 0.35, waterSave: 3.2, energySave: 1.1, fertilizer: 0.8, note: 'Lettuce grows fast — your rows beat supermarket prices by 2× this month.' },
-  tomato:   { mktPrice: 7.2,  perRowKgWk: 0.22, waterSave: 2.1, energySave: 0.9, fertilizer: 1.1, note: 'Tomatoes fetched RM 7.20/kg at Pasar Borong this week. Yours cost much less.' },
-  carrot:   { mktPrice: 3.5,  perRowKgWk: 0.18, waterSave: 1.8, energySave: 0.7, fertilizer: 0.6, note: 'Carrots are low-maintenance and high-value for home growing.' },
-  basil:    { mktPrice: 12.0, perRowKgWk: 0.12, waterSave: 0.9, energySave: 0.5, fertilizer: 0.4, note: 'Fresh basil at supermarkets is expensive. Your rows are a gold mine.' },
-  eggplant: { mktPrice: 5.5,  perRowKgWk: 0.20, waterSave: 2.4, energySave: 1.3, fertilizer: 0.9, note: 'Eggplant uses more water but market price makes it worthwhile.' },
+const WIF_COST_REFERENCE = {
+  lettuce:  { price: 4.8,  yieldKgCycle: 0.60, growthDays: 45, waterMLDay: 150, fertMLWeek: 3, lightHours: 6 },
+  tomato:   { price: 7.2,  yieldKgCycle: 4.00, growthDays: 70, waterMLDay: 250, fertMLWeek: 5, lightHours: 8 },
+  carrot:   { price: 3.5,  yieldKgCycle: 0.60, growthDays: 75, waterMLDay: 180, fertMLWeek: 3, lightHours: 6 },
+  basil:    { price: 12.0, yieldKgCycle: 0.50, growthDays: 35, waterMLDay: 120, fertMLWeek: 2, lightHours: 6 },
+  eggplant: { price: 5.5,  yieldKgCycle: 1.80, growthDays: 80, waterMLDay: 260, fertMLWeek: 5, lightHours: 8 },
+  cabbage:  { price: 3.2,  yieldKgCycle: 1.20, growthDays: 90, waterMLDay: 200, fertMLWeek: 4, lightHours: 6 },
+  spinach:  { price: 6.0,  yieldKgCycle: 0.45, growthDays: 40, waterMLDay: 120, fertMLWeek: 3, lightHours: 5 },
+  mint:     { price: 10.0, yieldKgCycle: 0.35, growthDays: 28, waterMLDay: 120, fertMLWeek: 2, lightHours: 5 },
+  chili:    { price: 9.0,  yieldKgCycle: 0.60, growthDays: 90, waterMLDay: 220, fertMLWeek: 5, lightHours: 8 },
+  kangkung:   { price: 3.0,  yieldKgCycle: 0.40, growthDays: 21, waterMLDay: 180, fertMLWeek: 3, lightHours: 5 },
+  pandan:     { price: 5.0,  yieldKgCycle: 0.10, growthDays: 90, waterMLDay: 100, fertMLWeek: 2, lightHours: 5 },
+  ulam_raja:  { price: 6.0,  yieldKgCycle: 0.30, growthDays: 45, waterMLDay: 130, fertMLWeek: 2, lightHours: 6 },
+  curry_leaf: { price: 8.0,  yieldKgCycle: 0.15, growthDays: 60, waterMLDay: 120, fertMLWeek: 2, lightHours: 7 },
+  cili_padi:  { price: 15.0, yieldKgCycle: 0.25, growthDays: 90, waterMLDay: 200, fertMLWeek: 4, lightHours: 8 },
 };
+
+function wifMeasuredCostLine(value, rate) {
+  if (value === null || value === undefined) return { value: null, cost: null };
+  return { value, cost: parseFloat((value * rate).toFixed(2)) };
+}
+
+function wifCropProfileFromSpec(plant, cropSpec = null) {
+  const fallback = WIF_COST_REFERENCE[plant] || WIF_COST_REFERENCE.lettuce;
+  const req = cropSpec?.requirements || {};
+  const y = cropSpec?.yield || {};
+  const cost = cropSpec?.cost || {};
+  const harvests = Math.max(1, wifNumber(y.harvestsPerCycle, 1));
+
+  return {
+    plant,
+    name: cropSpec?.commonName || plant,
+    price: wifNumber(cost.mktPricePerKg, fallback.price),
+    yieldKgCycle: wifNumber(y.avgGramsPerPlant, fallback.yieldKgCycle * 1000 / harvests) / 1000 * harvests,
+    growthDays: wifNumber(req.growthDays, fallback.growthDays),
+    waterMLDay: wifNumber(req.waterPerDay, fallback.waterMLDay),
+    fertMLWeek: wifNumber(req.fertilizerPerWeek, fallback.fertMLWeek),
+    lightHours: wifNumber(req.lightHours, fallback.lightHours),
+    profileSource: cropSpec ? 'crop database / AI crop profile' : 'built-in crop reference',
+  };
+}
+
+function wifGetCostAssumptions(plant) {
+  const cropSpec = window._wif_cropProfiles?.[plant];
+  const profile = wifCropProfileFromSpec(plant, cropSpec);
+  const market = window._wif_marketPrices?.[plant];
+  const livePrice = wifNumber(market?.bestPrice);
+
+  return {
+    ...profile,
+    price: livePrice ?? profile.price,
+    priceSource: livePrice !== null ? `${market?.bestChannel || 'market'} live market lookup` : profile.profileSource,
+    market,
+  };
+}
+
+function wifCalculateSavings(plant, weeks, sensors = {}, units = wif_cosRows) {
+  const profile = wifGetCostAssumptions(plant);
+  const weekCount = Math.max(1, wifNumber(weeks, 1));
+  const unitCount = Math.max(1, wifNumber(units, 1));
+  const days = weekCount * 7;
+
+  const measuredHarvestKg = wifNumber(sensors.harvestKg);
+  const harvestKg = measuredHarvestKg ?? parseFloat((profile.yieldKgCycle * unitCount * Math.min(days / profile.growthDays, 1)).toFixed(2));
+  const measuredPrice = wifNumber(sensors.marketPricePerKg);
+  const marketPricePerKg = measuredPrice ?? profile.price;
+  const income = parseFloat((harvestKg * marketPricePerKg).toFixed(2));
+
+  const measuredWater = wifNumber(sensors.waterUsedLiters);
+  const moisture = wifNumber(sensors.water);
+  const waterFactor = moisture === null ? 1 : moisture < 35 ? 1.15 : moisture > 70 ? 0.8 : 1;
+  const waterLiters = measuredWater ?? parseFloat((profile.waterMLDay * unitCount * days * waterFactor / 1000).toFixed(2));
+  const waterCost = parseFloat((waterLiters * WATER_RATE_RM_PER_LITRE).toFixed(2));
+
+  const measuredEnergy = wifNumber(sensors.energyUsedKwh, sensors.energyKwh);
+  const light = wifNumber(sensors.light);
+  const lightFactor = light === null ? 1 : light < 40 ? 1.2 : light > 70 ? 0.75 : 1;
+  const energyKWh = measuredEnergy ?? parseFloat((profile.lightHours * lightFactor * LIGHT_KW_PER_STRIP * unitCount * days).toFixed(2));
+  const energyCost = parseFloat((energyKWh * ELECTRICITY_RATE_RM_PER_KWH).toFixed(2));
+
+  const measuredFert = wifNumber(sensors.fertilizerUsedML, sensors.fertilizerML);
+  const ec = wifNumber(sensors.ec);
+  const fertFactor = ec === null ? 1 : ec < 1.2 ? 1.25 : ec > 2.2 ? 0.8 : 1;
+  const fertilizerML = measuredFert ?? parseFloat((profile.fertMLWeek * unitCount * weekCount * fertFactor).toFixed(1));
+  const fertCost = parseFloat((fertilizerML * FERTILIZER_RATE_RM_PER_ML).toFixed(2));
+
+  const expenses = parseFloat((waterCost + energyCost + fertCost).toFixed(2));
+  const net = parseFloat((income - expenses).toFixed(2));
+
+  const assumptions = [];
+  assumptions.push(measuredHarvestKg === null ? 'Harvest weight estimated from crop yield profile' : 'Harvest weight measured in Firebase');
+  assumptions.push(measuredPrice === null ? `Market price from ${profile.priceSource}` : 'Market price measured in Firebase');
+  assumptions.push(measuredWater === null ? 'Water estimated from crop water need and Firebase soil moisture' : 'Water measured from Firebase flow sensor');
+  assumptions.push(measuredEnergy === null ? 'Energy estimated from crop light hours and Firebase light level' : 'Energy measured from Firebase energy meter');
+  assumptions.push(measuredFert === null ? 'Fertilizer estimated from crop nutrient need and Firebase EC' : 'Fertilizer measured from Firebase dosing sensor');
+
+  return {
+    plant,
+    unitCount,
+    weekCount,
+    readingCount: sensors.days || null,
+    source: sensors.source || 'Firebase sensorReadings',
+    profile,
+    harvestKg,
+    marketPricePerKg,
+    income,
+    waterLiters,
+    waterCost,
+    energyKWh,
+    energyCost,
+    fertilizerML,
+    fertCost,
+    expenses,
+    net,
+    assumptions,
+    measured: {
+      harvest: measuredHarvestKg !== null,
+      price: measuredPrice !== null,
+      water: measuredWater !== null,
+      energy: measuredEnergy !== null,
+      fertilizer: measuredFert !== null,
+    },
+    note: `Savings use Firebase conditions plus clearly labeled market/crop assumptions where meters are missing.`,
+  };
+}
+
+async function wifFetchCostAssumptions(plant) {
+  const requestId = ++wif_costAssumptionRequestId;
+  window._wif_cropProfiles = window._wif_cropProfiles || {};
+  window._wif_marketPrices = window._wif_marketPrices || {};
+
+  const cropReq = wifFetchJsonWithTimeout(`${API_BASE}/api/crops/species/${encodeURIComponent(plant)}`, 8000)
+    .catch(() => null);
+  const marketReq = wifFetchJsonWithTimeout(`${API_BASE}/api/whatif/market-prices?crops=${encodeURIComponent(plant)}`, 8000)
+    .catch(() => null);
+
+  const [cropData, marketData] = await Promise.all([cropReq, marketReq]);
+  if (requestId !== wif_costAssumptionRequestId) return;
+  if (cropData?.crop) window._wif_cropProfiles[plant] = cropData.crop;
+  if (marketData?.prices?.[plant]) window._wif_marketPrices[plant] = marketData.prices[plant];
+  wifUpdateCost();
+}
 
 // MODIFIED: replaced icon string with emoji per impact resource; removed icon field entirely
 const WIF_NP_DATA = {
@@ -273,6 +678,56 @@ const WIF_NP_DATA = {
     ],
     ai: 'Basil is low-impact. Great companion plant for tomatoes and peppers.',
   },
+  kangkung: {
+    emoji: '🥬', readyDays: 3, readyZone: 'Zone B herbs', space: '0.8m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '+4%',       dir: 'up'   },
+      { name: 'pH value',    emoji: '🧪',  change: 'No change', dir: 'ok'   },
+      { name: 'Light (h/d)', emoji: '☀️',  change: '-1h',       dir: 'down' },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+6%',       dir: 'up'   },
+    ],
+    ai: 'Kangkung is one of the easiest greens to grow indoors — ready in 3 weeks, low light needed. Great for beginners.',
+  },
+  pandan: {
+    emoji: '🌿', readyDays: 14, readyZone: 'Zone A herbs', space: '0.6m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '+5%',       dir: 'up' },
+      { name: 'pH value',    emoji: '🧪',  change: '-0.1',      dir: 'ok' },
+      { name: 'Light (h/d)', emoji: '☀️',  change: 'No change', dir: 'ok' },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+3%',       dir: 'up' },
+    ],
+    ai: 'Pandan grows slowly but needs minimal care. Harvest individual leaves from the outer layer — do not uproot.',
+  },
+  ulam_raja: {
+    emoji: '🌱', readyDays: 21, readyZone: 'Zone B herbs', space: '1.0m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '+3%',       dir: 'up' },
+      { name: 'pH value',    emoji: '🧪',  change: 'No change', dir: 'ok' },
+      { name: 'Light (h/d)', emoji: '☀️',  change: '+0.5h',     dir: 'up' },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+5%',       dir: 'up' },
+    ],
+    ai: 'Ulam raja is hardy and grows well in Malaysian indoor conditions. Good for salads and ulam.',
+  },
+  curry_leaf: {
+    emoji: '🌿', readyDays: 30, readyZone: 'Zone C herbs', space: '0.7m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '-2%',       dir: 'down' },
+      { name: 'pH value',    emoji: '🧪',  change: '+0.2',      dir: 'ok'   },
+      { name: 'Light (h/d)', emoji: '☀️',  change: '+1.5h',     dir: 'up'   },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+4%',       dir: 'up'   },
+    ],
+    ai: 'Curry leaf needs more light than other herbs. Place near the top tier for best results. Harvest sparingly at first.',
+  },
+  cili_padi: {
+    emoji: '🌶️', readyDays: 14, readyZone: 'Zone C', space: '1.0m²',
+    impacts: [
+      { name: 'Humidity',    emoji: '💧',  change: '-3%',       dir: 'down' },
+      { name: 'pH value',    emoji: '🧪',  change: '+0.2',      dir: 'up'   },
+      { name: 'Light (h/d)', emoji: '☀️',  change: '+2h',       dir: 'up'   },
+      { name: 'Fertilizer',  emoji: '🧫',  change: '+12%',      dir: 'up'   },
+    ],
+    ai: 'Cili padi needs bright light and warm temps — same conditions as your other chili plants. Prune the base leaves to improve airflow.',
+  },
 };
 
 const WIF_ZONES = [
@@ -298,6 +753,8 @@ let wif_cosRows = 5;
 // MODIFIED: track currently selected new-plant species as state (was implicit via <select>)
 let wif_curNp   = 'spinach';
 let wif_savingsChart = null;
+let wif_npAiRequestId = 0;
+let wif_costAssumptionRequestId = 0;
 
 /* ============================================================
    render() — returns the full HTML string for the What-If feature
@@ -332,6 +789,7 @@ export function render() {
       /* ---- SLIDER ---- */
       .wif-slider-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
       .wif-slider-row label { font-size:12px; color:var(--text-secondary,#666); min-width:72px; }
+      .wif-row-label { font-size:12px; color:var(--text-secondary,#666); min-width:80px; }
       .wif-slider-row input[type=range] { flex:1; }
       .wif-slider-val { font-size:13px; font-weight:500; min-width:56px; text-align:right; }
 
@@ -432,35 +890,35 @@ export function render() {
       <!-- TAB BAR -->
       <div class="wif-tab-bar">
         <button class="wif-tab-btn active" onclick="wifSwitchTab('harvest',this)">
-          <span class="wif-tab-icon">🌿</span><span>Harvest</span>
+          <span class="wif-tab-icon">🌿</span><span>This Week</span>
         </button>
         <button class="wif-tab-btn" onclick="wifSwitchTab('cost',this)">
-          <span class="wif-tab-icon">💰</span><span>Savings</span>
+          <span class="wif-tab-icon">🏷️</span><span>Savings</span>
         </button>
         <button class="wif-tab-btn" onclick="wifSwitchTab('newplant',this)">
-          <span class="wif-tab-icon">🌱</span><span>New Plant</span>
+          <span class="wif-tab-icon">❓</span><span>Can I Grow?</span>
         </button>
       </div>
 
       <!-- ===== TAB 1: HARVEST PREDICT ===== -->
       <div id="wif-harvest" class="wif-section active">
         <div class="wif-card">
-          <div class="wif-card-title">📅 Harvest timeline</div>
+          <div class="wif-card-title">📅 What can I pick?</div>
           <div class="wif-slider-row">
-            <label>Forecast</label>
+            <label for="wif-sl-days">In the next</label>
             <input type="range" min="7" max="365" value="30" step="1" id="wif-sl-days" oninput="wifUpdateHarvest()">
             <span class="wif-slider-val" id="wif-v-days">30 days</span>
           </div>
-          <!-- MODIFIED: replaced "Days left" metric with "Total units" to show exact harvest count -->
+          <!-- Units first — mum counts individual plants/stalks/heads, not kg -->
           <div class="wif-metric-grid">
-            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-items">0</div><div class="wif-metric-lbl">Crops ready</div></div>
-            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-yield">0.00 kg</div><div class="wif-metric-lbl">Est. yield</div></div>
-            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-units">0</div><div class="wif-metric-lbl">Total units</div></div>
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-units">0</div><div class="wif-metric-lbl">Units ready</div></div>
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-items">0</div><div class="wif-metric-lbl">Crop types</div></div>
+            <div class="wif-metric"><div class="wif-metric-val" id="wif-hm-yield">0.00 kg</div><div class="wif-metric-lbl">Est. weight</div></div>
           </div>
           <div id="wif-crop-timelines"></div>
         </div>
         <div class="wif-card">
-          <div class="wif-card-title">✅ Select harvested crops</div>
+          <div class="wif-card-title">✅ Select what you picked</div>
           <div class="wif-crop-pills" id="wif-crop-select"></div>
         </div>
         <div class="wif-card">
@@ -473,23 +931,23 @@ export function render() {
       <!-- ===== TAB 2: COST SAVINGS ===== -->
       <div id="wif-cost" class="wif-section">
         <div class="wif-card">
-          <div class="wif-card-title">🪴 Choose plant to analyse</div>
+          <div class="wif-card-title">🪴 Choose crop to review</div>
           <!-- MODIFIED: rows count removed from option labels; controlled by stepper below -->
           <select class="wif-sel" id="wif-cost-plant" onchange="wifTriggerCostAi()">
   <option value="" disabled>Loading your crops...</option>
-</select>
+          </select>
           <!-- MODIFIED: new +/− stepper for rows count, separate from plant type -->
           <div class="wif-num-row">
-            <label>Units planted</label>
-            <div class="wif-qty-ctrl">
-              <button class="wif-qty-btn" onclick="wifChangeRows(-1)">−</button>
+            <span class="wif-row-label" id="wif-rows-label">Units</span>
+            <div class="wif-qty-ctrl" role="group" aria-labelledby="wif-rows-label">
+              <button type="button" class="wif-qty-btn" aria-label="Decrease units" onclick="wifChangeRows(-1)">−</button>
               <span class="wif-qty-num" id="wif-rows-disp">5</span>
-              <button class="wif-qty-btn" onclick="wifChangeRows(1)">+</button>
+              <button type="button" class="wif-qty-btn" aria-label="Increase units" onclick="wifChangeRows(1)">+</button>
             </div>
           </div>
-          <!-- MODIFIED: cycle slider changed from months (1–6) to weeks (1–24) -->
+          <!-- Period is only used for display/chart grouping. Costs come from Firebase measurements. -->
           <div class="wif-slider-row">
-            <label>Cycle</label>
+            <label for="wif-sl-weeks">View</label>
             <input type="range" min="1" max="24" value="1" step="1" id="wif-sl-weeks" oninput="wifUpdateCost()">
             <span class="wif-slider-val" id="wif-v-weeks">1 wk</span>
           </div>
@@ -497,14 +955,13 @@ export function render() {
         <div class="wif-card">
           <div class="wif-savings-big">
             <div class="wif-savings-num" id="wif-net-saving">RM 0.00</div>
-            <div class="wif-savings-lbl">Net savings this cycle</div>
+            <div class="wif-savings-lbl">saved vs buying at pasar</div>
           </div>
           <hr class="wif-divider">
           <div id="wif-cost-breakdown"></div>
         </div>
         <div class="wif-card">
-          <!-- MODIFIED: label changed from "Monthly savings trend" to "Weekly savings trend" -->
-          <div class="wif-card-title">📊 Weekly savings trend</div>
+          <div class="wif-card-title">📊 Savings trend when complete</div>
           <div style="position:relative;height:160px;">
             <canvas id="wif-savings-chart"></canvas>
           </div>
@@ -517,7 +974,7 @@ export function render() {
       <!-- ===== TAB 3: NEW PLANT ===== -->
       <div id="wif-newplant" class="wif-section">
         <div class="wif-card">
-          <div class="wif-card-title">🌱 Add new plant</div>
+          <div class="wif-card-title">🔍 Can I grow this?</div>
           <!-- MODIFIED: replaced <select> with smart-search input + suggestion dropdown -->
           <div class="wif-np-search-wrap">
             <span class="wif-np-search-icon">🔍</span>
@@ -533,22 +990,22 @@ export function render() {
           </div>
           <div class="wif-np-suggestions" id="wif-np-suggestions" style="display:none;"></div>
           <div class="wif-num-row" style="margin-top:8px;">
-            <label>Unit count</label>
-            <div class="wif-qty-ctrl">
-              <button class="wif-qty-btn" onclick="wifChangeQty(-1)">−</button>
+            <span class="wif-row-label" id="wif-np-qty-label">Unit count</span>
+            <div class="wif-qty-ctrl" role="group" aria-labelledby="wif-np-qty-label">
+              <button type="button" class="wif-qty-btn" aria-label="Decrease new plant unit count" onclick="wifChangeQty(-1)">−</button>
               <span class="wif-qty-num" id="wif-qty-disp">4</span>
-              <button class="wif-qty-btn" onclick="wifChangeQty(1)">+</button>
+              <button type="button" class="wif-qty-btn" aria-label="Increase new plant unit count" onclick="wifChangeQty(1)">+</button>
             </div>
           </div>
         </div>
 
         <!-- ✅ FIX 4.3: AI advisor card — shown below add-plant form, updated by wifFetchNewPlantAi -->
         <div id="wif-np-advisor-card" class="wif-card" style="display:none;border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
-          <div class="wif-card-title">🤖 AI Advisor</div>
+          <div class="wif-card-title">🌱 Grow verdict</div>
           <div id="wif-np-advisor-body"></div>
         </div>
         <div class="wif-card">
-          <div class="wif-card-title">⏰ Planting readiness</div>
+          <div class="wif-card-title">🪴 Space available?</div>
           <div class="wif-readiness" id="wif-readiness">
             <span style="font-size:24px;">📅</span>
             <div>
@@ -560,7 +1017,7 @@ export function render() {
           <div id="wif-zone-list"></div>
         </div>
         <div class="wif-card">
-          <div class="wif-card-title">📈 Predicted resource impact</div>
+          <div class="wif-card-title">📋 What this plant needs</div>
           <!-- MODIFIED: grid is now 2-col instead of auto-fit 3-col -->
           <div class="wif-impact-grid" id="wif-impact-grid"></div>
           <div class="wif-ai-note" id="wif-np-ai-note-wrap" style="display:none;"><span> </span><span id="wif-np-ai-note">Loading...</span></div>
@@ -674,9 +1131,9 @@ function wifUpdateHarvest() {
   const totalKg    = ready.reduce((a, c) => a + c.kg, 0);
   const totalUnits = ready.reduce((a, c) => a + c.units, 0);
 
+  document.getElementById('wif-hm-units').textContent = totalUnits;
   document.getElementById('wif-hm-items').textContent = ready.length;
   document.getElementById('wif-hm-yield').textContent = totalKg.toFixed(2) + ' kg';
-  document.getElementById('wif-hm-units').textContent = totalUnits;
 
   document.getElementById('wif-crop-timelines').innerHTML = CROPS.map(c => {
     const pct = Math.min(100, Math.round((days / c.readyIn) * 100));
@@ -688,7 +1145,7 @@ function wifUpdateHarvest() {
           <div class="wif-tl-fill" style="width:${pct}%;background:${rdy ? 'var(--accent,#639922)' : 'var(--amber-100,#FAC775)'};"></div>
         </div>
         ${rdy
-          ? `<span class="wif-tl-count">${c.units} units <span class="wif-badge wif-badge-green">Ready</span></span>`
+          ? `<span class="wif-tl-count">${c.units} unit${c.units !== 1 ? 's' : ''} <span class="wif-badge wif-badge-green">Ready</span></span>`
           : `<span class="wif-tl-end" style="color:var(--text-secondary,#666)">Day ${c.readyIn}</span>`}
       </div>`;
   }).join('');
@@ -913,124 +1370,79 @@ function wifUpdateCost() {
   const weeks = parseInt(weeksEl.value);
   document.getElementById('wif-v-weeks').textContent = weeks + (weeks === 1 ? ' wk' : ' wks');
 
-  const d = WIF_COST_DATA[plant] || {
-    mktPrice: 5.0, perRowKgWk: 0.28,
-    waterSave: 2.0, energySave: 0.8, fertilizer: 0.6,
-    note: 'Analysing your crop with current sensor data...'
-  };
+  const sensors = window._wif_lastSensors || {};
+  const calc = wifCalculateSavings(plant, weeks, sensors);
+  window._wif_lastCostProjection = calc;
 
-  const harvestKg  = wif_cosRows * d.perRowKgWk * weeks;
-  const income     = harvestKg * d.mktPrice;
+  const netClass = calc.net === null ? 'var(--text-secondary,#666)' : calc.net >= 0 ? 'var(--accent,#3B6D11)' : 'var(--red-400,#E24B4A)';
+  document.getElementById('wif-net-saving').textContent = 'RM ' + calc.net.toFixed(2);
+  document.getElementById('wif-net-saving').style.color = netClass;
 
-  const sensors = window._wif_lastSensors;
-  if (!sensors || sensors.water === null || sensors.light === null || sensors.nutrient === null) {
-    document.getElementById('wif-net-saving').textContent = '—';
-    document.getElementById('wif-cost-breakdown').innerHTML = `
-      <div class="wif-cost-row">
-        <span class="wif-cost-lbl">Firebase sensor readings required for water, energy, and fertilizer cost calculations.</span>
-      </div>`;
-    const noteEl = document.getElementById('wif-cost-ai-note');
-    if (noteEl && !window._wif_aiNoteSet) noteEl.textContent = 'Waiting for Firebase sensor readings before calculating costs.';
-    return;
-  }
+  const assumptionNote = `<div class="wif-cost-row" style="background:var(--amber-50,#FAEEDA);align-items:flex-start;">
+    <span class="wif-cost-lbl">Assumptions: ${calc.assumptions.map(wifEscapeHtml).join('; ')}</span>
+  </div>`;
+  const badge = isMeasured => `<span class="wif-badge ${isMeasured ? 'wif-badge-green' : 'wif-badge-amber'}" style="margin-left:6px;">${isMeasured ? 'Measured' : 'Estimated'}</span>`;
 
-  // Water cost: higher soil moisture → less watering needed
-  const waterLitersPerPlantPerWeek =
-    sensors.water < SENSOR_BANDS.water.low  ? WATER_L_PER_PLANT_WK.dry :
-    sensors.water > SENSOR_BANDS.water.high ? WATER_L_PER_PLANT_WK.wet :
-                                              WATER_L_PER_PLANT_WK.mid;
-  const waterCost = parseFloat((waterLitersPerPlantPerWeek * wif_cosRows * weeks * WATER_RATE_RM_PER_LITRE).toFixed(2));
-
-  // Energy cost: brighter ambient light → less artificial lighting needed
-  const lightHrsPerDay =
-    sensors.light > SENSOR_BANDS.light.high ? LIGHT_HRS_PER_DAY.bright :
-    sensors.light > SENSOR_BANDS.light.low  ? LIGHT_HRS_PER_DAY.mid   :
-                                              LIGHT_HRS_PER_DAY.dark;
-  const energyKWh  = parseFloat((lightHrsPerDay * LIGHT_KW_PER_STRIP * weeks * 7).toFixed(2));
-  const energyCost = parseFloat((energyKWh * ELECTRICITY_RATE_RM_PER_KWH).toFixed(2));
-
-  // Fertilizer cost: lower nutrients → more fertilizer needed
-  const fertMultiplier =
-    sensors.nutrient < SENSOR_BANDS.nutrient.low  ? FERT_MULTIPLIER.low  :
-    sensors.nutrient > SENSOR_BANDS.nutrient.high ? FERT_MULTIPLIER.high :
-                                                    FERT_MULTIPLIER.mid;
-  const fertCost = parseFloat((d.fertilizer * (weeks / 4) * fertMultiplier).toFixed(2));
-
-  const expenses   = waterCost + energyCost + fertCost;
-  const net        = income - expenses;
-
-  document.getElementById('wif-net-saving').textContent = 'RM ' + net.toFixed(2);
+  // Resource costs collapsed by default — beginner sees the win first
   document.getElementById('wif-cost-breakdown').innerHTML = `
     <div class="wif-cost-row wif-cost-income">
-      <span class="wif-cost-lbl">📦 Harvest value (${harvestKg.toFixed(1)} kg × RM ${d.mktPrice}/kg)</span>
-      <span style="color:var(--green-600,#3B6D11);font-weight:500;">+RM ${income.toFixed(2)}</span>
+      <span class="wif-cost-lbl">🛒 Pasar price for same amount ${badge(calc.measured.harvest && calc.measured.price)}<span style="font-size:10px;opacity:.7;"> (${calc.harvestKg.toFixed(2)} kg @ RM ${calc.marketPricePerKg.toFixed(2)}/kg)</span></span>
+      <span style="color:var(--green-600,#3B6D11);font-weight:500;">RM ${calc.income.toFixed(2)}</span>
     </div>
-    <div class="wif-cost-row wif-cost-expense">
-      <span class="wif-cost-lbl">💧 Water cost <span style="font-size:10px;opacity:.7;">(soil ${sensors.water}% → ${waterLitersPerPlantPerWeek}L/plant/wk)</span></span>
-      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${waterCost.toFixed(2)}</span>
+    <div class="wif-cost-row" style="background:var(--bg-secondary,#f5f5f5);cursor:pointer;" onclick="document.getElementById('wif-cost-detail').style.display=document.getElementById('wif-cost-detail').style.display==='none'?'block':'none'">
+      <span class="wif-cost-lbl" style="color:var(--text-secondary,#666);font-size:11px;">💧⚡🧪 Your growing cost — RM ${calc.expenses.toFixed(2)} <span style="font-size:10px;opacity:.7;">(tap to see breakdown)</span></span>
+      <span style="color:var(--red-400,#E24B4A);font-size:12px;">−RM ${calc.expenses.toFixed(2)}</span>
     </div>
-    <div class="wif-cost-row wif-cost-expense">
-      <span class="wif-cost-lbl">⚡ Energy cost <span style="font-size:10px;opacity:.7;">(light ${sensors.light}% → ${lightHrsPerDay}h lighting/day)</span></span>
-      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${energyCost.toFixed(2)}</span>
-    </div>
-    <div class="wif-cost-row wif-cost-expense">
-      <span class="wif-cost-lbl">🧪 Fertilizer <span style="font-size:10px;opacity:.7;">(nutrient ${sensors.nutrient}% → ${fertMultiplier}× base)</span></span>
-      <span style="color:var(--red-400,#E24B4A);font-weight:500;">−RM ${fertCost.toFixed(2)}</span>
+    <div id="wif-cost-detail" style="display:none;">
+      <div class="wif-cost-row wif-cost-expense">
+        <span class="wif-cost-lbl">💧 Water ${badge(calc.measured.water)}<span style="font-size:10px;opacity:.7;"> (${calc.waterLiters.toFixed(2)} L × RM ${WATER_RATE_RM_PER_LITRE}/L)</span></span>
+        <span style="color:var(--red-400,#E24B4A);">−RM ${calc.waterCost.toFixed(2)}</span>
+      </div>
+      <div class="wif-cost-row wif-cost-expense">
+        <span class="wif-cost-lbl">⚡ Electricity ${badge(calc.measured.energy)}<span style="font-size:10px;opacity:.7;"> (${calc.energyKWh.toFixed(2)} kWh × RM ${ELECTRICITY_RATE_RM_PER_KWH}/kWh)</span></span>
+        <span style="color:var(--red-400,#E24B4A);">−RM ${calc.energyCost.toFixed(2)}</span>
+      </div>
+      <div class="wif-cost-row wif-cost-expense">
+        <span class="wif-cost-lbl">🧪 Fertilizer ${badge(calc.measured.fertilizer)}<span style="font-size:10px;opacity:.7;"> (${calc.fertilizerML.toFixed(1)} mL × RM ${FERTILIZER_RATE_RM_PER_ML}/mL)</span></span>
+        <span style="color:var(--red-400,#E24B4A);">−RM ${calc.fertCost.toFixed(2)}</span>
+      </div>
+      ${assumptionNote}
     </div>
     <div class="wif-cost-row wif-cost-net">
-      <span>⭐ Net savings</span>
-      <span style="color:var(--teal-600,#0F6E56);">RM ${net.toFixed(2)}</span>
+      <span>⭐ You saved</span>
+      <span style="color:${netClass};font-weight:500;">RM ${calc.net.toFixed(2)}</span>
     </div>`;
 
   // Only set the note if AI hasn't already filled it with a real response
   const noteEl = document.getElementById('wif-cost-ai-note');
-  if (noteEl && !window._wif_aiNoteSet) noteEl.textContent = d.note;
-  wifRenderSavingsChart(weeks, d);
+  if (noteEl && !window._wif_aiNoteSet) noteEl.textContent = calc.note;
+  wifRenderSavingsChart(weeks, plant);
+  if (window._wif_lastCostAiData) wifRenderCostAiDetail(window._wif_lastCostAiData);
   // ✅ NO AI call here — AI fires once on plant-change only, via wifTriggerCostAi()
 }
 
-function wifRenderSavingsChart(weeks, d) {
+function wifRenderSavingsChart(weeks, plant) {
   const canvas = document.getElementById('wif-savings-chart');
   if (!canvas) return;
 
   if (typeof Chart === 'undefined') {
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
-    script.onload = () => wifDrawChart(canvas, weeks, d);
+    script.onload = () => wifDrawChart(canvas, weeks, plant);
     document.head.appendChild(script);
   } else {
-    wifDrawChart(canvas, weeks, d);
+    wifDrawChart(canvas, weeks, plant);
   }
 }
 
-function wifDrawChart(canvas, weeks, d) {
+function wifDrawChart(canvas, weeks, plant) {
   if (wif_savingsChart) { wif_savingsChart.destroy(); wif_savingsChart = null; }
-
-  // Use the same Firebase sensor-driven values as wifUpdateCost() so chart matches the breakdown
-  const sensors = window._wif_lastSensors;
-  if (!sensors || sensors.water === null || sensors.light === null || sensors.nutrient === null) return;
-  const waterLPW =
-    sensors.water < SENSOR_BANDS.water.low  ? WATER_L_PER_PLANT_WK.dry :
-    sensors.water > SENSOR_BANDS.water.high ? WATER_L_PER_PLANT_WK.wet :
-                                              WATER_L_PER_PLANT_WK.mid;
-  const lhrs =
-    sensors.light > SENSOR_BANDS.light.high ? LIGHT_HRS_PER_DAY.bright :
-    sensors.light > SENSOR_BANDS.light.low  ? LIGHT_HRS_PER_DAY.mid   :
-                                              LIGHT_HRS_PER_DAY.dark;
-  const fm =
-    sensors.nutrient < SENSOR_BANDS.nutrient.low  ? FERT_MULTIPLIER.low  :
-    sensors.nutrient > SENSOR_BANDS.nutrient.high ? FERT_MULTIPLIER.high :
-                                                    FERT_MULTIPLIER.mid;
 
   const labels = [];
   const data   = [];
   for (let w = 1; w <= weeks; w++) {
     labels.push('W' + w);
-    const inc     = wif_cosRows * d.perRowKgWk * w * d.mktPrice;
-    const wCost   = waterLPW * wif_cosRows * w * WATER_RATE_RM_PER_LITRE;
-    const eCost   = (lhrs * LIGHT_KW_PER_STRIP * w * 7) * ELECTRICITY_RATE_RM_PER_KWH;
-    const fCost   = d.fertilizer * (w / 4) * fm;
-    data.push(parseFloat((inc - wCost - eCost - fCost).toFixed(2)));
+    data.push(wifCalculateSavings(plant, w, window._wif_lastSensors || {}).net);
   }
 
   wif_savingsChart = new Chart(canvas, {
@@ -1077,21 +1489,75 @@ function wifTriggerCostAi() {
 
   // Reset so the note shows fresh for the new plant
   window._wif_aiNoteSet = false;
+  window._wif_lastCostAiData = null;
   document.getElementById('wif-ai-savings-detail')?.remove();
 
   wifUpdateCost(); // re-render numbers for new plant
+  wifFetchCostAssumptions(plant);
   wifFetchCostAi(plant, wif_cosRows, weeks); // call AI once
+}
+
+function wifRenderCostAiDetail(data = {}) {
+  const calc = window._wif_lastCostProjection;
+  if (!calc) return;
+
+  document.getElementById('wif-ai-savings-detail')?.remove();
+
+  const score = wifNumber(data.conditionScore, window._wif_dynamicCondition?.score);
+  const label = data.conditionLabel || window._wif_dynamicCondition?.label || 'Unknown';
+  const waterHistory = data.waterUsedLiters !== null && data.waterUsedLiters !== undefined
+    ? `${Number(data.waterUsedLiters).toFixed(2)} L recorded`
+    : 'No flow reading';
+  const energyHistory = data.energyUsedKwh !== null && data.energyUsedKwh !== undefined
+    ? `${Number(data.energyUsedKwh).toFixed(2)} kWh recorded`
+    : 'No energy meter reading';
+  const historyCount = data.historicalStats?.totalReadings || 0;
+  const netColour = calc.net === null ? 'var(--text-secondary,#666)' : calc.net >= 0 ? 'var(--accent,#639922)' : 'var(--red-400,#E24B4A)';
+  const money = value => value === null || value === undefined ? '--' : `RM ${value.toFixed(2)}`;
+
+  const detail = document.createElement('div');
+  detail.id = 'wif-ai-savings-detail';
+  detail.innerHTML = `
+    <div class="wif-card" style="margin-bottom:12px;border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
+      <div class="wif-card-title">🤖 AI Savings Analysis</div>
+      <div class="wif-metric-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:10px;">
+        <div class="wif-metric">
+          <div class="wif-metric-val" style="font-size:15px;color:var(--teal-600,#0F6E56);">${score !== null ? `${Math.round(score)}%` : '—'}</div>
+          <div class="wif-metric-lbl">Farm condition: ${wifEscapeHtml(label)}</div>
+        </div>
+        <div class="wif-metric">
+          <div class="wif-metric-val" style="font-size:15px;color:${netColour};">${money(calc.net)}</div>
+          <div class="wif-metric-lbl">Saved vs pasar</div>
+        </div>
+      </div>
+      <div class="wif-cost-row wif-cost-expense">
+        <span class="wif-cost-lbl">💧⚡🧪 Resource cost breakdown</span>
+        <span style="color:var(--red-400,#E24B4A);">${calc.expenses === null ? '--' : `−${money(calc.expenses)}`}</span>
+      </div>
+      <div class="wif-cost-row" style="background:var(--bg-secondary,#f5f5f5);">
+        <span class="wif-cost-lbl">Firebase history (${historyCount} readings)</span>
+        <span style="font-size:11px;color:var(--text-secondary,#666);">${wifEscapeHtml(waterHistory)} · ${wifEscapeHtml(energyHistory)}</span>
+      </div>
+    </div>`;
+
+  const costSection = document.getElementById('wif-cost');
+  const cards = costSection?.querySelectorAll(':scope > .wif-card');
+  if (cards?.length >= 3) {
+    cards[2].before(detail);
+  } else {
+    costSection?.appendChild(detail);
+  }
 }
 
 async function wifFetchCostAi(plant, units, weeks) {
   const noteEl = document.getElementById('wif-cost-ai-note');
-  noteEl.textContent = '🤖 Analyzing your sensor data...';
+  if (noteEl) noteEl.textContent = '🤖 Analyzing your sensor data...';
 
   const sensors = await fetchWeeklyAvgSensors();
-  if (!sensors || sensors.temp === null || sensors.humid === null || sensors.water === null || sensors.light === null || sensors.nutrient === null) {
+  if (!sensors) {
     window._wif_lastSensors = null;
     wifUpdateCost();
-    noteEl.textContent = 'Firebase sensor readings are required before AI cost analysis.';
+    if (noteEl) noteEl.textContent = 'Firebase sensor readings are required before AI cost analysis.';
     return;
   }
 
@@ -1106,11 +1572,11 @@ async function wifFetchCostAi(plant, units, weeks) {
     // Dynamic AI scoring from live sensors
 let score = 100;
 
-if (sensors.temp > 32 || sensors.temp < 20) score -= 15;
-if (sensors.humid > 85 || sensors.humid < 40) score -= 10;
-if (sensors.water < 35) score -= 20;
-if (sensors.light < 40) score -= 15;
-if (sensors.nutrient < 45) score -= 15;
+if (sensors.temp !== null && (sensors.temp > 32 || sensors.temp < 20)) score -= 15;
+if (sensors.humid !== null && (sensors.humid > 85 || sensors.humid < 40)) score -= 10;
+if (sensors.water !== null && sensors.water < 35) score -= 20;
+if (sensors.light !== null && sensors.light < 40) score -= 15;
+if (sensors.nutrient !== null && sensors.nutrient < 45) score -= 15;
 
 score = Math.max(25, Math.min(100, score));
 
@@ -1128,52 +1594,24 @@ window._wif_dynamicCondition = {
     const res = await fetch(`${API_BASE}/api/whatif/costsaving`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plant, units, weeks, sensors })
+      body: JSON.stringify({
+        plant,
+        units,
+        weeks,
+        ...wifBuildAiSensorContext(sensors),
+      })
     });
 
-    if (!res.ok) throw new Error('Server error');
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || data.error || `Server error ${res.status}`);
 
     window._wif_aiNoteSet = true; // prevent wifUpdateCost from overwriting this
-    noteEl.textContent = data.insight;
-
-    const detail = document.createElement('div');
-    detail.id = 'wif-ai-savings-detail';
-
-    detail.innerHTML = `
-      <div class="wif-card" style="margin-bottom:12px;border-color:var(--teal-200,#7DD3BD);border-width:1.5px;">
-        <div class="wif-card-title">🤖 AI Resource Analysis</div>
-        <div class="wif-metric-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:10px;">
-          <div class="wif-metric">
-            <div class="wif-metric-val" style="font-size:15px;color:var(--teal-600,#0F6E56);">${window._wif_dynamicCondition.score}%</div>
-            <div class="wif-metric-lbl">Condition: ${window._wif_dynamicCondition.label}</div>
-          </div>
-          <div class="wif-metric">
-            <div class="wif-metric-val" style="font-size:15px;color:var(--accent,#639922);">RM ${(data.totalSavedRM ?? 0).toFixed(2)}</div>
-            <div class="wif-metric-lbl">AI Est. Saved</div>
-          </div>
-        </div>
-        <div class="wif-cost-row wif-cost-income">
-          <span class="wif-cost-lbl">💧 Water saved</span>
-          <span style="color:var(--green-600,#3B6D11);">${(data.waterSavedLiters ?? 0).toFixed(1)}L · RM ${(data.waterCostSaved ?? 0).toFixed(2)}</span>
-        </div>
-        <div class="wif-cost-row wif-cost-income">
-          <span class="wif-cost-lbl">⚡ Energy saved</span>
-          <span style="color:var(--green-600,#3B6D11);">${(data.energySavedkWh ?? 0).toFixed(2)}kWh · RM ${(data.energyCostSaved ?? 0).toFixed(2)}</span>
-        </div>
-      </div>`;
-
-    // Insert before the chart card (3rd card in #wif-cost)
-    const costSection = document.getElementById('wif-cost');
-    const cards = costSection.querySelectorAll(':scope > .wif-card');
-    if (cards.length >= 3) {
-      cards[2].before(detail);
-    } else {
-      costSection.appendChild(detail);
-    }
+    if (noteEl) noteEl.textContent = data.insight || 'AI analysis complete.';
+    window._wif_lastCostAiData = data;
+    wifRenderCostAiDetail(data);
 
   } catch (err) {
-    noteEl.textContent = 'AI analysis unavailable — showing calculated estimates only.';
+    if (noteEl) noteEl.textContent = `AI analysis unavailable - ${err.message}. Showing calculated estimates only.`;
   }
 }
 
@@ -1297,11 +1735,7 @@ function wifChangeQty(delta) {
 // Falls back to WIF_ZONES static data if farm state is unavailable.
 function wifBuildFarmZones() {
   try {
-    const farms = JSON.parse(localStorage.getItem('user_farms') || '[]');
-    if (!farms.length) return null;
-
-    const currentFarm = farms.find(f => f.id === AppState?.currentFarmId)
-      || farms[farms.length - 1];
+    const currentFarm = wifGetCurrentFarm();
     if (!currentFarm) return null;
 
     const plants = Array.isArray(currentFarm.plants) ? currentFarm.plants : [];
@@ -1447,35 +1881,129 @@ noteEl.style.display = 'none'; // hidden while advisor card loads
   wifFetchNewPlantAi(wif_curNp, wif_qty);
 }
 
+function wifLocalVerticalFarmBlocker(species) {
+  const s = String(species || '').toLowerCase();
+  const blocked = ['apple', 'mango', 'durian', 'coconut', 'avocado', 'pear', 'orange', 'lemon', 'lime', 'grapefruit', 'rambutan', 'lychee'];
+  const smallForm = /sprout|microgreen|seedling|dwarf/.test(s);
+  return blocked.some(crop => s.includes(crop)) && !smallForm;
+}
+
+function wifRenderNewPlantFallback({ species, quantity, sensors, reason }) {
+  const advisorCard = document.getElementById('wif-np-advisor-card');
+  const advisorBody = document.getElementById('wif-np-advisor-body');
+  const impactGrid  = document.getElementById('wif-impact-grid');
+  const readyTitleEl = document.getElementById('wif-ready-title');
+  const readySubEl   = document.getElementById('wif-ready-sub');
+  const profile = wifGetCostAssumptions(species);
+  const blocked = wifLocalVerticalFarmBlocker(species);
+  const currentTemp = wifNumber(sensors?.temp);
+  const currentHumid = wifNumber(sensors?.humid);
+  const currentMoisture = wifNumber(sensors?.water);
+  const currentEc = wifNumber(sensors?.ec);
+  const waterLMonth = parseFloat((profile.waterMLDay * quantity * 30 / 1000).toFixed(1));
+  const fertMLWeek = parseFloat((profile.fertMLWeek * quantity).toFixed(1));
+  const energyKWhMonth = parseFloat((profile.lightHours * LIGHT_KW_PER_STRIP * quantity * 30).toFixed(2));
+  const resourceCost = parseFloat((
+    waterLMonth * WATER_RATE_RM_PER_LITRE +
+    fertMLWeek * 4.33 * FERTILIZER_RATE_RM_PER_ML +
+    energyKWhMonth * ELECTRICITY_RATE_RM_PER_KWH
+  ).toFixed(2));
+
+  const warnings = [];
+  if (blocked) warnings.push(`${species} is a tree/orchard crop and is not practical for compact indoor vertical farming.`);
+  if (currentTemp !== null && (currentTemp < 18 || currentTemp > 30)) warnings.push(`Temperature is ${currentTemp}C; many indoor crops prefer roughly 18-30C.`);
+  if (currentHumid !== null && (currentHumid < 45 || currentHumid > 85)) warnings.push(`Humidity is ${currentHumid}%; check ventilation before planting.`);
+  if (currentMoisture !== null && currentMoisture < 30) warnings.push(`Root moisture is low at ${currentMoisture.toFixed(1)}%.`);
+  if (currentEc !== null && (currentEc < 1.0 || currentEc > 2.5)) warnings.push(`EC is ${currentEc}; adjust nutrient strength before scaling.`);
+
+  if (advisorCard) advisorCard.style.display = 'block';
+  if (advisorBody) {
+    const source = sensors?.source || 'Firebase sensorReadings';
+    const warningHtml = warnings.length
+      ? `<div style="margin-top:8px;padding:8px 10px;background:var(--amber-50,#FAEEDA);border-radius:var(--radius-sm,8px);font-size:12px;color:var(--amber-800,#633806);">⚠️ ${warnings.map(wifEscapeHtml).join(' · ')}</div>`
+      : `<div style="margin-top:8px;padding:8px 10px;background:var(--green-50,#EAF3DE);border-radius:var(--radius-sm,8px);font-size:12px;color:var(--green-800,#27500A);">✅ Firebase conditions look workable for a beginner trial.</div>`;
+    advisorBody.innerHTML = `
+      <div style="font-size:12px;color:var(--teal-600,#0F6E56);line-height:1.5;">
+        ${blocked
+          ? `${wifEscapeHtml(species)} is not recommended for this vertical farm format.`
+          : `Fast estimate for ${wifEscapeHtml(species)} using Firebase readings while the full AI advisor is slow.`}
+      </div>
+      ${warningHtml}
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="wif-badge ${blocked ? 'wif-badge-red' : 'wif-badge-green'}">${blocked ? '😟 Not suitable' : '😊 Worth trying'}</span>
+        <span class="wif-badge wif-badge-blue">AI timed out</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-secondary,#777);margin-top:8px;">Reason: ${wifEscapeHtml(reason)} · Source: ${wifEscapeHtml(source)}</div>`;
+  }
+
+  if (readyTitleEl) readyTitleEl.textContent = blocked ? 'Not recommended' : 'Estimated suitable';
+  if (readySubEl) readySubEl.textContent = blocked
+    ? 'Choose compact leafy greens, herbs, or fruiting vegetables instead.'
+    : 'This is a fast estimate from Firebase conditions and crop resource references.';
+
+  if (impactGrid) {
+    impactGrid.innerHTML = blocked ? `
+      <div class="wif-impact-card warn" style="grid-column:1/-1;">
+        <div class="wif-impact-emoji">⚠️</div>
+        <div class="wif-impact-name">Vertical farming fit</div>
+        <div class="wif-impact-val warn">Not suitable</div>
+      </div>` : `
+      <div class="wif-impact-card up">
+        <div class="wif-impact-emoji">💧</div>
+        <div class="wif-impact-name">Water needed</div>
+        <div class="wif-impact-val up">${waterLMonth} L/mo</div>
+      </div>
+      <div class="wif-impact-card up">
+        <div class="wif-impact-emoji">🧪</div>
+        <div class="wif-impact-name">Fertilizer needed</div>
+        <div class="wif-impact-val up">${fertMLWeek} mL/wk</div>
+      </div>
+      <div class="wif-impact-card up">
+        <div class="wif-impact-emoji">⚡</div>
+        <div class="wif-impact-name">Energy needed</div>
+        <div class="wif-impact-val up">${energyKWhMonth} kWh/mo</div>
+      </div>
+      <div class="wif-impact-card up">
+        <div class="wif-impact-emoji">💵</div>
+        <div class="wif-impact-name">Extra resource cost</div>
+        <div class="wif-impact-val up">RM ${resourceCost.toFixed(2)}/mo</div>
+      </div>`;
+  }
+}
+
 async function wifFetchNewPlantAi(species, quantity) {
   const noteEl      = document.getElementById('wif-np-ai-note');
   const advisorCard = document.getElementById('wif-np-advisor-card');
   const advisorBody = document.getElementById('wif-np-advisor-body');
+  const requestId   = ++wif_npAiRequestId;
+  const speciesName = wifEscapeHtml(species);
 
   // Show advisor card in loading state immediately
   if (advisorCard) {
     advisorCard.style.display = 'block';
     advisorBody.innerHTML = `
       <div class="wif-ai-note" style="margin:0;">
-        <span>🤖</span><span>Analysing suitability for <strong>${species}</strong>...</span>
+        <span>🤖</span><span>Analysing <strong>${speciesName}</strong> with Firebase history. If the AI is slow, a fast estimate will appear automatically.</span>
       </div>`;
   }
 
-  const sensors = await fetchSensorData();
+  const [sensors, farmLevelSensors] = await Promise.all([
+    fetchSensorData(),
+    fetchFarmLevelSensorData(),
+  ]);
+  if (requestId !== wif_npAiRequestId) return;
+
   // Use real planted crops as context; fall back to sensible defaults
   const currentCrops = window._WIF_DYNAMIC_CROPS
     ? window._WIF_DYNAMIC_CROPS.map(c => c.id)
     : ['lettuce', 'tomato', 'basil'];
 
   try {
-    const res = await fetch(`${API_BASE}/api/whatif/newplant`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ species, quantity, currentCrops, sensors })
-    });
-
-    if (!res.ok) throw new Error('Server error');
-    const data = await res.json();
+    const sensorContext = wifBuildAiSensorContext(sensors, farmLevelSensors);
+    const data = await wifPostJsonWithTimeout(`${API_BASE}/api/whatif/newplant`, {
+      species, quantity, currentCrops, ...sensorContext
+    }, 12000);
+    if (requestId !== wif_npAiRequestId) return;
 
     // Normalise response — handles both /newplant and /newplant-ai server shapes
     const analysis  = data.analysis || {};
@@ -1485,7 +2013,7 @@ async function wifFetchNewPlantAi(species, quantity) {
       : (data.insight || 'Analysis complete.');
     data.warnings   = analysis.warnings || data.warnings || [];
     data.supported  = !data.unsuitable;
-    data.score      = analysis.compatibilityScore ?? data.score ?? 0;
+    data.score      = wifNumber(analysis.compatibilityScore, data.score);
 
     // ===== ADVISOR CARD =====
     if (advisorBody) {
@@ -1495,24 +2023,49 @@ async function wifFetchNewPlantAi(species, quantity) {
             <span style="font-size:28px;">⚠️</span>
             <div>
               <div style="font-size:13px;font-weight:500;color:var(--red-400,#E24B4A);margin-bottom:4px;">Not suitable for indoor vertical farming</div>
-              <div style="font-size:12px;color:var(--text-secondary,#666);">${data.insight}</div>
+              <div style="font-size:12px;color:var(--text-secondary,#666);">${wifEscapeHtml(data.insight)}</div>
             </div>
           </div>`;
       } else {
         const warningHtml = data.warnings?.length
           ? `<div style="margin-top:8px;padding:8px 10px;background:var(--amber-50,#FAEEDA);border-radius:var(--radius-sm,8px);font-size:12px;color:var(--amber-800,#633806);">
-               ⚠️ ${data.warnings.join(' · ')}
+               ⚠️ ${data.warnings.map(wifEscapeHtml).join(' · ')}
              </div>`
           : `<div style="margin-top:8px;padding:8px 10px;background:var(--green-50,#EAF3DE);border-radius:var(--radius-sm,8px);font-size:12px;color:var(--green-800,#27500A);">
-               ✅ All projected values within safe range
+               ✅ All projected values within the crop-specific safe range
              </div>`;
+        const gapRows = Object.values(data.sensorGap || {})
+          .filter(Boolean)
+          .slice(0, 4)
+          .map(g => {
+            const unit = g.unit || '';
+            const current = g.current === null || g.current === undefined ? 'No data' : `${g.current}${unit}`;
+            const ideal = g.idealMin === undefined || g.idealMax === undefined ? 'n/a' : `${g.idealMin}-${g.idealMax}${unit}`;
+            const action = g.action === 'increase' ? 'Raise' : g.action === 'reduce' ? 'Reduce' : g.action === 'maintain' ? 'Maintain' : 'Check';
+            return `<div class="wif-cost-row" style="background:var(--bg-secondary,#f5f5f5);margin-bottom:4px;">
+              <span class="wif-cost-lbl">${wifEscapeHtml(g.label)}: ${wifEscapeHtml(current)} / ideal ${wifEscapeHtml(ideal)}</span>
+              <span style="font-size:11px;color:var(--teal-600,#0F6E56);">${action}</span>
+            </div>`;
+          }).join('');
+        const diffEmoji = data.score === null ? '🌱'
+          : data.score >= 75 ? '😊'
+          : data.score >= 50 ? '😐'
+          : '😟';
+        const diffLabel = data.score === null ? 'Checking...'
+          : data.score >= 75 ? 'Easy to grow'
+          : data.score >= 50 ? 'Needs some care'
+          : 'Needs attention';
+        const scoreBadge = `<span class="wif-badge wif-badge-green" style="font-size:11px;">${diffEmoji} ${diffLabel}</span>`;
+        const sourceText = data.sensorSource || sensors?.source || 'Firebase sensorReadings';
         advisorBody.innerHTML = `
-          <div style="font-size:12px;color:var(--teal-600,#0F6E56);line-height:1.5;">${data.insight}</div>
+          <div style="font-size:12px;color:var(--teal-600,#0F6E56);line-height:1.5;">${wifEscapeHtml(data.insight)}</div>
           ${warningHtml}
+          ${gapRows ? `<div style="margin-top:10px;">${gapRows}</div>` : ''}
           <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-            <span class="wif-badge wif-badge-green">Suitable Indoor Crop</span>
-            <span class="wif-badge wif-badge-blue">AI Score: ${data.score}%</span>
-          </div>`;
+            <span class="wif-badge wif-badge-green">✅ Good for your farm</span>
+            ${scoreBadge}
+          </div>
+          <div style="font-size:10px;color:var(--text-secondary,#777);margin-top:8px;">Source: ${wifEscapeHtml(sourceText)}</div>`;
       }
     }
 
@@ -1542,6 +2095,38 @@ async function wifFetchNewPlantAi(species, quantity) {
 
     // ===== IMPACT GRID — enrich static cards with API numeric deltas if provided =====
     const impactGrid = document.getElementById('wif-impact-grid');
+    if (impactGrid && data.unsuitable) {
+      impactGrid.innerHTML = `
+        <div class="wif-impact-card warn" style="grid-column:1/-1;">
+          <div class="wif-impact-emoji">⚠️</div>
+          <div class="wif-impact-name">Vertical farming fit</div>
+          <div class="wif-impact-val warn">Not suitable</div>
+        </div>`;
+    }
+    if (impactGrid && !data.unsuitable && data.demand) {
+      const d = data.demand;
+      impactGrid.innerHTML = `
+        <div class="wif-impact-card up">
+          <div class="wif-impact-emoji">💧</div>
+          <div class="wif-impact-name">Water needed</div>
+          <div class="wif-impact-val up">${wifNumber(d.waterLPerMonth) ?? 0} L/mo</div>
+        </div>
+        <div class="wif-impact-card up">
+          <div class="wif-impact-emoji">🧪</div>
+          <div class="wif-impact-name">Fertilizer needed</div>
+          <div class="wif-impact-val up">${wifNumber(d.fertMLPerWeek) ?? 0} mL/wk</div>
+        </div>
+        <div class="wif-impact-card up">
+          <div class="wif-impact-emoji">⚡</div>
+          <div class="wif-impact-name">Energy needed</div>
+          <div class="wif-impact-val up">${wifNumber(d.lightKWhPerMonth) ?? 0} kWh/mo</div>
+        </div>
+        <div class="wif-impact-card up">
+          <div class="wif-impact-emoji">💵</div>
+          <div class="wif-impact-name">Extra resource cost</div>
+          <div class="wif-impact-val up">RM ${(wifNumber(d.totalMonthlyCostRM) ?? 0).toFixed(2)}/mo</div>
+        </div>`;
+    } else
     if (impactGrid && !data.unsuitable && data.impacts) {
       const apiDeltas = {
         'Temperature': data.impacts?.tempChange,
@@ -1571,14 +2156,13 @@ async function wifFetchNewPlantAi(species, quantity) {
     }
 
   } catch (err) {
-    if (advisorBody) {
-      advisorBody.innerHTML = `
-        <div class="wif-ai-note" style="margin:0;">
-          <span>🤖</span><span>AI advisor unavailable — check your connection.</span>
-        </div>`;
-    }
-    // Fallback: show local static AI tip
-    const d = WIF_NP_DATA[species];
-    if (noteEl) noteEl.textContent = d ? `${d.ai} (${quantity} plants)` : 'AI prediction unavailable.';
+    if (requestId !== wif_npAiRequestId) return;
+    wifRenderNewPlantFallback({
+      species,
+      quantity,
+      sensors,
+      reason: err.name === 'AbortError' ? 'full AI advisor took more than 12 seconds' : err.message,
+    });
+    if (noteEl) noteEl.textContent = `Fast estimate shown because AI advisor is slow.`;
   }
 }
