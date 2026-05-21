@@ -1,5 +1,6 @@
 import { showScreen } from '../utils/navigation.js';
 import { AppState } from '../store.js';
+import { readMetric, toFiniteNumber } from '../utils/sensorReading.js';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
@@ -37,8 +38,8 @@ export async function render(params = {}) {
     // Build sensor cards data
     const sensors = SENSOR_KEYS.map(key => {
         const meta = SENSOR_META[key];
-        const raw = reading ? Number(reading[meta.field] ?? null) : null;
-        const hasData = raw !== null && Number.isFinite(raw);
+        const raw = reading ? readSensorField(reading, meta.field) : null;
+        const hasData = raw !== null;
         const status = hasData ? (meta.normal(raw) ? 'Normal' : 'Check') : 'No Data';
         const value = hasData ? formatValue(raw) : '--';
         return { key, meta, value, status };
@@ -188,10 +189,16 @@ function normalizeZoneId(value) {
 }
 
 function formatValue(value) {
-    if (!Number.isFinite(value)) return '0';
+    if (!Number.isFinite(value)) return '--';
     if (Math.abs(value) >= 100)  return String(Math.round(value));
     if (Number.isInteger(value)) return String(value);
     return value.toFixed(1).replace(/\.0$/, '');
+}
+
+function readSensorField(reading, field) {
+    if (field === 'temperature') return readMetric(reading, ['temperature', 'temp']);
+    if (field === 'humidity') return readMetric(reading, ['humidity', 'humid', 'hum']);
+    return toFiniteNumber(reading?.[field]);
 }
 
 function escapeHTML(value) {
@@ -251,11 +258,17 @@ async function loadZoneHistory(zoneId, params = {}, meta = SENSOR_META['temp']) 
         const res = await fetch(url);
         const result = await res.json();
         const readings = result.readings || [];
-        if (!readings.length) return;
+        if (!readings.length) {
+            const chart = document.getElementById('zoneTrendChart');
+            if (chart) chart.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:0.85rem;font-weight:800;">Waiting for live data</div>`;
+            const log = document.getElementById('zoneHistoryLog');
+            if (log) log.innerHTML = `<div style="color:#94a3b8;font-size:0.85rem;">Waiting for live data</div>`;
+            return;
+        }
 
-        const values = readings.map(r => Number(r[meta.field] ?? 0)).reverse();
-        const maxV = Math.max(...values, 1);
-        const minV = Math.min(...values, 0);
+        const values = readings.map(r => readSensorField(r, meta.field)).filter(value => value !== null).reverse();
+        const maxV = values.length ? Math.max(...values, 1) : 1;
+        const minV = values.length ? Math.min(...values, 0) : 0;
         const range = maxV - minV || 1;
         const points = values.map((v, i) => ({
             x: ((i / (values.length - 1 || 1)) * 100).toFixed(1),
@@ -266,7 +279,7 @@ async function loadZoneHistory(zoneId, params = {}, meta = SENSOR_META['temp']) 
 
         const chart = document.getElementById('zoneTrendChart');
         if (chart) chart.innerHTML = `
-            <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%;height:100%;display:block;">
+            ${points.length ? `<svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%;height:100%;display:block;">
                 <defs>
                     <linearGradient id="zoneGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stop-color="rgba(16,185,129,.30)"/>
@@ -276,17 +289,18 @@ async function loadZoneHistory(zoneId, params = {}, meta = SENSOR_META['temp']) 
                 <path d="${areaPath}" fill="url(#zoneGrad)"/>
                 <path d="${linePath}" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 ${points.map(p => `<circle cx="${p.x}" cy="${p.y}" r="1.5" fill="#fff" stroke="#10B981" stroke-width="1"/>`).join('')}
-            </svg>`;
+            </svg>` : `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:0.85rem;font-weight:800;">Waiting for live data</div>`}`;
 
         const log = document.getElementById('zoneHistoryLog');
         if (log) log.innerHTML = readings.map(r => {
-            const val = Number(r[meta.field] ?? 0);
-            const status = meta.normal(val) ? 'Normal' : 'Check';
+            const val = readSensorField(r, meta.field);
+            const hasValue = val !== null;
+            const status = hasValue ? (meta.normal(val) ? 'Normal' : 'Check') : 'No Data';
             const time = r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
             return `
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:13px 0;border-bottom:1px solid #eef2f7;align-items:center;">
                     <span style="color:#64748b;font-weight:700;">${time}</span>
-                    <span style="font-weight:950;color:#17231b;">${formatValue(val)} <span style="font-size:0.72rem;color:#64748b;">${escapeHTML(meta.unit)}</span></span>
+                    <span style="font-weight:950;color:#17231b;">${hasValue ? formatValue(val) : '--'} <span style="font-size:0.72rem;color:#64748b;">${hasValue ? escapeHTML(meta.unit) : ''}</span></span>
                     <span style="text-align:right;"><span style="background:${status === 'Normal' ? '#ecfdf5' : '#fef2f2'};color:${status === 'Normal' ? '#166534' : '#dc2626'};border:1px solid ${status === 'Normal' ? '#bbf7d0' : '#fecaca'};padding:6px 10px;border-radius:999px;font-size:0.68rem;font-weight:900;">${status}</span></span>
                 </div>`;
         }).join('');

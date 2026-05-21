@@ -3,6 +3,7 @@ import { AppState } from '../store.js';
 import { CommercialFarmCanvas } from '../components/CommercialFarmCanvas.js?v=radish-ai-1';
 import { openAddPlantModal } from '../components/AddPlantModal.js';
 import { aiAdvisorHTML, aiChatHTML } from '../utils/aiFormat.js';
+import { formatMetric, hasRealSensorData, normalizeSensorReading, toFiniteNumber } from '../utils/sensorReading.js';
 import jsQR from 'https://esm.sh/jsqr@1.4.0';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -307,7 +308,7 @@ const syncData = async () => {
         if (fmRes) {
             const fmData = await fmRes.json().catch(() => null);
             const r = fmData?.reading;
-            if (r) {
+            if (hasRealSensorData(r)) {
     fmReading = rememberCommercialReading('farm_master', r, 'deviceId=' + DEMO_COMMERCIAL_FARM_MASTER).reading;
 }
         }
@@ -319,15 +320,16 @@ const syncData = async () => {
             el.style.color = isNormal ? '#14532d' : '#dc2626';
         }
     };
-    const water = fmReading.waterDistanceCm != null ? Number(fmReading.waterDistanceCm) : null;
-    const gas   = fmReading.gasRaw != null ? Number(fmReading.gasRaw) : null;
-    const co2   = fmReading.co2Ppm != null ? Number(fmReading.co2Ppm) : null;
-    const energy = fmReading.energyKwh != null ? Number(fmReading.energyKwh) : null;
+    const normalizedMaster = normalizeSensorReading(fmReading);
+    const water = normalizedMaster.waterDistanceCm;
+    const gas   = normalizedMaster.gasRaw;
+    const co2   = normalizedMaster.co2Ppm;
+    const energy = normalizedMaster.energyKwh;
 
-    setFmTile('fm-water',  water  != null ? `${water.toFixed(1)} cm`  : '--', water  == null || (water >= 3 && water <= 30));
+    setFmTile('fm-water',  water  != null ? `${formatMetric(water, ' cm', 1)}`  : '--', water  == null || (water >= 3 && water <= 30));
     setFmTile('fm-gas',    gas    != null ? String(Math.round(gas))   : '--', gas    == null || gas < 3000);
     setFmTile('fm-co2',    co2    != null ? `${co2} ppm`              : '--', co2    == null || co2 < 1500);
-    setFmTile('fm-energy', energy != null ? `${energy.toFixed(2)} kWh`: '--', energy == null || energy >= 0);
+    setFmTile('fm-energy', energy != null ? `${formatMetric(energy, ' kWh', 2)}`: '--', energy == null || energy >= 0);
     setText('fm-status-text', `Farm master ${formatReadingTime(fmReading)}${fmReading._stale ? ' · cached' : ''}`);
         }
 
@@ -402,7 +404,7 @@ async function fetchLatestCommercialReading(zoneId = selectedZoneId) {
         try {
             const res = await fetchWithTimeout(`${API_BASE}/api/sensors/latest?${query.toString()}`, {}, 4500);
             const data = await res.json();
-            if (data?.reading) {
+            if (hasRealSensorData(data?.reading)) {
                 const cached = rememberCommercialReading(zoneId, data.reading, query.toString());
                 return { ...data, reading: cached.reading, sourceQuery: query.toString() };
             }
@@ -446,8 +448,10 @@ function writeCommercialReadingCache(cache) {
 }
 
 function rememberCommercialReading(zoneId, reading, sourceQuery = '') {
+    const normalized = normalizeSensorReading(reading);
+    if (!hasRealSensorData(normalized)) return getCachedCommercialReading(zoneId) || { reading: null };
     const enriched = {
-        ...reading,
+        ...normalized,
         _sourceQuery: sourceQuery,
         _fetchedAt: new Date().toISOString(),
         _stale: false,
@@ -510,24 +514,18 @@ async function syncSelectedZoneData() {
 }
 
 function applySensorReading(r) {
-    const temp = Number(r.temperature || 0);
-    const humid = Number(r.humidity || 0);
-    const light = Number(r.lightRaw || 0);
-    const ph = Number(r.ph || 0);
-    const water = Number(r.waterDistanceCm || 0);
-    const gas = Number(r.gasRaw || 0);
-    const ec = Number(r.ec || 0);
-    const co2 = Number(r.co2Ppm || 0);
+    const normalized = normalizeSensorReading(r);
+    if (!hasRealSensorData(normalized)) return;
+    const temp = normalized.temperature;
+    const humid = normalized.humidity;
+    const light = normalized.lightRaw;
+    const ph = normalized.ph;
+    const water = normalized.waterDistanceCm;
+    const gas = normalized.gasRaw;
+    const ec = normalized.ec;
+    const co2 = normalized.co2Ppm;
     const liveReading = {
-        ...r,
-        temperature: temp,
-        humidity: humid,
-        lightRaw: light,
-        ph,
-        waterDistanceCm: water,
-        gasRaw: gas,
-        ec,
-        co2Ppm: co2,
+        ...normalized,
     };
 
     AppState.latestReading = liveReading;
@@ -539,26 +537,26 @@ function applySensorReading(r) {
     };
     AppState.sensors = {
         ...(AppState.sensors || {}),
-        temp: { val: temp },
-        humid: { val: humid },
-        light: { val: light },
-        ph: { val: ph },
-        water: { val: water },
-        nutrient: { val: gas },
-        ec: { val: ec },
-        co2: { val: co2 },
-        flow: { val: Number(r.waterFlowLpm || 0) },
-        energy: { val: Number(r.energyKwh || 0) },
+        temp: { val: temp ?? '--' },
+        humid: { val: humid ?? '--' },
+        light: { val: light ?? '--' },
+        ph: { val: ph ?? '--' },
+        water: { val: water ?? '--' },
+        nutrient: { val: gas ?? '--' },
+        ec: { val: ec ?? '--' },
+        co2: { val: co2 ?? '--' },
+        flow: { val: normalized.waterFlowLpm ?? '--' },
+        energy: { val: normalized.energyKwh ?? '--' },
     };
 
-    setText('pro-temp', `${temp.toFixed(1)}°C`);
-    setText('pro-humid', `${humid}%`);
-    setText('pro-light', light);
-    setText('pro-ph', ph || '--');
-    setText('pro-water', `${water}cm`);
-    setText('pro-gas', gas);
-    setText('pro-ec', ec ? ec.toFixed(2) + ' mS' : '--');
-    setText('pro-co2', co2 ? co2 + ' ppm' : '--');
+    setText('pro-temp', formatMetric(temp, '°C', 1));
+    setText('pro-humid', formatMetric(humid, '%', 0));
+    setText('pro-light', formatMetric(light, '', 0));
+    setText('pro-ph', formatMetric(ph, '', 1));
+    setText('pro-water', formatMetric(water, 'cm', 0));
+    setText('pro-gas', formatMetric(gas, '', 0));
+    setText('pro-ec', ec !== null ? `${formatMetric(ec, '', 2)} mS` : '--');
+    setText('pro-co2', co2 !== null ? `${formatMetric(co2, '', 0)} ppm` : '--');
     if (CommercialFarmCanvas?.showOverview && !CommercialFarmCanvas.selectedRoot) {
         CommercialFarmCanvas.sensorSnapshot = { ...(CommercialFarmCanvas.sensorSnapshot || {}), ...liveReading };
         CommercialFarmCanvas.showOverview();
@@ -860,9 +858,9 @@ function openZoneCameraModal() {
                                 ${zones.map(item => `<option value="${escapeAttr(item.id)}" ${item.id === zone?.id ? 'selected' : ''}>${escapeHTML(item.label)} · ${escapeHTML(item.crop)}</option>`).join('')}
                             </select>
                         </label>
-                        ${cameraMetric('Temp', reading?.temperature !== undefined ? `${Number(reading.temperature).toFixed(1)}C` : '--')}
-                        ${cameraMetric('Humidity', reading?.humidity !== undefined ? `${reading.humidity}%` : '--')}
-                        ${cameraMetric('Light', reading?.lightRaw ?? '--')}
+                        ${cameraMetric('Temp', formatMetric(normalizeSensorReading(reading || {}).temperature, 'C', 1))}
+                        ${cameraMetric('Humidity', formatMetric(normalizeSensorReading(reading || {}).humidity, '%', 0))}
+                        ${cameraMetric('Light', formatMetric(normalizeSensorReading(reading || {}).lightRaw, '', 0))}
                         ${cameraMetric('Plant count', `${zone?.planted ?? plantCount(farm)} plants`)}
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
                             <button id="cameraStartBtn" style="padding:13px;border:1px solid #99f6e4;border-radius:14px;background:#ecfeff;color:#0f766e;font-weight:950;cursor:pointer;">Start camera</button>
@@ -1121,11 +1119,11 @@ function zoneOverviewCards(farm, rack) {
 }
 
 function zoneCardHtml(zone) {
-    const reading = zoneSnapshots[zone.id];
+    const reading = zoneSnapshots[zone.id] ? normalizeSensorReading(zoneSnapshots[zone.id]) : null;
     const health = zoneHealth(reading, getCurrentFarm()?.thresholds || {});
     const deviceLabel = zone.deviceId ? zone.deviceId.replace(/^dev_/, '') : 'unassigned';
     const latest = reading
-        ? `${formatSensorMini(reading.temperature, '°C')} · ${formatSensorMini(reading.humidity, '%')} · pH ${reading.ph != null ? Number(reading.ph).toFixed(1) : '--'} · ${formatReadingTime(reading)}${reading._stale ? ' · cached' : ''}`
+        ? `${formatSensorMini(reading.temperature, '°C')} · ${formatSensorMini(reading.humidity, '%')} · pH ${formatSensorMini(reading.ph, '')} · ${formatReadingTime(reading)}${reading._stale ? ' · cached' : ''}`
         : 'waiting for first reading';
 
     return `
@@ -1292,25 +1290,24 @@ function zoneLabel(zoneId) {
 }
 
 function zoneHealth(reading, thresholds = {}) {
-    if (!reading) return { level: 'idle', label: 'No Data' };
-    const gasLimit = Number(thresholds.gasDangerThreshold ?? 3000);
-    const tempMin = Number(thresholds.tempMin ?? 18);
-    const tempMax = Number(thresholds.tempMax ?? 35);
-    const phMin = Number(thresholds.phMin ?? 5.5);
-    const phMax = Number(thresholds.phMax ?? 6.8);
-    const dark = Number(thresholds.darkThreshold ?? 1500);
-    const waterLow = Number(thresholds.waterLowCm ?? 20);
+    if (!reading || !hasRealSensorData(reading)) return { level: 'idle', label: 'No Data' };
+    const gasLimit = toFiniteNumber(thresholds.gasDangerThreshold) ?? 3000;
+    const tempMin = toFiniteNumber(thresholds.tempMin) ?? 18;
+    const tempMax = toFiniteNumber(thresholds.tempMax) ?? 35;
+    const phMin = toFiniteNumber(thresholds.phMin) ?? 5.5;
+    const phMax = toFiniteNumber(thresholds.phMax) ?? 6.8;
+    const dark = toFiniteNumber(thresholds.darkThreshold) ?? 1500;
+    const waterLow = toFiniteNumber(thresholds.waterLowCm) ?? 20;
+    const r = normalizeSensorReading(reading);
 
-    if (Number(reading.gasRaw) > gasLimit || Number(reading.temperature) > tempMax + 3) {
+    if ((r.gasRaw !== null && r.gasRaw > gasLimit) || (r.temperature !== null && r.temperature > tempMax + 3)) {
         return { level: 'critical', label: 'Critical' };
     }
     if (
-        Number(reading.temperature) < tempMin ||
-        Number(reading.temperature) > tempMax ||
-        Number(reading.ph) < phMin ||
-        Number(reading.ph) > phMax ||
-        Number(reading.lightRaw) < dark ||
-        Number(reading.waterDistanceCm) > waterLow
+        (r.temperature !== null && (r.temperature < tempMin || r.temperature > tempMax)) ||
+        (r.ph !== null && (r.ph < phMin || r.ph > phMax)) ||
+        (r.lightRaw !== null && r.lightRaw < dark) ||
+        (r.waterDistanceCm !== null && r.waterDistanceCm > waterLow)
     ) {
         return { level: 'warning', label: 'Warning' };
     }
@@ -1318,7 +1315,7 @@ function zoneHealth(reading, thresholds = {}) {
 }
 
 function formatSensorMini(value, suffix = '') {
-    const number = Number(value);
+    const number = toFiniteNumber(value);
     if (!Number.isFinite(number)) return `--${suffix}`;
     return `${number.toFixed(number % 1 ? 1 : 0)}${suffix}`;
 }

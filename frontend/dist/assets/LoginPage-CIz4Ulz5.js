@@ -1,4 +1,4 @@
-import{a as u,A as c,s as k}from"./index-Bza452zz.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";const x="demo@seeddown.com",h="seeddown2026",p=window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1"?"http://localhost:3000":window.location.origin;function P(){const t=document.getElementById("screenContainer");t.innerHTML=`
+import{a as u,A as c,s as k}from"./index-Cib2v6Mx.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";const x="demo@seeddown.com",h="seeddown2026",p=window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1"?"http://localhost:3000":window.location.origin;function P(){const t=document.getElementById("screenContainer");t.innerHTML=`
         <div class="screen active" id="loginScreen" style="
             background: linear-gradient(160deg, #ecfeff 0%, #f8fffe 100%);
             display:flex; flex-direction:column; justify-content:center;

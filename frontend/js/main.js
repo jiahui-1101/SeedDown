@@ -71,8 +71,10 @@ document.addEventListener("DOMContentLoaded", () => {
     NpcAdvisor.init();
     Community.init();
     
-    // 启动 IoT 物联网仿真器 (每5秒推送一次新传感器状态)
-    IotSimulator.start(5000);
+    // Optional local demo simulator. Real Firebase/cached readings are the default.
+    if (localStorage.getItem('seeddown_demo_simulator_enabled') === '1') {
+        IotSimulator.start(5000);
+    }
     
     // 初始化 AI 聊天专家基础服务
     initAiChat();

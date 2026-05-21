@@ -1,6 +1,7 @@
 import { showScreen } from '../utils/navigation.js';
 import { showToast } from '../utils/toast.js';
 import { AppState } from '../store.js';
+import { readMetric, toFiniteNumber } from '../utils/sensorReading.js';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
@@ -60,7 +61,7 @@ const chart = buildChart(historyRows);
                     <section style="background:${theme.surface};border:1px solid ${theme.border};border-radius:24px;padding:22px;box-shadow:${theme.shadow};">
                         <div style="font-size:0.72rem;font-weight:950;color:${theme.muted};text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Trend History</div>
                         <div style="width:100%;aspect-ratio:5 / 2;min-height:150px;position:relative;margin:0 auto;">
-                            <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;display:block;">
+                            ${chart.empty ? `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:${theme.muted};font-size:0.85rem;font-weight:800;">Waiting for live data</div>` : `<svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;display:block;">
                                 <defs>
                                     <linearGradient id="sensorGrad" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="0%" stop-color="${theme.chartFillTop}"/>
@@ -70,7 +71,7 @@ const chart = buildChart(historyRows);
                                 <path d="${chart.areaPath}" fill="url(#sensorGrad)"></path>
                                 <path d="${chart.linePath}" fill="none" stroke="${theme.accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 ${chart.interactiveSlices}
-                            </svg>
+                            </svg>`}
                             <div id="chartTooltip" style="display:none;position:absolute;top:-10px;background:${theme.tooltip};color:#fff;padding:6px 10px;border-radius:10px;font-size:0.78rem;pointer-events:none;white-space:nowrap;transform:translateX(-50%);z-index:10;text-align:center;"></div>
                         </div>
                     </section>
@@ -128,30 +129,31 @@ async function fetchHistory(meta, params = {}) {
         if (!Array.isArray(readings) || readings.length === 0) throw new Error('No data');
 
         return readings.map(item => {
-            const rawValue = item[meta.field];
-            const numeric = Number(rawValue ?? 0);
+            const numeric = readSensorField(item, meta.field);
             return {
                 time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--',
-                val: Number.isFinite(numeric) ? formatValue(numeric) : '0',
-                status: meta.normal(numeric) ? 'Normal' : 'Check',
+                numeric,
+                val: numeric !== null ? formatValue(numeric) : '--',
+                status: numeric === null ? 'No Data' : meta.normal(numeric) ? 'Normal' : 'Check',
             };
         });
     } catch (err) {
         console.error('Sensor history fetch error:', err);
-        return [{ time: 'N/A', val: '0', status: 'Offline' }];
+        return [{ time: 'N/A', numeric: null, val: '--', status: 'Offline' }];
     }
 }
 
 function buildChart(historyRows) {
-    const chartData = [...historyRows].reverse();
-    const values = chartData.map(d => Number.parseFloat(d.val) || 0);
+    const chartData = [...historyRows].reverse().filter(d => toFiniteNumber(d.numeric) !== null);
+    if (!chartData.length) return { empty: true, linePath: '', areaPath: '', interactiveSlices: '' };
+    const values = chartData.map(d => d.numeric);
     const maxVal = Math.max(...values, 1);
     const minVal = Math.min(...values, 0);
     const range = maxVal - minVal || 1;
 
     const points = chartData.map((d, i) => {
         const x = (i / (chartData.length - 1 || 1)) * 100;
-        const y = 35 - ((Number.parseFloat(d.val) - minVal) / range) * 25;
+        const y = 35 - ((d.numeric - minVal) / range) * 25;
         return { x: x.toFixed(1), y: y.toFixed(1), val: d.val, time: d.time };
     });
 
@@ -225,10 +227,16 @@ function getTheme(isCommercial) {
 }
 
 function formatValue(value) {
-    if (!Number.isFinite(value)) return '0';
+    if (!Number.isFinite(value)) return '--';
     if (Math.abs(value) >= 100) return String(Math.round(value));
     if (Number.isInteger(value)) return String(value);
     return value.toFixed(1).replace(/\.0$/, '');
+}
+
+function readSensorField(reading, field) {
+    if (field === 'temperature') return readMetric(reading, ['temperature', 'temp']);
+    if (field === 'humidity') return readMetric(reading, ['humidity', 'humid', 'hum']);
+    return toFiniteNumber(reading?.[field]);
 }
 
 function escapeHTML(value) {

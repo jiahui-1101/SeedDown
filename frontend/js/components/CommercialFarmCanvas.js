@@ -1,4 +1,5 @@
 import { AppState } from '../store.js';
+import { formatMetric, normalizeSensorReading, toFiniteNumber } from '../utils/sensorReading.js';
 import * as THREE from 'https://esm.sh/three@0.160.0';
 import { OrbitControls } from 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js';
 
@@ -498,13 +499,16 @@ export const CommercialFarmCanvas = {
     },
 
     addDigitalTwinDevices(towers) {
+        const snapshot = normalizeSensorReading(this.sensorSnapshot || {});
+        const gasDanger = snapshot.gasRaw !== null && snapshot.gasRaw > 2500;
+        const tempHigh = snapshot.temperature !== null && snapshot.temperature > 30;
         const farmDevices = [
-            { key: 'co2', label: 'CO2 Sensor', value: `${Number(this.sensorSnapshot.co2Ppm || 800)} ppm`, type: 'sensor', kind: 'co2', x: -7.25, y: 2.35, z: -5.95, color: 0x38bdf8 },
-            { key: 'reservoir', label: 'Water Reservoir', value: `${Number(this.sensorSnapshot.waterDistanceCm || 0)} cm`, type: 'sensor', kind: 'reservoir', x: -6.8, y: 0.55, z: 5.35, color: 0x0ea5e9 },
-            { key: 'gas', label: 'MQ-2 Gas Sensor', value: `${Number(this.sensorSnapshot.gasRaw || 0)} raw`, type: 'sensor', kind: 'gas', x: -5.25, y: 0.72, z: 5.55, color: statusColor(Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 'danger' : 'healthy') },
-            { key: 'power', label: 'Power Meter', value: `${Number(this.sensorSnapshot.energyKwh || 5.1).toFixed(1)} kWh`, type: 'sensor', kind: 'power', x: 0.9, y: 1.45, z: 5.42, color: 0xf59e0b },
-            { key: 'main_fan', label: 'Main Ventilation Fan', value: Number(this.sensorSnapshot.temperature || 25) > 30 ? 'active' : 'standby', type: 'output', kind: 'fan', x: 7.55, y: 2.85, z: -5.9, color: 0x64748b },
-            { key: 'emergency_buzzer', label: 'Emergency Buzzer', value: Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 'alert' : 'ready', type: 'output', kind: 'buzzer', x: 1.72, y: 1.34, z: 5.52, color: Number(this.sensorSnapshot.gasRaw || 0) > 2500 ? 0xef4444 : 0x84cc16 },
+            { key: 'co2', label: 'CO2 Sensor', value: formatMetric(snapshot.co2Ppm, ' ppm', 0), type: 'sensor', kind: 'co2', x: -7.25, y: 2.35, z: -5.95, color: 0x38bdf8 },
+            { key: 'reservoir', label: 'Water Reservoir', value: formatMetric(snapshot.waterDistanceCm, ' cm', 0), type: 'sensor', kind: 'reservoir', x: -6.8, y: 0.55, z: 5.35, color: 0x0ea5e9 },
+            { key: 'gas', label: 'MQ-2 Gas Sensor', value: formatMetric(snapshot.gasRaw, ' raw', 0), type: 'sensor', kind: 'gas', x: -5.25, y: 0.72, z: 5.55, color: statusColor(gasDanger ? 'danger' : 'healthy') },
+            { key: 'power', label: 'Power Meter', value: formatMetric(snapshot.energyKwh, ' kWh', 1), type: 'sensor', kind: 'power', x: 0.9, y: 1.45, z: 5.42, color: 0xf59e0b },
+            { key: 'main_fan', label: 'Main Ventilation Fan', value: tempHigh ? 'active' : 'standby', type: 'output', kind: 'fan', x: 7.55, y: 2.85, z: -5.9, color: 0x64748b },
+            { key: 'emergency_buzzer', label: 'Emergency Buzzer', value: gasDanger ? 'alert' : 'ready', type: 'output', kind: 'buzzer', x: 1.72, y: 1.34, z: 5.52, color: gasDanger ? 0xef4444 : 0x84cc16 },
         ];
         farmDevices.forEach(device => this.addDeviceMarker(device));
 
@@ -1918,7 +1922,8 @@ function towerStatus(plants) {
 
 function facilityStatus(plants, sensors) {
     if (plants.some(Boolean) && plants.some(p => p?.status === 'danger')) return 'Critical plant risk';
-    if (Number(sensors.gasRaw || 0) > 2500 || Number(sensors.temperature || 25) > 35) return 'Automation alert';
+    const normalized = normalizeSensorReading(sensors || {});
+    if ((normalized.gasRaw !== null && normalized.gasRaw > 2500) || (normalized.temperature !== null && normalized.temperature > 35)) return 'Automation alert';
     if (plants.some(p => p?.status === 'warning')) return 'Needs review';
     return 'Operational';
 }
@@ -1926,26 +1931,26 @@ function facilityStatus(plants, sensors) {
 function getSensorSnapshot() {
     const s = AppState.sensors || {};
     const reading = AppState.latestReading || AppState.currentReading || {};
-    const sensorNumber = (fallback, ...values) => {
+    const sensorNumber = (...values) => {
         for (const value of values) {
             const raw = value && typeof value === 'object' && 'val' in value ? value.val : value;
-            const num = Number(raw);
-            if (Number.isFinite(num)) return num;
+            const num = toFiniteNumber(raw);
+            if (num !== null) return num;
         }
-        return fallback;
+        return null;
     };
     return {
-        temperature: sensorNumber(25, s.temp, s.temperature, reading.temperature, reading.temp),
-        humidity: sensorNumber(60, s.humid, s.humidity, reading.humidity, reading.humid),
-        lightRaw: sensorNumber(2000, s.lightRaw, s.light, reading.lightRaw, reading.light),
-        soilRaw: sensorNumber(1800, s.soilRaw, s.soil, reading.soilRaw, reading.soilMoisture, reading.moisture),
-        ph: sensorNumber(6.1, s.ph, reading.ph),
-        waterDistanceCm: sensorNumber(10, s.water, s.waterDistanceCm, reading.waterDistanceCm, reading.waterLevel),
-        gasRaw: sensorNumber(1000, s.nutrient, s.gasRaw, reading.gasRaw, reading.gasValue),
-        ec: sensorNumber(1.5, s.ec, reading.ec),
-        co2Ppm: sensorNumber(850, s.co2, reading.co2Ppm),
-        energyKwh: sensorNumber(5.1, s.energy, s.energyKwh, reading.energyKwh),
-        waterFlowLpm: sensorNumber(0.8, s.flow, s.waterFlowLpm, reading.waterFlowLpm),
+        temperature: sensorNumber(s.temp, s.temperature, reading.temperature, reading.temp),
+        humidity: sensorNumber(s.humid, s.humidity, reading.humidity, reading.humid, reading.hum),
+        lightRaw: sensorNumber(s.lightRaw, s.light, reading.lightRaw, reading.light),
+        soilRaw: sensorNumber(s.soilRaw, s.soil, reading.soilRaw, reading.soilMoisture, reading.moisture),
+        ph: sensorNumber(s.ph, reading.ph),
+        waterDistanceCm: sensorNumber(s.water, s.waterDistanceCm, reading.waterDistanceCm, reading.waterLevel, reading.water),
+        gasRaw: sensorNumber(s.nutrient, s.gasRaw, reading.gasRaw, reading.gasValue, reading.gas),
+        ec: sensorNumber(s.ec, reading.ec),
+        co2Ppm: sensorNumber(s.co2, reading.co2Ppm, reading.co2),
+        energyKwh: sensorNumber(s.energy, s.energyKwh, reading.energyKwh, reading.powerKwh),
+        waterFlowLpm: sensorNumber(s.flow, s.waterFlowLpm, reading.waterFlowLpm),
     };
 }
 
@@ -1968,16 +1973,17 @@ function formatSensorUpdatedAt() {
 }
 
 function zoneDeviceValue(key, sensors) {
+    const s = normalizeSensorReading(sensors || {});
     const map = {
-        dht11: `${Number(sensors.temperature || 0).toFixed(1)}C / ${Number(sensors.humidity || 0)}%`,
-        soil: `${Number(sensors.soilRaw || 1800)} raw`,
-        ldr: `${Number(sensors.lightRaw || 0)} raw`,
-        ph: `${Number(sensors.ph || 0).toFixed(1)} pH`,
-        ec: `${Number(sensors.ec || 1.5).toFixed(1)} EC`,
-        flow: `${Number(sensors.waterFlowLpm || 0.8).toFixed(1)} L/min`,
-        pump: Number(sensors.waterDistanceCm || 0) > 20 ? 'ready' : 'standby',
-        zone_fan: Number(sensors.temperature || 25) > 30 ? 'active' : 'standby',
-        active_buzzer: Number(sensors.gasRaw || 0) > 2500 ? 'alert' : 'ready',
+        dht11: `${formatMetric(s.temperature, 'C', 1)} / ${formatMetric(s.humidity, '%', 0)}`,
+        soil: formatMetric(s.soilRaw, ' raw', 0),
+        ldr: formatMetric(s.lightRaw, ' raw', 0),
+        ph: `${formatMetric(s.ph, '', 1)} pH`,
+        ec: `${formatMetric(s.ec, '', 1)} EC`,
+        flow: formatMetric(s.waterFlowLpm, ' L/min', 1),
+        pump: s.waterDistanceCm !== null && s.waterDistanceCm > 20 ? 'ready' : 'standby',
+        zone_fan: s.temperature !== null && s.temperature > 30 ? 'active' : 'standby',
+        active_buzzer: s.gasRaw !== null && s.gasRaw > 2500 ? 'alert' : 'ready',
         camera: 'scan ready',
     };
     return map[key] || '--';
@@ -2007,8 +2013,8 @@ function deviceStatus(device) {
 }
 
 function isPhWarning(sensors) {
-    const ph = Number(sensors.ph ?? 6.1);
-    return ph < 5.5 || ph > 6.5;
+    const ph = toFiniteNumber(sensors.ph);
+    return ph !== null && (ph < 5.5 || ph > 6.5);
 }
 
 function speciesConfig(plant) {
@@ -2054,14 +2060,15 @@ function roundedPath(ctx, x, y, w, h, r) {
 }
 
 function infoPanelHTML({ title, subtitle, status, mode }) {
+    const snapshot = getSensorSnapshot();
     return `
         <div class="cf-panel-kicker">${escapeHTML(mode)}</div>
         <div class="cf-panel-title">${escapeHTML(title)}</div>
         <div class="cf-panel-sub">${escapeHTML(subtitle)}</div>
         <div class="cf-mini-grid">
             ${miniMetric('Status', status)}
-            ${miniMetric('Light', `${Math.round(Number(getSensorSnapshot().lightRaw || 0))}`)}
-            ${miniMetric('pH', `${Number(getSensorSnapshot().ph || 0).toFixed(1)}`)}
+            ${miniMetric('Light', formatMetric(snapshot.lightRaw, '', 0))}
+            ${miniMetric('pH', formatMetric(snapshot.ph, '', 1))}
             ${miniMetric('Updated', formatSensorUpdatedAt())}
         </div>
     `;
@@ -2079,7 +2086,7 @@ function rackPanelHTML(data, plants, sensors) {
             ${miniMetric('Healthy', healthy)}
             ${miniMetric('Warning', warning)}
             ${miniMetric('Critical', danger)}
-            ${miniMetric('Temp', `${Number(sensors.temperature || 0).toFixed(1)}C`)}
+            ${miniMetric('Temp', formatMetric(sensors.temperature, 'C', 1))}
         </div>
         <div class="cf-plant-list">
             ${plants.slice(0, 5).map(plant => `<span>${escapeHTML(plant.name)} <b>${escapeHTML(plant.status)}</b></span>`).join('') || '<span>No assigned crop yet</span>'}
@@ -2093,8 +2100,8 @@ function stationPanelHTML(data, sensors) {
         <div class="cf-panel-title">${escapeHTML(data.label || 'Tank')} Tank</div>
         <div class="cf-panel-sub">Linked to commercial automation controls</div>
         <div class="cf-mini-grid">
-            ${miniMetric('pH', `${Number(sensors.ph || 0).toFixed(1)}`)}
-            ${miniMetric('Water', `${Number(sensors.waterDistanceCm || 0)}cm`)}
+            ${miniMetric('pH', formatMetric(sensors.ph, '', 1))}
+            ${miniMetric('Water', formatMetric(sensors.waterDistanceCm, 'cm', 0))}
             ${miniMetric('Status', escapeHTML(data.status || 'healthy'))}
         </div>
     `;

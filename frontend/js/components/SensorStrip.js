@@ -1,5 +1,6 @@
 import { AppState } from '../store.js';
 import { showScreen } from '../utils/navigation.js';
+import { hasRealSensorData, normalizeSensorReading, sensorStatusRange, toFiniteNumber } from '../utils/sensorReading.js';
 
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000'
@@ -56,9 +57,10 @@ export const SensorStrip = {
 },
 
     applyReading(reading) {
-        this.lastReading = reading;
-        AppState.latestReading = reading;
-        AppState.sensors = mapReadingToSensors(reading, getCurrentFarm()?.thresholds || {});
+        const normalized = normalizeSensorReading(reading);
+        this.lastReading = normalized;
+        AppState.latestReading = normalized;
+        AppState.sensors = mapReadingToSensors(normalized, getCurrentFarm()?.thresholds || {});
         AppState.notify();
     },
 
@@ -187,14 +189,14 @@ function buildSensorQuery() {
 
 function mapReadingToSensors(reading, thresholds = {}) {
     return {
-        temp: sensorValue(reading.temperature, statusRange(reading.temperature, thresholds.tempMin ?? 18, thresholds.tempMax ?? 35)),
-        humid: sensorValue(reading.humidity, statusRange(reading.humidity, thresholds.humidityMin ?? 35, thresholds.humidityMax ?? 80)),
-        light: sensorValue(reading.lightRaw, reading.lightRaw !== undefined && reading.lightRaw < (thresholds.darkThreshold ?? 1500) ? 'warning' : 'normal'),
-        ph: sensorValue(reading.ph, statusRange(reading.ph, thresholds.phMin ?? 5.5, thresholds.phMax ?? 6.8)),
-        water: sensorValue(reading.waterDistanceCm, reading.waterDistanceCm !== undefined && reading.waterDistanceCm > (thresholds.waterLowCm ?? 20) ? 'warning' : 'normal'),
-        nutrient: sensorValue(reading.gasRaw, reading.gasRaw !== undefined && reading.gasRaw > (thresholds.gasDangerThreshold ?? 3000) ? 'danger' : 'normal'),
-        ec: sensorValue(reading.ec, statusRange(reading.ec, thresholds.ecMin ?? 1.2, thresholds.ecMax ?? 2.0)),
-        co2: sensorValue(reading.co2Ppm, reading.co2Ppm !== undefined && reading.co2Ppm < (thresholds.co2MinPpm ?? 800) ? 'warning' : 'normal'),
+        temp: sensorValue(reading.temperature, sensorStatusRange(reading.temperature, thresholds.tempMin ?? 18, thresholds.tempMax ?? 35)),
+        humid: sensorValue(reading.humidity, sensorStatusRange(reading.humidity, thresholds.humidityMin ?? 35, thresholds.humidityMax ?? 80)),
+        light: sensorValue(reading.lightRaw, toFiniteNumber(reading.lightRaw) !== null && reading.lightRaw < (thresholds.darkThreshold ?? 1500) ? 'warning' : 'normal'),
+        ph: sensorValue(reading.ph, sensorStatusRange(reading.ph, thresholds.phMin ?? 5.5, thresholds.phMax ?? 6.8)),
+        water: sensorValue(reading.waterDistanceCm, toFiniteNumber(reading.waterDistanceCm) !== null && reading.waterDistanceCm > (thresholds.waterLowCm ?? 20) ? 'warning' : 'normal'),
+        nutrient: sensorValue(reading.gasRaw, toFiniteNumber(reading.gasRaw) !== null && reading.gasRaw > (thresholds.gasDangerThreshold ?? 3000) ? 'danger' : 'normal'),
+        ec: sensorValue(reading.ec, sensorStatusRange(reading.ec, thresholds.ecMin ?? 1.2, thresholds.ecMax ?? 2.0)),
+        co2: sensorValue(reading.co2Ppm, toFiniteNumber(reading.co2Ppm) !== null && reading.co2Ppm < (thresholds.co2MinPpm ?? 800) ? 'warning' : 'normal'),
     };
 }
 
@@ -206,23 +208,13 @@ function sensorKeysForPackage(farm, reading) {
 }
 
 function sensorValue(value, status) {
-    const numeric = Number(value);
+    const numeric = toFiniteNumber(value);
     const val = Number.isFinite(numeric) ? Number(numeric.toFixed(2)).toString() : '--';
     return { val, status };
 }
 
-function statusRange(value, min, max) {
-    if (value === undefined || value === null || value === '') return 'normal';
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return 'normal';
-    if (numeric < min || numeric > max) return 'warning';
-    return 'normal';
-}
-
 function isReliableReading(reading) {
-    if (!reading || typeof reading !== 'object') return false;
-    return ['temperature', 'humidity', 'lightRaw', 'ph', 'waterDistanceCm', 'gasRaw', 'ec', 'co2Ppm']
-        .some(key => Number.isFinite(Number(reading[key])));
+    return hasRealSensorData(reading);
 }
 
 function isNewerReading(reading, cached) {

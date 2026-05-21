@@ -1,4 +1,4 @@
-import{s}from"./index-Bza452zz.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function o(){var a;const e=document.getElementById("screenContainer");e.innerHTML=`
+import{s}from"./index-Cib2v6Mx.js";import"https://esm.sh/three@0.160.0";import"https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";function o(){var a;const e=document.getElementById("screenContainer");e.innerHTML=`
         <div class="screen active" id="splashScreen">
             <div class="splash-inner" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px;">
                 <div class="splash-badge" style="font-size:0.72rem; background:var(--accent-l); padding:8px 16px; border-radius:30px;">Smart Vertical Farm</div>
