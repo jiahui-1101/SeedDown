@@ -318,6 +318,9 @@ export function render() {
    INIT
 ============================================================ */
 export async function init() {
+
+  // 👉 加上這行，強迫系統認定現在是 Commercial Mode
+  AppState.mode = 'commercial';
   _showAllPlants = false;
   _allPlantData  = [];
 

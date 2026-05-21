@@ -461,6 +461,7 @@ router.post('/analysis', async (req, res) => {
       plants        = [],
       metrics       = {},
       sensorHistory = [],
+      farmContext = {}
     } = req.body;
 
     const isReal = sensorHistory.length > 0 &&
