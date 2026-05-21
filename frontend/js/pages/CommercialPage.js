@@ -49,8 +49,8 @@ export function render() {
     const farm = getCurrentFarm();
     AppState.currentFarm = farm; 
     const rack = resolveRack(farm);
-    const plantTotal = plantCount(farm);
-    const occupancy = rack.total ? Math.min(100, Math.round((plantTotal / rack.total) * 100)) : 0;
+    const displaySummary = commercialDisplaySummary(farm, rack);
+    const occupancy = displaySummary.total ? Math.min(100, Math.round((displaySummary.planted / displaySummary.total) * 100)) : 0;
     if (!selectedZoneId) selectedZoneId = resolveDefaultZone(farm);
 
     container.innerHTML = `
@@ -65,7 +65,7 @@ export function render() {
                         <strong>${escapeHTML(farm?.name || AppState.farmName || 'Commercial Farm')}</strong>
                         <span>${occupancy}% occupied</span>
                     </div>
-                    <small>${escapeHTML(rack.label)} · ${plantTotal}/${rack.total} planted</small>
+                    <small>${escapeHTML(displaySummary.label)} · ${displaySummary.planted}/${displaySummary.total} planted</small>
                 </div>
             </div>
 
@@ -866,7 +866,8 @@ function updateZoneSelectionUI() {
 function buildCommercialZones(farm, rack) {
     const plants = Array.isArray(farm?.plants) ? farm.plants : [];
     const baseZones = commercialZonesForFarm(farm);
-    const capacity = Math.max(1, Math.ceil((rack?.total || 9) / baseZones.length));
+    const summary = commercialDisplaySummary(farm, rack);
+    const capacity = Math.max(1, Math.ceil((summary.total || rack?.total || 9) / baseZones.length));
     const devices = Array.isArray(farm?.commercialDevices) ? farm.commercialDevices : [];
 
     return baseZones.map((base, index) => {
@@ -892,6 +893,38 @@ function buildCommercialZones(farm, rack) {
             deviceId: device?.deviceId || (farm?.zoneId === base.id ? farm.deviceId : null),
         };
     });
+}
+
+function commercialDisplaySummary(farm, rack) {
+    const explicitZones = Array.isArray(farm?.commercialStructure?.zones)
+        ? farm.commercialStructure.zones
+        : Array.isArray(farm?.zones)
+        ? farm.zones
+        : [];
+    const planted = plantCount(farm);
+
+    if (!explicitZones.length) {
+        const total = Number.parseInt(farm?.plantSlots, 10) || rack?.total || planted || 0;
+        return {
+            label: rack?.label || 'Commercial Farm',
+            planted,
+            total: Math.max(total, planted),
+        };
+    }
+
+    const zoneCount = explicitZones.length;
+    const zoneCapacity = explicitZones.reduce((sum, zone) => {
+        const count = Number.parseInt(zone.capacity ?? zone.slots ?? zone.plantSlots ?? zone.count ?? 0, 10);
+        return sum + (Number.isFinite(count) && count > 0 ? count : 0);
+    }, 0);
+    const storedCapacity = Number.parseInt(farm?.plantSlots, 10) || Number.parseInt(farm?.capacity, 10) || 0;
+    const total = Math.max(zoneCapacity, storedCapacity, planted, zoneCount * 12);
+
+    return {
+        label: `${zoneCount}-Zone Commercial Farm`,
+        planted,
+        total,
+    };
 }
 
 function commercialZonesForFarm(farm) {
@@ -1443,7 +1476,7 @@ function ensureCommercialCommandStyles() {
         }
         .commercial-command-screen .cf-info-panel {
             display: block !important;
-            top: 132px !important;
+            top: 148px !important;
             left: 18px !important;
             width: min(360px, calc(100vw - 470px)) !important;
             min-width: 280px !important;
@@ -1486,6 +1519,13 @@ function ensureCommercialCommandStyles() {
             .commercial-top-shell { left: 12px; top: 12px; }
             .commercial-title-card { min-width: 0; width: calc(100vw - 120px); }
             .commercial-title-row { align-items:flex-start; flex-direction:column; }
+            .commercial-command-screen .cf-info-panel {
+                top: 164px !important;
+                left: 12px !important;
+                width: calc(100vw - 24px) !important;
+                min-width: 0 !important;
+                max-width: 360px !important;
+            }
             .commercial-panel-toggle { top: auto; bottom: 16px; right: 16px; }
             .commercial-ops-panel { top: 94px; left: 12px; right: 12px; bottom: 70px; width: auto; }
             .commercial-command-screen.panel-hidden .commercial-ops-panel { transform: translateY(calc(100% + 90px)); }
