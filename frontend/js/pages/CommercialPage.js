@@ -1917,7 +1917,48 @@ function ensureCommercialCommandStyles() {
                 left: 12px !important;
                 width: calc(100vw - 24px) !important;
                 min-width: 0 !important;
-                max-width: 360px !important;
+                max-width: 320px !important;
+                max-height: 34dvh !important;
+                overflow: auto !important;
+                padding: 10px 11px !important;
+                border-radius: 14px !important;
+            }
+            .commercial-command-screen .cf-panel-kicker {
+                font-size: 8px !important;
+                margin-bottom: 3px !important;
+            }
+            .commercial-command-screen .cf-panel-title {
+                font-size: 14px !important;
+                line-height: 1.05 !important;
+            }
+            .commercial-command-screen .cf-panel-sub {
+                font-size: 10px !important;
+                margin-top: 3px !important;
+            }
+            .commercial-command-screen .cf-mini-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+                gap: 6px !important;
+                margin-top: 8px !important;
+            }
+            .commercial-command-screen .cf-mini-metric {
+                padding: 6px !important;
+                border-radius: 10px !important;
+            }
+            .commercial-command-screen .cf-mini-metric span {
+                font-size: 7px !important;
+            }
+            .commercial-command-screen .cf-mini-metric strong {
+                font-size: 11px !important;
+                margin-top: 2px !important;
+            }
+            .commercial-command-screen .cf-plant-list {
+                gap: 5px !important;
+                margin-top: 8px !important;
+                max-height: 74px !important;
+            }
+            .commercial-command-screen .cf-plant-list span {
+                padding: 6px 7px !important;
+                font-size: 10px !important;
             }
             .commercial-command-screen .cf-mascot-bubble {
                 left: 12px !important;
@@ -1931,6 +1972,17 @@ function ensureCommercialCommandStyles() {
             .commercial-command-screen.panel-hidden .commercial-ops-panel { transform: translateY(calc(100% + 90px)); }
             .ops-sensor-grid { grid-template-columns: repeat(2, 1fr); }
             .ops-tool-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 420px) {
+            .commercial-command-screen .cf-info-panel {
+                top: 154px !important;
+                width: calc(100vw - 20px) !important;
+                max-width: 286px !important;
+                max-height: 30dvh !important;
+            }
+            .commercial-command-screen .cf-mini-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            }
         }
     `;
     document.head.appendChild(style);
