@@ -48,6 +48,7 @@ render.yaml
 ```text
 Name: seeddown-backend
 Runtime: Node
+Plan: Free
 Root Directory: backend
 Build Command: npm install
 Start Command: npm start

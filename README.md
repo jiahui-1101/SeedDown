@@ -634,6 +634,7 @@ Full step-by-step deployment instructions are in [DEPLOYMENT.md](DEPLOYMENT.md).
 Recommended demo deployment:
 
 - Deploy `backend` to Render using `render.yaml`.
+- Render backend is configured for the Free instance type.
 - Deploy `frontend` to Vercel with project root `frontend`.
 - In Vercel, set `VITE_API_BASE` to the Render backend URL.
 - In Render, set `JWT_SECRET`, `FIREBASE_PROJECT_ID`, and `FIREBASE_SERVICE_ACCOUNT_JSON`.
