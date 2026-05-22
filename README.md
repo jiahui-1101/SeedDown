@@ -18,6 +18,7 @@
 
 - [Track & Problem Statement](#track--problem-statement)
 - [Introduction](#introduction)
+- [Live Demo](#live-demo)
 - [System Flow](#system-flow)
 - [System Architecture](#system-architecture)
 - [Core Features](#core-features)
@@ -34,6 +35,7 @@
 - [Project Structure](#project-structure)
 - [Real-Life Deployment Budget](#real-life-deployment-budget)
 - [Demo Flow](#demo-flow)
+- [Project Materials](#project-materials)
 - [Future Improvements](#future-improvements)
 - [Contributors](#contributors)
 
@@ -83,6 +85,21 @@ The system supports two user types:
 
 ---
 
+## Live Demo
+
+Use these links for judging and presentation. Replace the placeholders with the latest production deployment URLs after the final Vercel and Render deploy.
+
+| Resource | Link | Notes |
+|---|---|---|
+| Production Web App | `TODO_FRONTEND_URL` | Vercel production deployment for the SeedDown frontend. |
+| Backend API | `TODO_BACKEND_URL` | Render backend root should return `{ "status": "SeedDown API running" }`. |
+| Demo QR / IoT Flow | See [Current Demo IoT Setup](#current-demo-iot-setup) | Includes commercial QR assignment and Wokwi token mapping. |
+| Project Materials | See [Project Materials](#project-materials) | Reserved for documentation, slides, and poster links. |
+
+Only the production deployment should be used for the official demo.
+
+---
+
 ## System Flow
 
 ```mermaid
@@ -105,26 +122,33 @@ The older `farm_001` demo fallback is still supported, but the current architect
 
 ## System Architecture
 
-> Add the final SeedDown system architecture diagram here.
-
-Recommended image format:
-
-```html
 <p align="center">
   <img src="assets/system-architecture.png" alt="SeedDown System Architecture" width="900">
 </p>
+
+SeedDown's architecture is demo-ready because it shows the complete operational loop: package-based ESP32 devices, QR identity, secure backend ingestion, Firestore storage, AI/rule decisions, dashboard views, and actuator commands.
+
+```mermaid
+flowchart LR
+    QR["QR package onboarding"] --> ESP32["ESP32 / Wokwi device"]
+    ESP32 --> API["Node.js + Express API"]
+    API --> DB["Firebase Firestore"]
+    DB --> Intelligence["AI + threshold rules"]
+    Intelligence --> UX["Beginner / Commercial dashboards"]
+    Intelligence --> Commands["Device commands"]
+    Commands --> ESP32
+    UX --> Twin["3D digital twin + control pages"]
 ```
 
-Suggested diagram layers:
+Architecture layers:
 
-```text
-Frontend Web App
--> Node.js / Express API
--> Firebase Firestore
--> AI Provider Chain
--> ESP32 Device Nodes
--> Sensors and Actuators
-```
+- **Device & Sensor Layer**: Beginner and Commercial ESP32 packages collect environment readings.
+- **Connectivity & Identity Layer**: WiFi, HTTPS REST API, QR serial onboarding, and device-token authentication.
+- **Backend & Services Layer**: Node.js / Express handles device registration, sensor ingestion, thresholds, alerts, control, farm management, and user auth.
+- **Database & Cloud Storage**: Firebase Firestore stores users, devices, farms, readings, commands, and alerts.
+- **AI Integration Layer**: Groq/Gemini provider chain plus deterministic fallback rules for What-If, disease, thresholds, and advisory chat.
+- **User Experience Layer**: Beginner dashboard, Commercial dashboard, 3D digital twin, Control, Disease, What-If, Community, and analytics pages.
+- **Actuation & Control Layer**: Wokwi/ESP32-supported outputs such as water pump, fan, buzzer, pH warning, fertilizer alert, CO2 low, and gas alert. Grow light support is treated as an optional package output, not a required 3D model change.
 
 ---
 
@@ -631,6 +655,13 @@ Do not commit service account files or real API keys.
 
 Full step-by-step deployment instructions are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
+Current production links:
+
+| Target | URL |
+|---|---|
+| Frontend production | `TODO_FRONTEND_URL` |
+| Backend production | `TODO_BACKEND_URL` |
+
 Recommended demo deployment:
 
 - Deploy `backend` to Render using `render.yaml`.
@@ -647,6 +678,8 @@ After Render deploys, open the backend root URL and confirm it returns:
 ```
 
 After Vercel deploys, open the site and confirm browser network requests go to the Render URL for `/api/...`.
+
+Keep this section focused on the latest production frontend and backend.
 
 ---
 
@@ -972,6 +1005,25 @@ Suggested hackathon demo sequence:
 | Camera | Browser `getUserMedia` capture saves a zone snapshot; ESP32-CAM stream is future scope. |
 | What-If | Uses backend AI/resource endpoints when available; benchmark fallback keeps output visible when AI is unavailable. |
 | ESG / Consumption | Estimates water/energy impact from readings/history or benchmark fallback when live analysis is unavailable. |
+
+---
+
+## Project Materials
+
+Reserve this section for the final judging files.
+
+| Material | Link | Status |
+|---|---|---|
+| Documentation | `docs/SeedDown_Documentation.pdf` | Placeholder |
+| Slide Deck | `docs/SeedDown_Slides.pdf` | Placeholder |
+| Poster | `docs/SeedDown_Poster.pdf` | Placeholder |
+| Pitch Video | `TODO_PITCH_VIDEO_URL` | Placeholder |
+
+Recommended final upload format:
+
+- Keep PDF exports in `docs/` so judges can open them from the README.
+- Keep the Production Web App and Backend API links in [Live Demo](#live-demo) updated with the latest deployment.
+- If a file is hosted externally, replace the placeholder path with the public URL.
 
 ---
 
