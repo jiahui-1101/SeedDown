@@ -833,11 +833,11 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
         labels,
         datasets: [
           // 1. 传统农业基准线 (红色虚线)
-          { type: 'line', label: 'Traditional (kWh)', data: Array(labels.length).fill(traditionalPerReading), borderColor: '#DC2626', borderDash: [6,4], borderWidth: 2, pointRadius: 0 },
+          { type: 'line', label: 'Traditional (kWh) (per reading)', data: Array(labels.length).fill(traditionalPerReading), borderColor: '#DC2626', borderDash: [6,4], borderWidth: 2, pointRadius: 0 },
           // 2. 自动化触发耗电 (亮橘色在上面)
-          { type: 'bar',  label: 'Automation (Active)', data: autoEnergyData, backgroundColor: '#D97706', stack: 'Stack 0', borderRadius: { topLeft: 4, topRight: 4 } },
+          { type: 'bar',  label: 'Automation (Active) (per reading)', data: autoEnergyData, backgroundColor: '#D97706', stack: 'Stack 0', borderRadius: { topLeft: 4, topRight: 4 } },
           // 3. 待机耗电 (深石板灰在底部，投影机绝对看得见！)
-          { type: 'bar',  label: 'Standby (Base)', data: baseEnergyData, backgroundColor: '#64748B', stack: 'Stack 0' }
+          { type: 'bar',  label: 'Standby (Base) (per reading )', data: baseEnergyData, backgroundColor: '#64748B', stack: 'Stack 0' }
         ],
       },
       options: {
@@ -853,7 +853,7 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
           },
           y: { 
             stacked: true, // 开启 Y 轴堆叠
-            beginAtZero: true, title: { display: true, text: 'Energy (kWh)' }, grid: { color: '#F1F5F9' }, ticks: { callback: v => `${v} kWh`, color: '#94A3B8', font: { size: 9 } } 
+            beginAtZero: true,suggestedMax: traditionalPerReading * 2.5, title: { display: true, text: 'Energy (kWh)' }, grid: { color: '#F1F5F9' }, ticks: { callback: v => `${v} kWh`, color: '#94A3B8', font: { size: 9 } } 
           },
         },
       },
@@ -861,7 +861,8 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
 
     const es = _el('con-energy-summary');
     es.style.display = 'block';
-    es.innerHTML = `<span style="font-weight:700;color:#D97706;">${totalEnergy.toFixed(2)} kWh used today</span> · Traditional estimate: ${traditionalTotal.toFixed(2)} kWh/day`;
+    //es.innerHTML = `<span style="font-weight:700;color:#D97706;">${totalEnergy.toFixed(2)} kWh used today</span> · Traditional estimate: ${traditionalTotal.toFixed(2)} kWh/day`;
+    es.innerHTML = `<span style="font-weight:700;color:#D97706;">Total: ${totalEnergy.toFixed(2)} kWh</span> (across ${labels.length} readings) · Traditional would use: ${traditionalTotal.toFixed(2)} kWh`;
   }
 
   // ── Eco grade ───────────────────────────────────────────────
