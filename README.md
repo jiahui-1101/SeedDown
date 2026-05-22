@@ -1049,19 +1049,19 @@ This would make the 3D scene more than a visual preview. It becomes the farm man
 
 ## Contributors
 
-Team **next level utm**
+Team **🌱 next level utm 🚀**
 
-- Wong Jia Hui
-- Lee Mei Shuet
-- Loh Su Ting
-- Christ Ting Shin Ling
-- Wong Zi Qi
+- 🌿 Wong Jia Hui
+- 💧 Lee Mei Shuet
+- 🥬 Loh Su Ting
+- 🔬 Christ Ting Shin Ling
+- ⚡ Wong Zi Qi
 
 ---
 
 ## Notes for Judges
 
-SeedDown is an end-to-end prototype, not only a UI mockup.
+SeedDown is an end-to-end smart farming system prototype, not only a UI mockup.
 
 ```text
 QR device package
