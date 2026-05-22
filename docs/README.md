@@ -3,6 +3,7 @@
 Place final judging materials here before submission:
 
 - `SeedDown_Documentation.pdf`
+- `SeedDown_7_5min_Pitch_Script.md`
 - `SeedDown_Slides.pdf`
 - `SeedDown_Poster.pdf`
 
