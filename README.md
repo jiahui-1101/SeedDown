@@ -18,7 +18,7 @@
 
 - [Track & Problem Statement](#track--problem-statement)
 - [Introduction](#introduction)
-- [Live Demo](#live-demo)
+- [Live Deployment](#live-deployment)
 - [System Flow](#system-flow)
 - [System Architecture](#system-architecture)
 - [Core Features](#core-features)
@@ -29,12 +29,10 @@
 - [Installation](#installation)
 - [Environment Variables](#environment-variables)
 - [Cloud Deployment](#cloud-deployment)
-- [Current Demo IoT Setup](#current-demo-iot-setup)
 - [Wokwi Simulation](#wokwi-simulation)
 - [API Reference](#api-reference)
 - [Project Structure](#project-structure)
 - [Real-Life Deployment Budget](#real-life-deployment-budget)
-- [Demo Flow](#demo-flow)
 - [Project Materials](#project-materials)
 - [Future Improvements](#future-improvements)
 - [Contributors](#contributors)
@@ -85,7 +83,7 @@ The system supports two user types:
 
 ---
 
-## Live Demo
+## Live Deployment
 
 Use these links for judging and presentation. Replace the placeholders with the latest production deployment URLs after the final Vercel and Render deploy.
 
@@ -93,10 +91,9 @@ Use these links for judging and presentation. Replace the placeholders with the 
 |---|---|---|
 | Production Web App | `TODO_FRONTEND_URL` | Vercel production deployment for the SeedDown frontend. |
 | Backend API | `TODO_BACKEND_URL` | Render backend root should return `{ "status": "SeedDown API running" }`. |
-| Demo QR / IoT Flow | See [Current Demo IoT Setup](#current-demo-iot-setup) | Includes commercial QR assignment and Wokwi token mapping. |
 | Project Materials | See [Project Materials](#project-materials) | Reserved for documentation, slides, and poster links. |
 
-Only the production deployment should be used for the official demo.
+Use the production deployment for the public web application and the backend API link for health checks or integration testing.
 
 ---
 
@@ -116,7 +113,7 @@ flowchart LR
     Dashboard --> DigitalTwin["3D farm digital twin"]
 ```
 
-The older `farm_001` demo fallback is still supported, but the current architecture uses device registration and `x-device-token` headers.
+Legacy Wokwi endpoints can still use `farm_001` for compatibility. Real devices should be registered by QR serial and send readings with the assigned `x-device-token` header.
 
 ---
 
@@ -126,7 +123,7 @@ The older `farm_001` demo fallback is still supported, but the current architect
   <img src="assets/system-architecture.png" alt="SeedDown System Architecture" width="900">
 </p>
 
-SeedDown's architecture is demo-ready because it shows the complete operational loop: package-based ESP32 devices, QR identity, secure backend ingestion, Firestore storage, AI/rule decisions, dashboard views, and actuator commands.
+SeedDown's architecture is production-oriented because it shows the complete operational loop: package-based ESP32 devices, QR identity, secure backend ingestion, Firestore storage, AI/rule decisions, dashboard views, and actuator commands.
 
 ```mermaid
 flowchart LR
@@ -310,7 +307,7 @@ Commercial farms use a separate larger digital twin:
 - Camera tool for zone snapshot / live-view style inspection.
 - Right-side operations panel with sensors, advisor, tools, and chat.
 - Active device assignment is the canonical zone routing rule. Firmware `zoneId` is used only as fallback.
-- Live sensor cards cache the last successful reading per farm/zone and show the last updated time instead of jumping to unrelated demo values.
+- Live sensor cards cache the last successful reading per farm/zone and show the last updated time instead of jumping to unrelated fallback values.
 
 ### 9. Disease Analysis
 
@@ -329,7 +326,7 @@ The disease flow is designed to reduce risky one-shot AI guesses. It can:
 - Recommend practical recovery steps such as isolation, pruning, airflow changes, pH check, nutrient adjustment, or watering correction.
 - Ask follow-up questions when the image is unclear or the model cannot decide safely.
 
-Disease is advisory in the current demo. It explains confidence, likely causes, and recovery steps, but it does not automatically send `WATER_ON`, `FAN_ON`, or other IoT commands.
+Disease is advisory in the current system. It explains confidence, likely causes, and recovery steps, but it does not automatically send `WATER_ON`, `FAN_ON`, or other IoT commands.
 
 This feature is useful for commercial farms because a disease issue in one zone can spread quickly. By connecting disease analysis with zone-level data, SeedDown can help the operator decide whether the problem is visual disease, nutrient imbalance, humidity stress, or sensor-triggered environmental stress.
 
@@ -388,7 +385,7 @@ For Beginner mode, control stays simple and focuses mainly on safe interval and 
 
 This page matters because commercial farms need override ability. The system can automate routine action, but the operator still needs manual control when testing hardware, handling emergencies, or tuning a zone.
 
-For Wokwi demo stability, alert actions and manual commands should stay within the supported command set: `WATER_ON`, `LIGHT_ON`, `FAN_ON`, `BUZZER_ON`, `PH_WARNING`, `FERT_ALERT`, `CO2_LOW`, `GAS_ALERT`, and `NO_ACTION`.
+For Wokwi firmware compatibility, alert actions and manual commands should stay within the supported command set: `WATER_ON`, `LIGHT_ON`, `FAN_ON`, `BUZZER_ON`, `PH_WARNING`, `FERT_ALERT`, `CO2_LOW`, `GAS_ALERT`, and `NO_ACTION`.
 
 ### 13. Farm Advisor and AI Chat
 
@@ -662,7 +659,7 @@ Current production links:
 | Frontend production | `TODO_FRONTEND_URL` |
 | Backend production | `TODO_BACKEND_URL` |
 
-Recommended demo deployment:
+Recommended production deployment:
 
 - Deploy `backend` to Render using `render.yaml`.
 - Render backend is configured for the Free instance type.
@@ -683,57 +680,6 @@ Keep this section focused on the latest production frontend and backend.
 
 ---
 
-## Current Demo IoT Setup
-
-The current demo uses fixed IDs so Wokwi, Firestore, and dashboard can match each other.
-
-| Device ID | Token | Serial | Scope |
-|---|---|---|---|
-| `commercial-farm-master-1` | `sd_demo_commercial_farm_master_1` | `SD-COM-FRM-03001` | Commercial farm master |
-| `commercial-zone-node-1` | `sd_demo_commercial_zone_node_1` | `SD-COM-ZON-01001` | Zone A |
-| `commercial-zone-node-2` | `sd_demo_commercial_zone_node_2` | `SD-COM-ZON-01002` | Zone B |
-| `commercial-zone-node-3` | `sd_demo_commercial_zone_node_3` | `SD-COM-ZON-01003` | Zone C |
-| `beginner_starter` | `sd_demo_beginner_starter` | `SD-BGN-STR-00123` | Beginner Starter |
-| `beginner_standard` | `sd_demo_beginner_standard` | `SD-BGN-STD-00456` | Beginner Standard |
-| `beginner_pro` | `sd_demo_beginner_pro` | `SD-BGN-PRO-00789` | Beginner Pro |
-
-For the smooth commercial Wokwi demo, scan either of these QR values into the selected zone:
-
-```text
-SD-COM-ZON-01001
-sd_demo_commercial_zone_node_1
-```
-
-The frontend normalizes the demo token QR to serial `SD-COM-ZON-01001`. Assigning that QR to Zone A, Zone B, or Zone C makes that selected zone the active owner of new readings for the device. In other words, dashboard assignment overrides the firmware `ZONE_ID` for new readings after reassignment. The firmware `zoneId` is still useful as a fallback when no active assignment exists.
-
-Important routing rules:
-
-- Active device assignment is canonical for commercial zones.
-- Firmware `zoneId` is fallback only.
-- If a reading has no `zoneId` and no registered/assigned device context, it is stored but will not reliably appear inside a commercial zone view.
-- Reassigning a replacement device marks the old target device as replaced/inactive; historical readings remain stored.
-- Live sensor cards and Facility Overview keep the last successful reading per farm/zone/device and show `Last updated HH:MM` if the latest backend request fails.
-
-Seed demo data:
-
-```bash
-cd backend
-npm run seed:demo-iot
-```
-
-This writes demo data to:
-
-- `devices`
-- `userPreferences`
-- `sensorReadings`
-- `deviceCommands`
-
-Commercial dashboard lookup is scoped to the selected zone/device and avoids falling back to unrelated `farm_001` readings. This prevents live sensor cards from suddenly showing random demo values.
-
-`farm_001` remains only as a legacy API fallback for older demo endpoints and sketches. New registered users and newly created farms should use their registered QR device, generated `dev_*` local demo device, Farm Master, or Zone Node assignment instead of inheriting `farm_001`.
-
----
-
 ## Wokwi Simulation
 
 Package folders:
@@ -745,6 +691,8 @@ iot/wokwi/beginner_pro
 iot/wokwi/commercial_zone
 iot/wokwi/commercial_master
 ```
+
+Wokwi validates the SeedDown IoT loop before physical deployment. Legacy Wokwi sketches may still use `farm_001`, while current device flows should use QR registration and `x-device-token`.
 
 Each package contains:
 
@@ -795,38 +743,7 @@ Commercial alert action buttons map to Wokwi-supported commands only:
 | Zone clog | `WATER_ON` |
 | Unknown alert | `BUZZER_ON` |
 
-This keeps the demo aligned with the ESP32/Wokwi sketch outputs.
-
----
-
-## UI Demo Polish Notes
-
-- Splash uses a white centered launch screen with deeper teal borders and the IoT Package summary below the feature cards.
-- Login branding reads `Powered by next level utm`.
-- SeedDown AI advisor/chat entry points are login-gated. They do not appear on Splash, Login, or Register; Beginner Home and Commercial tools show AI only after a user session exists.
-- Commercial AI Chat frames AI replies into short status, metric rows, and up to three readable points instead of long raw markdown.
-- SeedDown AI mascot can be hidden from its speech bubble or from Control -> `SeedDown AI mascot`; AI Chat remains available when the mascot is hidden.
-- Commercial Facility Overview is compact on mobile with smaller metrics and bounded height so it does not dominate the 3D farm scene.
-- Control Manual Override supports Farm Level or Zone targets, active device resolution, manual device fallback, command duration, and operator reason. Supported demo commands are `WATER_ON`, `FAN_ON`, `BUZZER_ON`, `GAS_ALERT`, `PH_WARNING`, `FERT_ALERT`, `CO2_LOW`, and `NO_ACTION`.
-- Disease and QR image flows expose both camera capture and file upload choices so demos work on laptop or phone browsers.
-- Beginner Live Data caches the last successful reading per beginner device/package and shows cached values with `Last updated HH:MM` instead of jumping to unrelated demo readings.
-
----
-
-## Camera Demo Mode
-
-Commercial Camera supports browser camera capture for demos:
-
-```text
-Open Camera
--> select zone
--> Start camera
--> grant browser permission
--> Capture frame
--> save latest zone snapshot
-```
-
-This does not require ESP32-CAM. The captured frame is stored as the latest farm/zone camera snapshot and can be reused as context for disease diagnosis where supported. If camera permission is denied, SeedDown keeps the existing placeholder/photo fallback. ESP32-CAM live stream can be added later if a stream URL is provided.
+This keeps the simulated firmware aligned with the same command set used by the web dashboard and backend command queue.
 
 ---
 
@@ -975,43 +892,6 @@ Important real wiring notes:
 
 ---
 
-## Demo Flow
-
-Suggested hackathon demo sequence:
-
-1. Introduce Case Study 1 and the beginner / commercial farming problem.
-2. Show login and mode selection.
-3. Beginner: create a field with QR package selection.
-4. Upload photo and show AI-detected structure.
-5. Generate AI thresholds and show locked sensors based on package tier.
-6. Confirm and show Beginner 3D farm dashboard.
-7. Show live sensor cards and package-based sensor availability.
-8. Switch to Commercial mode.
-9. Show commercial onboarding: farm info, zones, goals, thresholds, QR device assignment.
-10. Show Commercial Digital Twin with zone cards, camera tool, Control, Disease, and What-If.
-11. Run Wokwi / ESP32 simulation and show sensor reading -> backend -> command -> LED/actuator.
-12. Close with SeedDown as an affordable bridge between learning, automation, and commercial farm operations.
-
-### Current Feature Flow Notes
-
-| Feature | Current demo logic |
-|---|---|
-| Launch page | White intro screen with animated plant, feature cards, and bottom IoT package summary. |
-| Register terms | Register checkbox links open SeedDown-specific Terms and Privacy modals. |
-| Commercial assignment | Take/upload QR image or enter serial to assign/replace Farm Master / Zone Node. Active assignment controls new reading routing. |
-| Live sensor cards | Fetch latest zone/device reading; if unavailable, show cached last successful value with timestamp. Beginner cards also cache per package/device. |
-| Facility Overview | Uses current AppState/live reading snapshot and displays live status metrics with update time. |
-| Alerts | Predictive alerts are advisory plus optional supported Wokwi command actions. |
-| AI Chat / Advisor | AI replies are framed into short readable summaries, status, metrics, and limited action points. |
-| SeedDown AI mascot | Commercial 3D guide can be hidden from the bubble or Control page without disabling AI Chat. |
-| Control | Operator can view latest pending command, tune thresholds, sync preferences, and send scoped farm/zone manual supported commands. |
-| Disease | Diagnosis/advice only. It supports take-photo or upload-photo input and does not auto-control devices. |
-| Camera | Browser `getUserMedia` capture saves a zone snapshot; ESP32-CAM stream is future scope. |
-| What-If | Uses backend AI/resource endpoints when available; benchmark fallback keeps output visible when AI is unavailable. |
-| ESG / Consumption | Estimates water/energy impact from readings/history or benchmark fallback when live analysis is unavailable. |
-
----
-
 ## Project Materials
 
 Reserve this section for the final judging files.
@@ -1022,12 +902,6 @@ Reserve this section for the final judging files.
 | Slide Deck | `docs/SeedDown_Slides.pdf` | Placeholder |
 | Poster | `docs/SeedDown_Poster.pdf` | Placeholder |
 | Pitch Video | `TODO_PITCH_VIDEO_URL` | Placeholder |
-
-Recommended final upload format:
-
-- Keep PDF exports in `docs/` so judges can open them from the README.
-- Keep the Production Web App and Backend API links in [Live Demo](#live-demo) updated with the latest deployment.
-- If a file is hosted externally, replace the placeholder path with the public URL.
 
 ---
 
