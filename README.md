@@ -87,11 +87,11 @@ The system supports two user types:
 
 | Resource | Link | Notes |
 |---|---|---|
-| Production Web App | Pending final Vercel production URL | SeedDown frontend. |
-| Backend API | Pending final Render production URL | Backend root should return `{ "status": "SeedDown API running" }`. |
-| Project Materials | See [Project Materials](#project-materials) | Reserved for documentation, slides, and poster links. |
+| Production Web App | Not included | Demo will be shown through the prepared product walkthrough. |
+| Backend API | Not included | Backend is used for the demo system, but no public API link is submitted here. |
+| Project Materials | See [Project Materials](#project-materials) | Documentation, slides, poster, and demo video are ready for judging. |
 
-Use the production deployment for the public web application and the backend API link for health checks or integration testing.
+Use the submitted materials and demo video for judging. Public frontend and backend links are intentionally omitted from this section.
 
 ---
 
@@ -902,10 +902,10 @@ Reserve this section for the final judging files.
 
 | Material | Link | Status |
 |---|---|---|
-| Documentation | `docs/SeedDown_Documentation.pdf` | Ready |
-| Slide Deck | `docs/SeedDown_Slides.pdf` | Reserved |
-| Poster | `docs/SeedDown_Poster.pdf` | Reserved |
-| Pitch Video | Pending public video URL | Reserved |
+| Documentation | `docs/Documentation/SeedDown_Documentation.pdf` | Ready |
+| Slide Deck | `docs/Slide/SeedDown_PresentationSlide.pdf` | Ready |
+| Poster | `docs/posters/` | Ready |
+| Pitch Video | `docs/Demo Video/Demo VIdeo.MOV` | Ready |
 
 ---
 

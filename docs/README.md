@@ -1,11 +1,12 @@
 # SeedDown Project Materials
 
-Place final judging materials here before submission:
+Final judging materials:
 
-- `SeedDown_Documentation.pdf`
-- `SeedDown_Final_8min_Pitch_Script.md`
-- `SeedDown_Final_7_5min_Pitch_Script.md`
-- `SeedDown_Slides.pdf`
-- `SeedDown_Poster.pdf`
+- `Documentation/SeedDown_Documentation.pdf`
+- `Documentation/SeedDown_Final_8min_Pitch_Script.md`
+- `Documentation/SeedDown_Final_7_5min_Pitch_Script.md`
+- `Slide/SeedDown_PresentationSlide.pdf`
+- `posters/`
+- `Demo Video/Demo VIdeo.MOV`
 
-If a material is hosted externally, update the link in the main `README.md`.
+Frontend and backend production URLs are intentionally not listed in the main `README.md` submission table.
