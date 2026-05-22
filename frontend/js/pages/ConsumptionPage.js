@@ -383,13 +383,13 @@ function _resolveFarmContext() {
   let farmId = farm ? (farm.id || farm.farmId) : AppState.currentFarmId;
 
   // 2. Localhost 開發強制切換 Demo ID
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  //if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     farmId = accountMode === 'commercial' 
       ? 'farm_commercial_demo_001' 
       : 'farm_beginner_demo_001';
       //farmId = 'some_fake_id_with_zero_data'; //demo mode
-    console.log(`[DEBUG] Auto-switched to Demo Farm ID: ${farmId} (${accountMode} mode)`);
-  }
+    console.log(`[DEBUG] Auto-switched to Farm ID: ${farmId} (${accountMode} mode)`);
+  //}
 
   // ── Query params ─────────────────────
   const queryParams = farmId
@@ -598,6 +598,10 @@ async function _fetchAI(metrics, readings, isMock, ctx) {
     const allPlants = _resolveFarmContext().plants;
     const fallbackPd = allPlants.length > 0 ? allPlants.map(n => _benchmarkFallback(n)) : [_benchmarkFallback('lettuce')];
     _allPlantData = fallbackPd;
+    // 💥 关键修复：在 Demo Mode 下，也必须把假数据丢进去画图和算分！
+    const iz = fallbackPd[0]?.idealZone || { min: 30, max: 55, mid: 42 };
+    const tradE = fallbackPd[0]?.traditional?.energyKwhPerDay || 3.0;
+    _renderCharts(readings, metrics, iz, tradE); // <--- 加了这行，图表和分数就会出来了！
     _renderPlantCards(fallbackPd, false);
     _renderCompBars(fallbackPd, _calcMetrics(_lastReadings));
     
@@ -717,9 +721,12 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
   const pct = Math.round((inRange / waterData.length) * 100);
 
   // ── Energy ─────────────────────────────────────────────────
-  const energyData = readings.map(r => {
+  /*const energyData = readings.map(r => {
     const lr    = r.lightRaw    ?? 2000;
     const t     = r.temperature ?? 25;
+    // 加入 50W (0.05 kWh) 的硬體待機功耗，讓圖表不會是 0
+    const BASE_POWER = 0.05;
+
     const watts = (lr < 1500 ? WATTS_LIGHT : 0) +
                   (t > 28    ? WATTS_FAN   : 0) +
                   WATTS_PUMP * 0.1;
@@ -729,8 +736,28 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
   const traditionalPerReading = Number((traditionalEnergyPerDay / 24).toFixed(3));
   const totalEnergy           = energyData.reduce((a, b) => a + b, 0);
   const traditionalTotal      = traditionalPerReading * labels.length;
-  const energySavePct         = Math.max(0, Math.round((1 - totalEnergy / (traditionalTotal || 1)) * 100));
+  const energySavePct         = Math.max(0, Math.round((1 - totalEnergy / (traditionalTotal || 1)) * 100));*/
 
+  // ── Energy ─────────────────────────────────────────────────
+  const BASE_POWER = 0.05; // 50W (0.05 kWh) 硬體待機功耗
+  const baseEnergyData = Array(labels.length).fill(BASE_POWER);
+
+  const autoEnergyData = readings.map(r => {
+    const lr    = r.lightRaw    ?? 2000;
+    const t     = r.temperature ?? 25;
+    const watts = (lr < 1500 ? WATTS_LIGHT : 0) +
+                  (t > 28    ? WATTS_FAN   : 0) +
+                  WATTS_PUMP * 0.1;
+    return Number((watts / 1000).toFixed(3));
+  });
+
+  const totalBase = baseEnergyData.reduce((a, b) => a + b, 0);
+  const totalAuto = autoEnergyData.reduce((a, b) => a + b, 0);
+  const totalEnergy = totalBase + totalAuto;
+
+  const traditionalPerReading = Number((traditionalEnergyPerDay / 24).toFixed(3));
+  const traditionalTotal      = traditionalPerReading * labels.length;
+  const energySavePct         = Math.max(0, Math.round((1 - totalEnergy / (traditionalTotal || 1)) * 100));
   // ── Water chart ─────────────────────────────────────────────
   const wEl = _el('con-water-chart');
   if (wEl) {
@@ -766,7 +793,7 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
   }
 
   // ── Energy chart ────────────────────────────────────────────
-  const eEl = _el('con-energy-chart');
+ /* const eEl = _el('con-energy-chart');
   if (eEl) {
     try { eEl._chart?.destroy(); } catch {}
     _el('energy-trad-badge').style.display = 'block';
@@ -786,6 +813,48 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
         scales: {
           x: { title: { display: true, text: 'Reading #' }, grid: { color: '#F8FAFC' }, ticks: { color: '#94A3B8', font: { size: 9 } } },
           y: { beginAtZero: true, title: { display: true, text: 'Energy (kWh)' }, grid: { color: '#F1F5F9' }, ticks: { callback: v => `${v} kWh`, color: '#94A3B8', font: { size: 9 } } },
+        },
+      },
+    });
+
+    const es = _el('con-energy-summary');
+    es.style.display = 'block';
+    es.innerHTML = `<span style="font-weight:700;color:#D97706;">${totalEnergy.toFixed(2)} kWh used today</span> · Traditional estimate: ${traditionalTotal.toFixed(2)} kWh/day`;
+  }*/
+ // ── Energy chart (Stacked Bar) ──────────────────────────────
+  const eEl = _el('con-energy-chart');
+  if (eEl) {
+    try { eEl._chart?.destroy(); } catch {}
+    _el('energy-trad-badge').style.display = 'block';
+    _el('energy-trad-badge').textContent   = `↓ ${energySavePct}% vs traditional`;
+
+    eEl._chart = new window.Chart(eEl, {
+      data: {
+        labels,
+        datasets: [
+          // 1. 传统农业基准线 (红色虚线)
+          { type: 'line', label: 'Traditional (kWh)', data: Array(labels.length).fill(traditionalPerReading), borderColor: '#DC2626', borderDash: [6,4], borderWidth: 2, pointRadius: 0 },
+          // 2. 自动化触发耗电 (亮橘色在上面)
+          { type: 'bar',  label: 'Automation (Active)', data: autoEnergyData, backgroundColor: '#D97706', stack: 'Stack 0', borderRadius: { topLeft: 4, topRight: 4 } },
+          // 3. 待机耗电 (深石板灰在底部，投影机绝对看得见！)
+          { type: 'bar',  label: 'Standby (Base)', data: baseEnergyData, backgroundColor: '#64748B', stack: 'Stack 0' }
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { 
+          legend: { display: true }, 
+          tooltip: { callbacks: { label(c) { return `${c.dataset.label}: ${c.parsed.y} kWh`; } } } 
+        },
+        scales: {
+          x: { 
+            stacked: true, // 开启 X 轴堆叠
+            title: { display: true, text: 'Reading #' }, grid: { color: '#F8FAFC' }, ticks: { color: '#94A3B8', font: { size: 9 } } 
+          },
+          y: { 
+            stacked: true, // 开启 Y 轴堆叠
+            beginAtZero: true, title: { display: true, text: 'Energy (kWh)' }, grid: { color: '#F1F5F9' }, ticks: { callback: v => `${v} kWh`, color: '#94A3B8', font: { size: 9 } } 
+          },
         },
       },
     });
