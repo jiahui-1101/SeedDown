@@ -1,7 +1,6 @@
 import { AppState, initTiles } from "./store.js";
 import { FarmCanvas } from "./components/FarmCanvas.js";
 import { SensorStrip } from "./components/SensorStrip.js";
-import { NpcAdvisor } from "./components/NpcAdvisor.js";
 import { Community } from "./components/Community.js";
 import { initNavigation } from "./utils/navigation.js";
 import { IotSimulator } from "./services/IotSimulator.js";
@@ -68,7 +67,6 @@ const pages = {
 document.addEventListener("DOMContentLoaded", () => {
     FarmCanvas.init("farmCanvas");
     SensorStrip.init();
-    NpcAdvisor.init();
     Community.init();
     
     // Optional local demo simulator. Real Firebase/cached readings are the default.
