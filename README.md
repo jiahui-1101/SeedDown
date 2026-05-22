@@ -902,7 +902,7 @@ Reserve this section for the final judging files.
 
 | Material | Link | Status |
 |---|---|---|
-| Documentation | `docs/SeedDown_Documentation.pdf` | Reserved |
+| Documentation | `docs/SeedDown_Documentation.pdf` | Ready |
 | Slide Deck | `docs/SeedDown_Slides.pdf` | Reserved |
 | Poster | `docs/SeedDown_Poster.pdf` | Reserved |
 | Pitch Video | Pending public video URL | Reserved |
