@@ -87,8 +87,8 @@ The system supports two user types:
 
 | Resource | Link | Notes |
 |---|---|---|
-| Production Web App | `TODO_FRONTEND_URL` | Vercel production deployment for the SeedDown frontend. |
-| Backend API | `TODO_BACKEND_URL` | Render backend root should return `{ "status": "SeedDown API running" }`. |
+| Production Web App | Pending final Vercel production URL | SeedDown frontend. |
+| Backend API | Pending final Render production URL | Backend root should return `{ "status": "SeedDown API running" }`. |
 | Project Materials | See [Project Materials](#project-materials) | Reserved for documentation, slides, and poster links. |
 
 Use the production deployment for the public web application and the backend API link for health checks or integration testing.
@@ -110,10 +110,6 @@ flowchart LR
     Readings --> Dashboard["Beginner / Commercial dashboard"]
     Dashboard --> DigitalTwin["3D farm digital twin"]
 ```
-
-Legacy Wokwi endpoints can still use `farm_001` for compatibility. Real devices should be registered by QR serial and send readings with the assigned `x-device-token` header.
-
----
 
 ## System Architecture
 
@@ -650,13 +646,6 @@ Do not commit service account files or real API keys.
 
 Full step-by-step deployment instructions are in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-Current production links:
-
-| Target | URL |
-|---|---|
-| Frontend production | `TODO_FRONTEND_URL` |
-| Backend production | `TODO_BACKEND_URL` |
-
 Recommended production deployment:
 
 - Deploy `backend` to Render using `render.yaml`.
@@ -673,8 +662,6 @@ After Render deploys, open the backend root URL and confirm it returns:
 ```
 
 After Vercel deploys, open the site and confirm browser network requests go to the Render URL for `/api/...`.
-
-Keep this section focused on the latest production frontend and backend.
 
 ---
 
@@ -915,10 +902,10 @@ Reserve this section for the final judging files.
 
 | Material | Link | Status |
 |---|---|---|
-| Documentation | `docs/SeedDown_Documentation.pdf` | Placeholder |
-| Slide Deck | `docs/SeedDown_Slides.pdf` | Placeholder |
-| Poster | `docs/SeedDown_Poster.pdf` | Placeholder |
-| Pitch Video | `TODO_PITCH_VIDEO_URL` | Placeholder |
+| Documentation | `docs/SeedDown_Documentation.pdf` | Reserved |
+| Slide Deck | `docs/SeedDown_Slides.pdf` | Reserved |
+| Poster | `docs/SeedDown_Poster.pdf` | Reserved |
+| Pitch Video | Pending public video URL | Reserved |
 
 ---
 
