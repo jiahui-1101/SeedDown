@@ -730,6 +730,8 @@ This writes demo data to:
 
 Commercial dashboard lookup is scoped to the selected zone/device and avoids falling back to unrelated `farm_001` readings. This prevents live sensor cards from suddenly showing random demo values.
 
+`farm_001` remains only as a legacy API fallback for older demo endpoints and sketches. New registered users and newly created farms should use their registered QR device, generated `dev_*` local demo device, Farm Master, or Zone Node assignment instead of inheriting `farm_001`.
+
 ---
 
 ## Wokwi Simulation
@@ -801,8 +803,10 @@ This keeps the demo aligned with the ESP32/Wokwi sketch outputs.
 
 - Splash uses a white centered launch screen with deeper teal borders and the IoT Package summary below the feature cards.
 - Login branding reads `Powered by next level utm`.
+- SeedDown AI advisor/chat entry points are login-gated. They do not appear on Splash, Login, or Register; Beginner Home and Commercial tools show AI only after a user session exists.
 - Commercial AI Chat frames AI replies into short status, metric rows, and up to three readable points instead of long raw markdown.
 - SeedDown AI mascot can be hidden from its speech bubble or from Control -> `SeedDown AI mascot`; AI Chat remains available when the mascot is hidden.
+- Commercial Facility Overview is compact on mobile with smaller metrics and bounded height so it does not dominate the 3D farm scene.
 - Control Manual Override supports Farm Level or Zone targets, active device resolution, manual device fallback, command duration, and operator reason. Supported demo commands are `WATER_ON`, `FAN_ON`, `BUZZER_ON`, `GAS_ALERT`, `PH_WARNING`, `FERT_ALERT`, `CO2_LOW`, and `NO_ACTION`.
 - Disease and QR image flows expose both camera capture and file upload choices so demos work on laptop or phone browsers.
 - Beginner Live Data caches the last successful reading per beginner device/package and shows cached values with `Last updated HH:MM` instead of jumping to unrelated demo readings.
