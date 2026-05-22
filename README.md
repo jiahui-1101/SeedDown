@@ -85,8 +85,6 @@ The system supports two user types:
 
 ## Live Deployment
 
-Use these links for judging and presentation. Replace the placeholders with the latest production deployment URLs after the final Vercel and Render deploy.
-
 | Resource | Link | Notes |
 |---|---|---|
 | Production Web App | `TODO_FRONTEND_URL` | Vercel production deployment for the SeedDown frontend. |
