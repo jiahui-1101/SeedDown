@@ -862,25 +862,44 @@ SeedDown/
 
 ## Real-Life Deployment Budget
 
-Budget estimate for a low-cost ESP32 deployment in Malaysia.
+Budget estimate for ESP32-based deployment in Malaysia. Prices are prototype ranges; supplier, calibration quality, waterproofing, and industrial sensor grade can change the final cost.
 
-| Component | Approx. Cost (RM) | Role |
-|---|---:|---|
-| NodeMCU ESP32 | 10.90 | Main WiFi controller |
-| DHT11 / DHT module | 2.52 | Temperature and humidity |
-| Soil moisture sensor | 2.60 | Irrigation trigger |
-| LDR module | 4.50 | Light level |
-| MQ-2 gas sensor | 3.40 | Gas / smoke safety |
-| HC-SR04 ultrasonic | 7.50 | Water reservoir level |
-| Analog pH sensor kit | 25.50 | Nutrient pH |
-| 5V mini water pump | 4.50 | Irrigation actuator |
-| LED strip | 2.00 / 10cm | Grow light output |
-| Small fan | 2.00 | Ventilation output |
-| Active buzzer | 2.10 | Local alert |
-| Relay / MOSFET module | 2.00 | Safe actuator switching |
-| 5V USB supply + adapter | 3.60 | Power |
+| Component | Approx. Cost (RM) | Used By | Role |
+|---|---:|---|---|
+| NodeMCU ESP32 / ESP32 DevKit | 11 - 25 | All packages | WiFi controller and GPIO edge node |
+| DHT11 / DHT22 module | 6 - 13 | Beginner, Commercial Zone | Air temperature and humidity |
+| Capacitive soil moisture sensor | 3 - 6 | Beginner, Commercial Zone | Root-zone moisture trend |
+| LDR / light sensor module | 3 - 6 | Beginner, Commercial Zone | Light level detection |
+| MQ gas sensor module | 3 - 12 | Beginner Standard+, Farm Master | Gas / smoke safety signal |
+| HC-SR04 ultrasonic sensor | 6 - 10 | Beginner Standard+, Farm Master | Water reservoir level |
+| Analog pH sensor kit | 25 - 60 | Beginner Standard+, Commercial Zone | Nutrient acidity / alkalinity |
+| EC / TDS nutrient sensor | 25 - 90 | Beginner Pro, Commercial Zone | Nutrient strength estimate |
+| RS485 soil EC / industrial nutrient sensor | 290 - 360 | Commercial Zone upgrade | More robust commercial EC/moisture measurement |
+| CO2 sensor module | 45 - 120 | Beginner Pro, Farm Master | CO2 and ventilation decisions |
+| Water-flow sensor | 8 - 20 | Commercial Zone | Irrigation flow / clog detection |
+| ESP32-CAM or camera module | 25 - 80 | Commercial Zone add-on | Visual inspection / disease image input |
+| Current sensor / energy meter | 12 - 45 | Commercial Farm Master | Pump, fan, and lighting energy tracking |
+| 5V mini water pump | 5 - 20 | Beginner, Commercial Zone | Irrigation output |
+| LED strip / grow light output | 2 - 30 | Beginner, Commercial Zone | Supplemental lighting output |
+| Small DC fan | 2 - 18 | Beginner Standard+, Commercial | Ventilation output |
+| Active buzzer | 2 - 5 | All packages | Local alert output |
+| Relay / MOSFET driver module | 2 - 12 | All actuator packages | Safe switching for pump, fan, light, buzzer |
+| 5V power supply / adapter | 4 - 25 | All packages | External actuator and controller power |
+| Wiring, enclosure, connectors | 10 - 40 | All packages | Field installation and protection |
 
-Estimated small prototype cost with pH sensor: around **RM75 - RM85**, depending on wiring, shipping, and module quality.
+### Package Cost Estimate
+
+| Package | Included Hardware Scope | Estimated Prototype Cost (RM) |
+|---|---|---:|
+| Beginner Starter | ESP32, DHT, soil moisture, light sensor, buzzer/basic output wiring | 30 - 60 |
+| Beginner Standard | Starter + pH, MQ gas, water-level sensor, pump/fan/relay outputs | 80 - 150 |
+| Beginner Pro | Standard + EC/TDS, CO2, water-flow or expanded nutrient monitoring | 170 - 330 |
+| Commercial Zone Node | ESP32 zone controller, climate sensors, pH/EC, water flow, actuator relay outputs, optional camera connector | 250 - 650 |
+| Commercial Farm Master | Farm-level ESP32 controller, reservoir level, gas, CO2, energy/current sensor, fan/buzzer relays | 130 - 320 |
+| Commercial Camera Add-on | ESP32-CAM or browser/USB camera capture path, mounting and enclosure | 30 - 90 |
+| Industrial Nutrient Upgrade | RS485 EC or 7-in-1 soil/nutrient probe for higher durability | 290 - 1,000+ |
+
+Reference points used for the ranges include local ESP32 fertigation BOM examples, Robotronik DHT11 pricing, and Myduino RS485 EC / 7-in-1 soil sensor listings.
 
 Important real wiring notes:
 
