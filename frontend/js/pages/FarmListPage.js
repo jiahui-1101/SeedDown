@@ -20,32 +20,11 @@ export function render() {
     const container = document.getElementById('screenContainer');
     let savedFarms = loadSavedFarms();
 
-    if (savedFarms.length === 0) {
-        const dummyFarm = {
-            id: `farm_${Date.now()}`,
-            name: 'Farm 1 - Rack Alpha',
-            plants: 6,
-            plantSlots: 6,
-            zone: 'A',
-            location: 'Zone A',
-            targetPlant: 'Lettuce',
-            rackLabel: '3-Tier Vertical Rack',
-            createdAt: new Date().toISOString(),
-        };
-        savedFarms = [dummyFarm];
-        saveFarms(savedFarms);
-
-        const token = localStorage.getItem('token');
-        if (token) {
-            fetch(`${API_BASE}/api/farms/create`, {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(dummyFarm)
-            }).catch(e => console.warn('[FarmListPage] Dummy farm sync skipped:', e.message));
-        }
-    }
-
     const isCommercial = AppState.mode === 'commercial';
+    const emptyTitle = isCommercial ? 'No commercial farm yet' : 'No field yet';
+    const emptyText = isCommercial
+        ? 'Create a commercial farm to assign Farm Master and Zone Node devices.'
+        : 'Create a beginner field to connect a QR package and start monitoring.';
 
     container.innerHTML = `
         <div class="screen active" id="farmlistScreen">
@@ -60,12 +39,12 @@ export function render() {
 
             <div style="padding:16px; flex:1; overflow-y:auto;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <div style="font-size:0.7rem; font-weight:700; color:var(--sub);">SELECT FIELD (${savedFarms.length})</div>
+                    <div style="font-size:0.7rem; font-weight:700; color:var(--sub);">${isCommercial ? 'SELECT FARM' : 'SELECT FIELD'} (${savedFarms.length})</div>
                     <button id="buildFarmBtn" class="btn-outline" style="padding:6px 12px;">${isCommercial ? '+ New Farm' : '+ New Field'}</button>
                 </div>
 
                 <div id="farmList" style="display:flex; flex-direction:column; gap:10px;">
-                    ${savedFarms.map(farmCard).join('')}
+                    ${savedFarms.length ? savedFarms.map(farmCard).join('') : emptyState(emptyTitle, emptyText, isCommercial)}
                 </div>
             </div>
 
@@ -131,6 +110,16 @@ function farmCard(f) {
                 <button class="farm-delete-btn" data-farm-id="${escapeAttr(f.id)}" title="Delete field" aria-label="Delete field"
                     style="width:32px;height:32px;border:1px solid rgba(220,38,38,.24);background:rgba(220,38,38,.08);color:var(--danger);border-radius:10px;font-size:15px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
             </div>
+        </div>
+`;
+}
+
+function emptyState(title, text, isCommercial) {
+    return `
+        <div style="background:var(--surface);border:1px dashed var(--border);border-radius:18px;padding:28px 18px;text-align:center;color:var(--sub);">
+            <div style="width:56px;height:56px;margin:0 auto 12px;border-radius:18px;background:var(--accent-l);display:flex;align-items:center;justify-content:center;font-size:28px;">${isCommercial ? '🏭' : '🌱'}</div>
+            <div style="font-weight:900;color:var(--text);font-size:16px;">${escapeHTML(title)}</div>
+            <div style="font-size:13px;line-height:1.45;margin-top:6px;">${escapeHTML(text)}</div>
         </div>
     `;
 }

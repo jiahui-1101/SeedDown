@@ -354,6 +354,13 @@ async function _onLoginSuccess(mode, user, isGuest) {
         ? 'Guest'
         : (user.displayName || user.email?.split('@')[0] || 'Farmer');
     localStorage.setItem('seeddown_mode', mode);
+    localStorage.setItem('seeddown_user', JSON.stringify({
+        uid: user.uid,
+        email: user.email || '',
+        name: AppState.userName,
+        mode,
+        isGuest,
+    }));
 
     // 从你的自建 Node.js 后端抓取 ownerId 属于当前用户的专属 Farms 列表
     try {

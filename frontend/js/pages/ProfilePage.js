@@ -411,11 +411,17 @@ function _doLogout() {
     // 徹底廢除 Firebase Logout，改為清除 JWT Token
     localStorage.removeItem('token');
     localStorage.removeItem('seeddown_mode');
+    localStorage.removeItem('seeddown_user');
+    localStorage.removeItem('user_farms');
+    localStorage.removeItem('farm_profile');
     
     AppState.uid       = null;
     AppState.userEmail = '';
     AppState.userName  = '';
     AppState.isGuest   = false;
+    AppState.currentFarmId = null;
+    AppState.currentFarm = null;
+    AppState.farmName = 'My Farm';
     
     showToast('info', '👋 Logged out. See you next harvest!');
     setTimeout(() => showScreen('login'), 800);
