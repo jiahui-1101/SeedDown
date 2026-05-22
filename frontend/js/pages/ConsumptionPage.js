@@ -1,4 +1,5 @@
 import { API_BASE as BASE_URL } from '../utils/apiBase.js';
+import { hasRealSensorData, normalizeSensorReading, toFiniteNumber } from '../utils/sensorReading.js';
 /* ============================================================
    MODULE: FEATURE — ECO CONSUMPTION DASHBOARD
    ConsumptionPage.js — UPDATED: Real sensor data via farmId,
@@ -327,78 +328,25 @@ export async function init() {
 
 /* ============================================================
    RESOLVE FARM CONTEXT
-   Works for both beginner and commercial.
-   Returns: { farmId, farmName, accountMode, queryParams, plants[], farmLabel }
-============================================================ */
-/*function _resolveFarmContext() {
-  const farm = AppState.currentFarm;
-  const mode = AppState.mode || 'beginner';
-  // 先确认当前到底是哪一个 mode
-  const accountMode = farm?.accountMode || mode; 
-
-  // 原本拿真实 farmId 的逻辑
-  let farmId = farm ? (farm.id || farm.farmId) : AppState.currentFarmId;
-
-  // 🌟 神奇魔法：只要是跑 localhost 开发，自动根据 mode 切换对应的 Demo Farm ID
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    farmId = accountMode === 'commercial' 
-      ? 'farm_commercial_demo_001' 
-      : 'farm_beginner_demo_001';
-      
-    console.log(`[DEBUG] Auto-switched to Demo Farm ID: ${farmId} (${accountMode} mode)`);
-  }
-
-  // ── Query params: always prefer farmId ─────────────────────
-  const queryParams = farmId
-    ? { farmId, limit: 48 }          // 48 ≈ 2 readings/hr × 24 h
-    : { deviceId: 'farm_001', limit: 24 };
-
-  // ── Extract plant names ─────────────────────────────────────
-  // 这里传入 farm || {} 防止 farm 是 undefined 的时候 crash
-  const plants = _extractPlants(farm || {}, accountMode);
-
-  // ── Human-readable badge ───────────────────────────────────
-  let farmLabel;
-  if (accountMode === 'commercial') {
-    const zoneCount = farm && Array.isArray(farm.zones) ? farm.zones.length : 0;
-    farmLabel = `📍 ${farm?.name || 'Commercial Farm'} · ${zoneCount} zones · Overall Analysis (DEMO)`;
-  } else {
-    farmLabel = `📍 ${farm?.name || 'My Farm'} · Beginner Mode (DEMO)`;
-  }
-
-  return { farmId, farmName: farm?.name || 'Demo Farm', accountMode, queryParams, plants, farmLabel };
-}*/
-/* ============================================================
-   RESOLVE FARM CONTEXT
+   Uses the selected real farm/device only. Demo farm IDs are seeded
+   farms, not a fallback for normal users.
 ============================================================ */
 function _resolveFarmContext() {
   const farm = AppState.currentFarm;
-  
-  // 1. 三重保險判斷 Mode：
-  // 優先順序：農場本身設定 > AppState 快取 > localStorage 強制讀取 > 預設 beginner
   const fallbackMode = localStorage.getItem('seeddown_mode') || 'beginner';
   const mode = AppState.mode || fallbackMode;
   const accountMode = farm?.accountMode || mode; 
 
-  let farmId = farm ? (farm.id || farm.farmId) : AppState.currentFarmId;
-
-  // 2. Localhost 開發強制切換 Demo ID
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    farmId = accountMode === 'commercial' 
-      ? 'farm_commercial_demo_001' 
-      : 'farm_beginner_demo_001';
-      //farmId = 'some_fake_id_with_zero_data'; //demo mode
-    console.log(`[DEBUG] Auto-switched to Demo Farm ID: ${farmId} (${accountMode} mode)`);
-  }
-
-  // ── Query params ─────────────────────
+  const farmId = farm ? (farm.id || farm.farmId) : AppState.currentFarmId;
+  const deviceId = farm?.deviceId || farm?.registeredDevice?.deviceId || farm?.masterDevice?.deviceId || null;
   const queryParams = farmId
     ? { farmId, limit: 48 }
-    : { deviceId: 'farm_001', limit: 24 };
+    : deviceId
+      ? { deviceId, limit: 48 }
+      : null;
 
   const plants = _extractPlants(farm || {}, accountMode);
 
-  // ── Human-readable badge ───────────────────────────────────
   let farmLabel;
   if (accountMode === 'commercial') {
     const zoneCount = farm && Array.isArray(farm.zones) ? farm.zones.length : 0;
@@ -407,45 +355,8 @@ function _resolveFarmContext() {
     farmLabel = `📍 ${farm?.name || 'My Farm'} · Beginner Mode`;
   }
 
-  return { farmId, farmName: farm?.name || 'Demo Farm', accountMode, queryParams, plants, farmLabel };
+  return { farmId, deviceId, farmName: farm?.name || 'Selected Farm', accountMode, queryParams, plants, farmLabel };
 }
-
-/*TEST for GUEST commercial mode only
-function _resolveFarmContext() {
-  const farm = AppState.currentFarm;
-  
-  // 💥 终极暴力破解：不管农场设定、不管 AppState，我全都要 Commercial！
-  const accountMode = 'commercial'; 
-
-  let farmId = farm ? (farm.id || farm.farmId) : AppState.currentFarmId;
-
-  // 2. Localhost 開發強制切換 Demo ID
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-   // farmId = accountMode === 'commercial' 
-     // ? 'farm_commercial_demo_001' 
-     // : 'farm_beginner_demo_001';
-      farmId = 'some_fake_id_with_zero_data'; //demo mode
-    console.log(`[DEBUG] Auto-switched to Demo Farm ID: ${farmId} (${accountMode} mode)`);
-  }
-
-  // ── Query params ─────────────────────
-  const queryParams = farmId
-    ? { farmId, limit: 48 }
-    : { deviceId: 'farm_001', limit: 24 };
-
-  const plants = _extractPlants(farm || {}, accountMode);
-
-  // ── Human-readable badge ───────────────────────────────────
-  let farmLabel;
-  if (accountMode === 'commercial') {
-   const zoneCount = 3;
-    farmLabel = `📍 ${farm?.name || 'Commercial Farm'} · ${zoneCount} zones · Overall Analysis`;
-  } else {
-    farmLabel = `📍 ${farm?.name || 'My Farm'} · Beginner Mode`;
-  }
-
-  return { farmId, farmName: farm?.name || 'Demo Farm', accountMode, queryParams, plants, farmLabel };
-}*/
 
 /* ============================================================
    EXTRACT PLANTS
@@ -506,32 +417,98 @@ async function _loadData() {
       badge.style.display = 'block';
     }
 
-    // Fetch sensor history using farmId (or deviceId fallback)
+    if (!ctx.queryParams) {
+      _renderNoLiveData(ctx, 'Select or create a farm to start consumption tracking.');
+      return;
+    }
+
+    // Fetch sensor history using the selected real farm or registered device.
     const params = new URLSearchParams(ctx.queryParams);
     const hRes   = await fetch(`${BASE_URL}/api/sensors/history?${params}`);
     const hData  = hRes.ok ? await hRes.json() : {};
-    const raw    = hData.readings || [];
+    const raw    = Array.isArray(hData.readings) ? hData.readings : [];
+    const readings = raw
+      .map(reading => normalizeSensorReading(reading))
+      .filter(reading => hasRealSensorData(reading));
 
     console.log(
       '[ConsumptionPage] Readings fetched:', raw.length,
+      '| usable:', readings.length,
       '| query:', Object.entries(ctx.queryParams).map(([k, v]) => `${k}=${v}`).join('&')
     );
 
-    const isMock   = !hRes.ok || raw.length === 0;
-    const readings = isMock ? _mockReadings() : raw;
+    if (!hRes.ok) throw new Error(`History request failed: ${hRes.status}`);
+    if (readings.length === 0) {
+      _renderNoLiveData(ctx, 'Waiting for live sensor readings from this farm.');
+      return;
+    }
 
-    await _processData(readings, isMock, ctx);
+    await _processData(readings, ctx);
 
   } catch (err) {
     console.error('[ConsumptionPage] _loadData error:', err);
-    await _processData(_mockReadings(), true, _resolveFarmContext());
+    _renderNoLiveData(_resolveFarmContext(), 'Could not load live readings. Check backend connection and device registration.');
+  }
+}
+
+function _renderNoLiveData(ctx, message) {
+  _show('content');
+  _lastReadings = [];
+
+  const badge = _el('con-farm-badge');
+  if (badge && ctx?.farmLabel) {
+    badge.textContent = ctx.farmLabel;
+    badge.style.display = 'block';
+  }
+
+  _el('con-grade').textContent = '--';
+  _el('con-grade').style.color = '#0D9488';
+  _el('con-grade-note').textContent = message;
+  _el('con-water-today').textContent = '--';
+  _el('con-energy-today').textContent = '--';
+  _el('con-co2').textContent = '--';
+  _el('con-water-vs').textContent = 'Waiting for live data';
+  _el('con-energy-vs').textContent = 'Waiting for live data';
+  _el('con-cost-saved').textContent = '--';
+  _el('con-cost-sub').textContent = '';
+  _el('con-breakdown').innerHTML = '<div style="text-align:center;padding:18px;color:#64748B;font-size:0.8rem;">Equipment usage appears after SeedDown receives live readings from this farm.</div>';
+  _el('con-ai-tips').innerHTML = '<div style="text-align:center;padding:18px;color:#64748B;font-size:0.8rem;">Connect a registered sensor node to unlock farm-specific eco tips.</div>';
+  _el('con-ai-spinner').style.display = 'none';
+  _el('con-ai-text').textContent = 'SeedDown is waiting for live sensor data from this selected farm. Once readings arrive, this page will calculate water use, energy use, savings, and sustainability insights from the real farm history.';
+  _el('con-ai-text').style.fontStyle = 'normal';
+  _el('con-ai-source').style.display = 'none';
+  _el('con-last-updated').textContent = 'No live readings received yet.';
+  _el('con-monthly-savings').style.display = 'none';
+
+  const plants = ctx?.plants?.length ? ctx.plants : [];
+  _allPlantData = plants.map(name => _benchmarkFallback(name));
+  _renderPlantCards(_allPlantData, false);
+  _el('con-trad-bars').innerHTML = '<div style="text-align:center;padding:16px;color:#94A3B8;font-size:0.8rem;">Comparative bars will appear after live readings are available.</div>';
+
+  _setChartWaiting('con-water-chart', 'con-water-summary', 'water-ideal-badge', 'Waiting for live water/reservoir readings.');
+  _setChartWaiting('con-energy-chart', 'con-energy-summary', 'energy-trad-badge', 'Waiting for live energy, light, fan, or pump activity readings.');
+}
+
+function _setChartWaiting(canvasId, summaryId, badgeId, message) {
+  const canvas = _el(canvasId);
+  if (canvas) {
+    try { canvas._chart?.destroy(); } catch {}
+    const ctx = canvas.getContext?.('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  const badge = _el(badgeId);
+  if (badge) badge.style.display = 'none';
+  const summary = _el(summaryId);
+  if (summary) {
+    summary.style.display = 'block';
+    summary.innerHTML = `<span style="font-weight:700;color:#64748B;">${message}</span>`;
   }
 }
 
 /* ============================================================
    PROCESS DATA
 ============================================================ */
-async function _processData(readings, isMock, ctx) {
+async function _processData(readings, ctx) {
   _show('content');
   _lastReadings = readings;
 
@@ -546,17 +523,17 @@ async function _processData(readings, isMock, ctx) {
 
   const ts = readings[0]?.createdAt || new Date();
   _el('con-last-updated').textContent =
-    `${isMock ? '⚡ Demo mode · ' : ''}Last updated: ${new Date(ts).toLocaleString('en-MY')}`;
+    `Last updated: ${new Date(ts).toLocaleString('en-MY')}`;
 
   await _loadChartLib();
  // _renderCharts(readings, metrics, { min: 65, max: 80, mid: 72 }, 3.0);
-  _fetchAI(metrics, readings, isMock, ctx);
+  _fetchAI(metrics, readings, ctx);
 }
 
 /* ============================================================
    FETCH AI
 ============================================================ */
-async function _fetchAI(metrics, readings, isMock, ctx) {
+async function _fetchAI(metrics, readings, ctx) {
   const allPlants = ctx.plants;
 
   const applyFallback = (msg) => {
@@ -577,32 +554,6 @@ async function _fetchAI(metrics, readings, isMock, ctx) {
     _el('con-cost-saved').textContent = 'RM 0.00/day';
     _el('con-cost-sub').textContent   = 'RM 0.00/mo';
   };
-
-  // Demo / no real data → skip AI entirely
-  // Demo / no real data → 强行显示 AI 风格的 Demo 叙述
-  if (isMock) {
-    console.log('[ConsumptionPage] Demo mode active — showing benchmark data.');
-    
-    // 把 spinner 关掉，因为我们不 fetch 了
-    _el('con-ai-spinner').style.display = 'none';
-    
-    // 直接塞一段看起来很专业的 AI 建议
-    const demoNarrative = `Based on your simulated vertical farm setup, your water usage is 45% more efficient than traditional soil-based farming today. Your current light cycle is optimal for leafy greens, contributing to an estimated 12% faster growth rate compared to the baseline. Recommendation: Consider adjusting the fan threshold to 26°C if humidity levels continue to rise, as this will further stabilize your vapor pressure deficit.`;
-    
-    _el('con-ai-text').textContent = demoNarrative;
-    _el('con-ai-text').style.fontStyle = 'normal'; // 看起来更像正式报告
-    _el('con-ai-source').style.display = 'block';
-    _el('con-ai-source').textContent = 'Powered by SeedDown AI (Simulated)';
-    
-    // 依然要执行 fallback 以确保卡片显示
-    const allPlants = _resolveFarmContext().plants;
-    const fallbackPd = allPlants.length > 0 ? allPlants.map(n => _benchmarkFallback(n)) : [_benchmarkFallback('lettuce')];
-    _allPlantData = fallbackPd;
-    _renderPlantCards(fallbackPd, false);
-    _renderCompBars(fallbackPd, _calcMetrics(_lastReadings));
-    
-    return;
-  }
 
   // Send up to 3 plants to AI; handle the rest with benchmark fallback
   const aiPlants   = allPlants.slice(0, 3);
@@ -694,35 +645,32 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
   const labels = readings.map((_, i) => `${i}`);
 
   // ── Water ──────────────────────────────────────────────────
-  //const waterData = readings.map(r => Number(r.waterLevel ?? 70));
   const waterData = readings.map(r => {
-    // 1. 如果你以后改了 DB，直接存了 percentage，就优先用它
-    if (r.waterLevel !== undefined && r.waterLevel !== null) {
-      return Number(r.waterLevel);
+    const directLevel = toFiniteNumber(r.waterLevel);
+    if (directLevel !== null) {
+      return Math.max(0, Math.min(100, directLevel));
     }
 
-    // 2. 如果 DB 里面只有水面距离 (waterDistanceCm)，我们就把距离换算成百分比
-    const TANK_DEPTH_CM = 30; // 假设你的水箱总深度是 30cm (你可以根据真实的桶高度修改)
-    const distance = r.waterDistanceCm ?? 10; // 如果找不到数据，预设距离为 10cm
-    
-    // 公式：(总深度 - 目前水面距离) / 总深度 * 100
-    let pct = ((TANK_DEPTH_CM - distance) / TANK_DEPTH_CM) * 100;
-    
-    // 确保画出来的图表数据卡在 0% 到 100% 之间，不会爆表
+    const TANK_DEPTH_CM = 30;
+    const distance = toFiniteNumber(r.waterDistanceCm);
+    if (distance === null) return null;
+    const pct = ((TANK_DEPTH_CM - distance) / TANK_DEPTH_CM) * 100;
     return Math.max(0, Math.min(100, Math.round(pct)));
   });
   const izMin = idealZone.min;
   const izMax = idealZone.max;
-  const inRange = waterData.filter(v => v >= izMin && v <= izMax).length;
-  const pct = Math.round((inRange / waterData.length) * 100);
+  const validWaterData = waterData.filter(v => Number.isFinite(v));
+  const inRange = validWaterData.filter(v => v >= izMin && v <= izMax).length;
+  const pct = validWaterData.length ? Math.round((inRange / validWaterData.length) * 100) : 0;
 
   // ── Energy ─────────────────────────────────────────────────
   const energyData = readings.map(r => {
-    const lr    = r.lightRaw    ?? 2000;
-    const t     = r.temperature ?? 25;
-    const watts = (lr < 1500 ? WATTS_LIGHT : 0) +
-                  (t > 28    ? WATTS_FAN   : 0) +
-                  WATTS_PUMP * 0.1;
+    const lr = toFiniteNumber(r.lightRaw);
+    const t = toFiniteNumber(r.temperature);
+    const soil = toFiniteNumber(r.soilRaw);
+    const watts = (lr !== null && lr < 1500 ? WATTS_LIGHT : 0) +
+                  (t !== null && t > 28 ? WATTS_FAN : 0) +
+                  (soil !== null && soil < 1800 ? WATTS_PUMP : 0);
     return Number((watts / 1000).toFixed(3));
   });
 
@@ -746,7 +694,7 @@ function _renderCharts(readings, metrics, idealZone, traditionalEnergyPerDay) {
           { label: 'Ideal Max (%)', data: Array(labels.length).fill(izMax), borderColor: 'rgba(22,163,74,0.45)', borderDash: [5,4], borderWidth: 1.5, pointRadius: 0, fill: '+1', backgroundColor: 'rgba(22,163,74,0.10)' },
           { label: 'Ideal Min (%)', data: Array(labels.length).fill(izMin), borderColor: 'rgba(22,163,74,0.45)', borderDash: [5,4], borderWidth: 1.5, pointRadius: 0, fill: false },
           { label: 'Your Farm (%)', data: waterData, borderColor: '#2563EB', borderWidth: 2.5, tension: 0.35, pointRadius: 3,
-            pointBackgroundColor: waterData.map(v => v < izMin ? '#DC2626' : v > izMax ? '#F59E0B' : '#2563EB'),
+            pointBackgroundColor: waterData.map(v => !Number.isFinite(v) ? '#CBD5E1' : v < izMin ? '#DC2626' : v > izMax ? '#F59E0B' : '#2563EB'),
             pointBorderColor: '#FFF', pointBorderWidth: 1.5 },
         ],
       },
@@ -1042,16 +990,19 @@ function _renderEcoTips(readings, m) {
 function _calcMetrics(readings) {
   let waterAct = 0, lightH = 0, fanH = 0;
   readings.forEach(r => {
-    if ((r.soilRaw    ?? 1900) < 1800) waterAct++;
-    if ((r.lightRaw   ?? 2000) < 1500) lightH++;
-    if ((r.temperature ?? 25)  > 28)   fanH++;
+    const soil = toFiniteNumber(r.soilRaw);
+    const light = toFiniteNumber(r.lightRaw);
+    const temp = toFiniteNumber(r.temperature);
+    if (soil !== null && soil < 1800) waterAct++;
+    if (light !== null && light < 1500) lightH++;
+    if (temp !== null && temp > 28) fanH++;
   });
   const waterLiters = (waterAct * ML_PER_WATERING) / 1000;
   const energyKwh   = ((lightH * WATTS_LIGHT) + (fanH * WATTS_FAN) + (waterAct * WATTS_PUMP)) / 1000;
   return {
-    waterLiters:      Math.max(waterLiters, 0.05),
-    energyKwh:        Math.max(energyKwh, 0.01),
-    co2Saved:         Math.max((60 - waterLiters) * 0.035, 0.5),
+    waterLiters,
+    energyKwh,
+    co2Saved:         Math.max((60 - waterLiters) * 0.035, 0),
     waterActivations: waterAct,
     lightHours:       lightH,
     fanHours:         fanH,
@@ -1083,20 +1034,6 @@ function _benchmarkFallback(nameOrKey) {
     waterSavePct:  Math.round(((b.tw - b.w)  / b.tw)  * 100),
     energySavePct: Math.round(((b.te - b.e)  / b.te)  * 100),
   };
-}
-
-/* ============================================================
-   MOCK READINGS (demo / no backend)
-============================================================ */
-function _mockReadings() {
-  const now = Date.now();
-  return Array.from({ length: 24 }, (_, i) => ({
-    temperature: 22 + Math.sin(i / 4) * 4,
-    soilRaw:     1550 + Math.random() * 650,
-    lightRaw:    700  + Math.random() * 1300,
-    waterLevel:  63   + Math.random() * 25,
-    createdAt:   new Date(now - (23 - i) * 3600000).toISOString(),
-  }));
 }
 
 /* ============================================================
