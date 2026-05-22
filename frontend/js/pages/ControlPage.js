@@ -31,7 +31,7 @@ function defaultControls() {
         name: 'UTM Farmer',
         email: 'farmer@seeddown.com',
         farmName: AppState.farmName || 'Commercial Farm',
-        deviceId: 'farm_001',
+        deviceId: '',
         sensorIntervalMinutes: 60,
         soilDryThreshold: 1800,
         gasDangerThreshold: 2500,
@@ -309,7 +309,13 @@ function bindEvents() {
 }
 
 async function fetchLatestCommand(showResult) {
-    const deviceId = value('manualDeviceId') || value('controlDeviceId') || 'farm_001';
+    const deviceId = value('manualDeviceId') || value('controlDeviceId');
+    if (!deviceId) {
+        setText('latestCommandText', 'No device assigned');
+        setText('latestCommandReason', 'Assign a Farm Master or Zone Node before polling commands.');
+        if (showResult) showToast('warning', 'No device assigned yet');
+        return;
+    }
     try {
         const res = await fetch(`${API_BASE}/api/sensors/command?deviceId=${encodeURIComponent(deviceId)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -339,7 +345,11 @@ async function sendManualCommand(command = '', reason = '') {
     const selectedCommand = command || value('manualCommand') || 'NO_ACTION';
     const selectedReason = reason || value('manualReason') || `${selectedCommand} manual override from Control page`;
     const durationSeconds = Math.max(0, Number(value('manualDuration')) || 0);
-    const deviceId = target.deviceId || value('controlDeviceId') || 'farm_001';
+    const deviceId = target.deviceId || value('controlDeviceId');
+    if (!deviceId) {
+        showToast('warning', 'Choose a target with an assigned device before sending a command.');
+        return;
+    }
     const isStop = selectedCommand === 'NO_ACTION';
     try {
         const res = await fetch(`${API_BASE}/api/sensors/command`, {
@@ -400,7 +410,7 @@ function resolveManualTarget() {
 }
 
 function resolveFarmMasterDeviceId(farm, profile = {}) {
-    return farm?.farmMaster?.deviceId || farm?.deviceId || profile.deviceId || 'farm_001';
+    return farm?.farmMaster?.deviceId || farm?.deviceId || profile.deviceId || '';
 }
 
 function resolveZoneDeviceId(farm, zoneId) {
@@ -411,7 +421,7 @@ function resolveZoneDeviceId(farm, zoneId) {
         && device?.status !== 'replaced'
         && normalizeControlZoneId(device.targetId || device.zoneId || device.zone) === normalized
     );
-    return active?.deviceId || DEMO_COMMERCIAL_ZONE_DEVICES[normalized] || normalized || 'farm_001';
+    return active?.deviceId || DEMO_COMMERCIAL_ZONE_DEVICES[normalized] || normalized || '';
 }
 
 function normalizeControlZoneId(value) {
@@ -484,7 +494,11 @@ function applyPreset(name) {
     showToast('info', 'Preset applied. Press Sync to send it to IoT.');
 }
 async function fetchCurrentPreferences(showResult) {
-    const deviceId = value('controlDeviceId') || 'farm_001';
+    const deviceId = value('controlDeviceId');
+    if (!deviceId) {
+        if (showResult) showToast('warning', 'No device assigned yet');
+        return;
+    }
     try {
         const res = await fetch(`${API_BASE}/api/sensors/preferences?deviceId=${encodeURIComponent(deviceId)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -534,6 +548,12 @@ async function syncControls() {
     icon.textContent = '⏳';
 
     saveProfile({ ...defaultControls(), ...(loadProfile(AppState.currentFarmId) || {}), ...controls }, AppState.currentFarmId);
+    if (!controls.deviceId) {
+        icon.textContent = '⚠️';
+        btn.disabled = false;
+        showToast('warning', 'Assign a device before syncing thresholds.');
+        return;
+    }
 
     const payload = {
         deviceId: controls.deviceId,
@@ -564,7 +584,7 @@ async function syncControls() {
 
 function collectControls() {
     const controls = {
-        deviceId: value('controlDeviceId') || 'farm_001',
+        deviceId: value('controlDeviceId'),
     };
     document.querySelectorAll('.control-threshold-input').forEach(input => {
         const key = input.dataset.key;

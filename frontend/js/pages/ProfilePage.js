@@ -50,7 +50,7 @@ function getDefaultProfile() {
         name:                  'UTM Farmer',
         email:                 'farmer@seeddown.com',
         farmName:              AppState.farmName || 'Farm 1 - Rack Alpha',
-        deviceId:              'farm_001',
+        deviceId:              '',
         sensorIntervalMinutes: 60,
         soilDryThreshold:      1800,
         phMin:                 5.5,
@@ -74,7 +74,13 @@ export function render() {
         AppState.farmName      = savedFarms[0].name;
     }
 
-    const profile      = { ...getDefaultProfile(), ...(loadProfile(AppState.currentFarmId) || {}) };
+    const selectedFarm = AppState.currentFarm || savedFarms.find(f => f.id === AppState.currentFarmId) || null;
+    const profile      = {
+        ...getDefaultProfile(),
+        farmName: selectedFarm?.name || AppState.farmName || getDefaultProfile().farmName,
+        deviceId: selectedFarm?.deviceId || selectedFarm?.farmMaster?.deviceId || '',
+        ...(loadProfile(AppState.currentFarmId) || {}),
+    };
     const isCommercial = AppState.mode === 'commercial';
 
     // Reflect real browser notification permission in the toggle
@@ -209,6 +215,7 @@ function _bindEvents(savedFarms) {
 
             const farmProfile = {
                 ...getDefaultProfile(),
+                deviceId: selectedFarm.deviceId || selectedFarm.farmMaster?.deviceId || '',
                 ...(loadProfile(selectedId) || {}),
                 farmName: selectedFarm.name,
             };
@@ -365,6 +372,10 @@ function _doSave() {
 /* ── SYNC TO DEVICE ── */
 async function _doSync() {
     const profile = _collectForm();
+    if (!profile.deviceId) {
+        showToast('warning', 'Assign or register a device before syncing settings.');
+        return;
+    }
     saveProfile(profile, AppState.currentFarmId);
 
     const icon = document.getElementById('syncBtnIcon');
@@ -373,7 +384,7 @@ async function _doSync() {
     icon.textContent = '⏳';
 
     const payload = {
-        deviceId:              profile.deviceId || 'farm_001',
+        deviceId:              profile.deviceId,
         sensorIntervalSeconds: profile.sensorIntervalMinutes * 60,
         notifications:         profile.notifications,
     };
@@ -418,7 +429,7 @@ function _collectForm() {
         name:                  _val('profileName')     || existing.name,
         email:                 _val('profileEmail')    || existing.email,
         farmName:              _val('profileFarmName') || AppState.farmName || existing.farmName,
-        deviceId:              _val('profileDeviceId') || existing.deviceId || 'farm_001',
+        deviceId:              _val('profileDeviceId') || existing.deviceId || '',
         sensorIntervalMinutes: parseInt(_val('profileInterval'), 10) || existing.sensorIntervalMinutes || 60,
         notifications:         document.getElementById('toggleNotifications')?.checked ?? existing.notifications ?? true,
     };
@@ -456,7 +467,7 @@ function _farmIdentitySection(profile) {
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow-sm);flex-shrink:0;">
             <div style="font-size:0.6rem;font-weight:700;color:var(--muted);letter-spacing:0.08em;margin-bottom:14px;">🌿 FARM IDENTITY</div>
             ${_settingInput('Farm Name', 'profileFarmName', profile.farmName, 'text', 'e.g. Rack Alpha - Level 3')}
-            ${_settingInput('Device ID',  'profileDeviceId',  profile.deviceId,  'text', 'e.g. farm_001')}
+            ${_settingInput('Device ID',  'profileDeviceId',  profile.deviceId,  'text', 'Not assigned yet')}
         </div>`;
 }
 

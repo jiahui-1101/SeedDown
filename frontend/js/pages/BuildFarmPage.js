@@ -53,6 +53,7 @@ let commercialZoneThresholds = {};
 let commercialDeviceAssignments = [];
 let commercialPendingDevice = null;
 let commercialDraftFarmId = null;
+let beginnerDraftFarmId = null;
 
 const COMMERCIAL_GOAL_OPTIONS = [
     { id: 'maximum_yield', label: 'Maximum Yield' },
@@ -181,6 +182,7 @@ export function render() {
     registeredDevice = null;
     goalPriority = commercial ? ['maximum_yield'] : ['beginner_safe'];
     generatedThresholds = null;
+    beginnerDraftFarmId = null;
     fieldInfo = {
         name: '',
         location: '',
@@ -2547,8 +2549,8 @@ async function registerDeviceFromStep(scannedPackage = null) {
                 wifi_ssid: deviceSetup.wifiSsid.trim(),
                 wifi_password: deviceSetup.wifiPassword,
                 accountType: deviceSetup.accountType,
-                farmId: AppState.currentFarmId || 'farm_001',
-                fieldId: `field_${Date.now()}`,
+                farmId: draftBeginnerFarmId(),
+                fieldId: draftBeginnerFarmId(),
             }),
         });
         const data = await response.json();
@@ -2574,8 +2576,8 @@ function buildLocalDemoDevice(option = null) {
         serial: selected.serial,
         deviceType: selected.deviceType,
         packageLevel: selected.packageLevel,
-        fieldId: `field_${Date.now()}`,
-        farmId: AppState.currentFarmId || 'farm_001',
+        fieldId: draftBeginnerFarmId(),
+        farmId: draftBeginnerFarmId(),
         isDemoFallback: true,
     };
 }
@@ -2807,7 +2809,8 @@ async function createField() {
     }
 
     const rack = currentRack();
-    const fieldId = registeredDevice?.fieldId || `field_${Date.now()}`;
+    const fieldId = registeredDevice?.fieldId || draftBeginnerFarmId();
+    const fallbackDevice = registeredDevice || buildLocalDemoDevice();
     const thresholds = filterThresholdsForPackage(generatedThresholds?.thresholds || {}, registeredDevice?.packageLevel || beginnerPackageLevel());
     const payload = {
         name: fieldInfo.name.trim(),
@@ -2823,7 +2826,7 @@ async function createField() {
         photoPreview: photoData?.dataUrl || null,
         plants: detectedPlants,
         plantSlots: totalSlotsUsed(),
-        deviceId: registeredDevice?.deviceId || 'farm_001',
+        deviceId: fallbackDevice.deviceId,
         serial: registeredDevice?.serial || deviceSetup.serial,
         packageLevel: registeredDevice?.packageLevel || 'standard',
         goalPriority,
@@ -2874,10 +2877,10 @@ async function createField() {
         rackConfig: fieldInfo.customRack ? { ...fieldInfo.customRack } : null,
         targetPlant: payload.targetPlant,
         analysisGoal: payload.analysisGoal,
-        deviceId: registeredDevice?.deviceId || 'farm_001',
-        deviceToken: registeredDevice?.deviceToken || null,
-        serial: registeredDevice?.serial || deviceSetup.serial,
-        packageLevel: registeredDevice?.packageLevel || 'standard',
+        deviceId: fallbackDevice.deviceId,
+        deviceToken: fallbackDevice.deviceToken || null,
+        serial: fallbackDevice.serial || deviceSetup.serial,
+        packageLevel: fallbackDevice.packageLevel || 'standard',
         goalPriority: [...goalPriority],
         thresholds: { ...thresholds },
         thresholdSource: generatedThresholds?.source || 'manual',
@@ -3176,6 +3179,12 @@ function currentRack() {
 
 function totalSlotsUsed() {
     return detectedPlants.reduce((sum, plant) => sum + plant.slots, 0);
+}
+
+function draftBeginnerFarmId() {
+    if (AppState.currentFarmId) return AppState.currentFarmId;
+    if (!beginnerDraftFarmId) beginnerDraftFarmId = `field_${Date.now()}`;
+    return beginnerDraftFarmId;
 }
 
 function goalLabel(id) {
