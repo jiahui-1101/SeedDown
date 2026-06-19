@@ -1032,15 +1032,19 @@ This would make the 3D scene more than a visual preview. It becomes the farm man
 
 ---
 
-## Contributors
+## Team Contributions
 
 Team **🌱 next level utm 🚀**
 
-- 🌿 Wong Jia Hui
-- 💧 Lee Mei Shuet
-- 🥬 Loh Su Ting
-- 🔬 Christ Ting Shin Ling
-- ⚡ Wong Zi Qi
+| Team member | Role | Contributions evidenced in the repository | Visible non-merge commits* |
+|---|---|---|---:|
+| **Wong Jia Hui** | **Team Leader · Lead Full-Stack & IoT Developer** | Led end-to-end integration across IoT telemetry, Firebase data, device commands, AI thresholds/advisor, farm setup, 3D views, authentication/session handling, deployment, mobile polish and judge-facing documentation. | **129 / 217** |
+| **Lee Mei Shuet** | **Consumption Analytics & Authentication Developer** | Implemented consumption charts and farm context, JWT authentication/profile flows, plant-card data, benchmark analysis and Groq-supported consumption insights. | **31 / 217** |
+| **Wong Zi Qi** | **What-If & AI Services Developer** | Developed beginner/commercial What-If planning, live sensor and zone analysis, AI advisor flows, crop/recipe data services, Gemini/Groq integration and secret-management cleanup. | **26 / 217** |
+| **Loh Su Ting** | **Disease Analysis & Community Developer** | Implemented AI disease analysis and confidence logic, predictive alerts, SOS beacon, barter/visit/community flows, navigation and commercial UI fixes. | **18 / 217** |
+| **Christ Ting Shin Ling** | **Real-Time Dashboard Developer** | Connected live beginner/commercial sensor data, built predictive alert/detail flows, sensor and profit detail pages, and refined dashboard UI and supporting data views. | **13 / 217** |
+
+<sub>*Counts are non-merge commits visible in the public Git history. Generated build files and review copies can inflate line totals, so commit counts are included only as a transparent activity signal.</sub>
 
 ---
 
